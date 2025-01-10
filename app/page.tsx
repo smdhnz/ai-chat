@@ -11,20 +11,17 @@ import { Markdown } from "@/components/markdown";
 import { codeBlockParse } from "@/lib/utils";
 
 export default function Page() {
-  const {
-    messages,
-    input,
-    setInput,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-  } = useChat({
-    onError: (e) => {
-      toast.error(`${e}`);
-    },
-  });
+  const { messages, input, handleInputChange, handleSubmit, isLoading } =
+    useChat({
+      onError: (e) => {
+        toast.error("ERROR", { description: `${e}` });
+      },
+    });
   const [files, setFiles] = useState<FileList | undefined>(undefined);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
+  const [imageFileName, setImageFileName] = useState<string | undefined>(
+    undefined
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -32,14 +29,17 @@ export default function Page() {
     if (isLoading) return;
 
     // CTRL + ENTER
-    if (event.ctrlKey && event.key === "Enter") {
+    if (event.ctrlKey && event.key === "Enter" && (input || files)) {
       event.preventDefault();
 
       handleSubmit(event, {
         experimental_attachments: files,
+        allowEmptySubmit: true,
       });
 
       setFiles(undefined);
+      setImageUrl(undefined);
+      setImageFileName(undefined);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -48,37 +48,33 @@ export default function Page() {
 
     // CTRL + V
     if (event.ctrlKey && event.key === "v") {
-      event.preventDefault();
-
       const text = await navigator.clipboard.readText();
+      const items = await navigator.clipboard.read();
 
-      if (text) {
-        setInput((prev) => prev + text);
-      } else {
-        try {
-          const items = await navigator.clipboard.read();
-          const dataTransfer = new DataTransfer();
+      if (!text && items) {
+        event.preventDefault();
 
-          for (const clipboardItem of items) {
-            const types = clipboardItem.types;
+        const dataTransfer = new DataTransfer();
 
-            for (const type of types) {
-              if (
-                type.startsWith("image/") ||
-                type.startsWith("application/octet-stream")
-              ) {
-                const blob = await clipboardItem.getType(type);
-                const fileName = `clipboard-file.${type.split("/")[1]}`;
-                dataTransfer.items.add(new File([blob], fileName, { type }));
-              }
+        for (const clipboardItem of items) {
+          const types = clipboardItem.types;
+
+          for (const type of types) {
+            if (
+              type.startsWith("image/") ||
+              type.startsWith("application/octet-stream")
+            ) {
+              const blob = await clipboardItem.getType(type);
+              const fileName = `clipboard-file.${type.split("/")[1]}`;
+              const file = new File([blob], fileName, { type });
+              setImageUrl(URL.createObjectURL(file));
+              setImageFileName(fileName);
+              dataTransfer.items.add(new File([blob], fileName, { type }));
             }
           }
-
-          setFiles(dataTransfer.files);
-          toast("画像を貼り付けました");
-        } catch (error) {
-          console.error("Error reading clipboard:", error);
         }
+
+        setFiles(dataTransfer.files);
       }
     }
   }
@@ -97,18 +93,15 @@ export default function Page() {
             <div key={m.id} className="px-4 py-4">
               <div className="flex flex-1 gap-3 mx-auto max-w-[800px] px-5">
                 <div className="relative">
-                  {m.role === "user" ? <CircleUserIcon /> : <BotIcon />}
+                  {m.role === "user" ? <SmileIcon /> : <BotIcon />}
                 </div>
+
                 <div className="relative flex flex-col w-11/12">
                   <p className="font-bold">
                     {m.role === "user" ? "User" : "AI"}
                   </p>
-                  {m.role === "user" ? (
-                    <div className="whitespace-break-spaces">{m.content}</div>
-                  ) : (
-                    <Markdown>{codeBlockParse(m.content)}</Markdown>
-                  )}
-                  <div>
+
+                  <div className="my-2">
                     {m.experimental_attachments
                       ?.filter((attachment) =>
                         attachment?.contentType?.startsWith("image/")
@@ -120,14 +113,44 @@ export default function Page() {
                           width={500}
                           height={500}
                           alt={attachment.name ?? `attachment-${index}`}
+                          className="w-auto h-full rounded-md object-cover"
                         />
                       ))}
                   </div>
+
+                  {m.role === "user" ? (
+                    <div className="whitespace-break-spaces">{m.content}</div>
+                  ) : (
+                    <Markdown>{codeBlockParse(m.content)}</Markdown>
+                  )}
                 </div>
               </div>
             </div>
           ))}
-          <div ref={messagesEndRef} />
+
+          {imageUrl && imageFileName && (
+            <div className="px-4 py-4">
+              <div className="flex flex-1 gap-3 mx-auto max-w-[800px] px-5">
+                <div className="relative">
+                  <SmileIcon />
+                </div>
+
+                <div className="relative flex flex-col w-11/12">
+                  <p className="font-bold">User</p>
+
+                  <div className="my-2">
+                    <Image
+                      src={imageUrl}
+                      width={500}
+                      height={500}
+                      alt={imageFileName}
+                      className="w-auto h-full rounded-md object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="w-full flex flex-col items-center mb-8 px-4">
