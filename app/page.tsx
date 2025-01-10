@@ -2,7 +2,7 @@
 
 import type { KeyboardEvent } from "react";
 import Image from "next/image";
-import { CircleUserIcon, BotIcon } from "lucide-react";
+import { BotIcon, SmileIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useChat } from "ai/react";
 import { useRef, useState } from "react";
