@@ -2,6 +2,8 @@ import * as React from "react";
 import Markdown_ from "markdown-to-jsx";
 import { ClipboardIcon, ClipboardCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { solarizedlight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 type Props = {
   children: string;
@@ -82,11 +84,20 @@ export const Markdown = ({ children }: Props) => {
             },
           },
           pre: {
-            component: ({ children, ...props }: { [k: string]: any }) => {
+            component: ({ children }: { [k: string]: any }) => {
               const code = React.Children.map(
                 children,
                 (child) => child.props.children
               ).join("\n");
+
+              // codeタグのclassNameから言語を取得
+              const language =
+                React.Children.toArray(children)
+                  .find(
+                    (child): child is React.ReactElement =>
+                      React.isValidElement(child) && child.type === "code"
+                  )
+                  ?.props.className?.match(/lang-(\w+)/)?.[1] || "plaintext";
 
               const [isClick, setIsClick] = React.useState(false);
 
@@ -105,16 +116,18 @@ export const Markdown = ({ children }: Props) => {
                   >
                     {isClick ? <ClipboardCheckIcon /> : <ClipboardIcon />}
                   </Button>
-                  <pre
-                    {...props}
-                    className="overflow-x-auto mt-3 px-6 py-5 bg-[#F0EBE3] rounded-xl"
+                  <SyntaxHighlighter
+                    language={language}
+                    style={solarizedlight}
+                    customStyle={{
+                      backgroundColor: "#F0EBE3",
+                      borderRadius: "0.75rem",
+                      padding: "20px 24px",
+                    }}
+                    className="border"
                   >
-                    {React.Children.map(children, (child) =>
-                      React.cloneElement(child, {
-                        className: "bg-[#F0EBE3] text-[#555555]",
-                      })
-                    )}
-                  </pre>
+                    {code}
+                  </SyntaxHighlighter>
                 </div>
               );
             },
@@ -122,7 +135,8 @@ export const Markdown = ({ children }: Props) => {
           code: {
             component: "code",
             props: {
-              className: "bg-[#F0EBE3] text-[#555555] rounded-xl px-2 py-1.5",
+              className:
+                "bg-[#F0EBE3] text-[#555555] rounded-xl px-2 py-1.5 border",
             },
           },
         },
