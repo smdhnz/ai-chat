@@ -84,7 +84,7 @@ export default function Page() {
   return (
     <div className="h-screen flex flex-col bg-[#F6F5F2] relative text-[#555555]">
       <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-8 py-8">
+        <div className="flex flex-col gap-6 py-8">
           {messages.map((m) => (
             <div key={m.id}>
               <div className="flex flex-1 gap-3 mx-auto max-w-[800px] px-5">
@@ -110,7 +110,7 @@ export default function Page() {
                             width={500}
                             height={500}
                             alt={attachment.name ?? `attachment-${index}`}
-                            className="w-auto h-full rounded-md object-cover"
+                            className="w-auto h-full rounded-xl object-cover"
                           />
                         ))}
                     </div>
@@ -142,7 +142,7 @@ export default function Page() {
                       width={500}
                       height={500}
                       alt={imageFileName}
-                      className="w-auto h-full rounded-md object-cover"
+                      className="w-auto h-full rounded-xl object-cover"
                     />
                   </div>
                 </div>
