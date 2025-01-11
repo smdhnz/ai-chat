@@ -9,10 +9,63 @@ type Props = {
   children: string;
 };
 
-export const Markdown = ({ children }: Props) => {
+export const Markdown = React.memo(({ children }: Props) => {
   const handleCopy = (code: string) => {
     navigator.clipboard.writeText(code);
   };
+
+  const renderPre = React.useCallback(
+    ({ children }: { [k: string]: any }) => {
+      const code = React.Children.map(
+        children,
+        (child) => child.props.children
+      ).join("\n");
+
+      const language = React.useMemo(() => {
+        return (
+          React.Children.toArray(children)
+            .find(
+              (child): child is React.ReactElement =>
+                React.isValidElement(child) && child.type === "code"
+            )
+            ?.props.className?.match(/lang-(\w+)/)?.[1] || "plaintext"
+        );
+      }, [children]);
+
+      const [isClick, setIsClick] = React.useState(false);
+
+      const handleClick = React.useCallback(() => {
+        handleCopy(code);
+        setIsClick(true);
+      }, [code, handleCopy]);
+
+      return (
+        <div className="relative">
+          <Button
+            onClick={handleClick}
+            className="absolute top-2 right-2"
+            size="icon"
+            variant="ghost"
+          >
+            {isClick ? <ClipboardCheckIcon /> : <ClipboardIcon />}
+          </Button>
+          <SyntaxHighlighter
+            language={language}
+            style={solarizedlight}
+            customStyle={{
+              backgroundColor: "#F0EBE3",
+              borderRadius: "0.75rem",
+              padding: "20px 24px",
+            }}
+            className="border"
+          >
+            {code}
+          </SyntaxHighlighter>
+        </div>
+      );
+    },
+    [handleCopy]
+  );
 
   return (
     <Markdown_
@@ -84,53 +137,7 @@ export const Markdown = ({ children }: Props) => {
             },
           },
           pre: {
-            component: ({ children }: { [k: string]: any }) => {
-              const code = React.Children.map(
-                children,
-                (child) => child.props.children
-              ).join("\n");
-
-              // codeタグのclassNameから言語を取得
-              const language =
-                React.Children.toArray(children)
-                  .find(
-                    (child): child is React.ReactElement =>
-                      React.isValidElement(child) && child.type === "code"
-                  )
-                  ?.props.className?.match(/lang-(\w+)/)?.[1] || "plaintext";
-
-              const [isClick, setIsClick] = React.useState(false);
-
-              const handleClick = () => {
-                handleCopy(code);
-                setIsClick(true);
-              };
-
-              return (
-                <div className="relative">
-                  <Button
-                    onClick={handleClick}
-                    className="absolute top-2 right-2"
-                    size="icon"
-                    variant="ghost"
-                  >
-                    {isClick ? <ClipboardCheckIcon /> : <ClipboardIcon />}
-                  </Button>
-                  <SyntaxHighlighter
-                    language={language}
-                    style={solarizedlight}
-                    customStyle={{
-                      backgroundColor: "#F0EBE3",
-                      borderRadius: "0.75rem",
-                      padding: "20px 24px",
-                    }}
-                    className="border"
-                  >
-                    {code}
-                  </SyntaxHighlighter>
-                </div>
-              );
-            },
+            component: renderPre,
           },
           code: {
             component: "code",
@@ -145,4 +152,4 @@ export const Markdown = ({ children }: Props) => {
       {children}
     </Markdown_>
   );
-};
+});
