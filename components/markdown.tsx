@@ -40,7 +40,7 @@ export const Markdown = ({ children }: Props) => {
           p: {
             component: "p",
             props: {
-              className: "leading-7 [&:not(:first-child)]:mt-6",
+              className: "leading-7 [&:not(:first-child)]:mt-4",
             },
           },
           blockquote: {
@@ -107,11 +107,11 @@ export const Markdown = ({ children }: Props) => {
                   </Button>
                   <pre
                     {...props}
-                    className="overflow-x-auto my-5 p-6 bg-[#0D0D0D] text-white rounded-xl"
+                    className="overflow-x-auto mt-3 px-6 py-5 bg-[#F0EBE3] rounded-xl"
                   >
                     {React.Children.map(children, (child) =>
                       React.cloneElement(child, {
-                        className: "bg-[#0D0D0D] text-white",
+                        className: "bg-[#F0EBE3] text-[#555555]",
                       })
                     )}
                   </pre>
@@ -122,7 +122,7 @@ export const Markdown = ({ children }: Props) => {
           code: {
             component: "code",
             props: {
-              className: "bg-[#0D0D0D] text-white rounded p-2",
+              className: "bg-[#F0EBE3] text-[#555555] rounded-xl px-2 py-1.5",
             },
           },
         },

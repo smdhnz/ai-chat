@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Noto_Sans_JP } from "next/font/google";
-import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -20,7 +19,6 @@ export default function RootLayout({
     <html lang="ja" suppressHydrationWarning>
       <body className={cn(notoSansJp.className, "antialiased")}>
         <main>{children}</main>
-        <Toaster position="top-center" expand={true} richColors />
       </body>
     </html>
   );
