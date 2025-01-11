@@ -154,7 +154,7 @@ export default function Page() {
 
       <div className="w-full flex flex-col items-center mb-8 px-4">
         <div
-          className="rounded-xl border-2 cursor-text max-w-[700px] w-full px-5 py-4"
+          className="rounded-xl border-2 cursor-text max-w-[800px] w-full px-5 py-4"
           onClick={handleClickTextarea}
         >
           <div className="max-h-[50vh] overflow-y-auto w-full mb-[-5px]">
