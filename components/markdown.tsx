@@ -136,7 +136,7 @@ export const Markdown = ({ children }: Props) => {
             component: "code",
             props: {
               className:
-                "bg-[#F0EBE3] text-[#555555] rounded-xl px-2 py-1.5 border",
+                "bg-[#F0EBE3] text-[#555555] rounded-lg px-1.5 py-0.5 border",
             },
           },
         },
