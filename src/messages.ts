@@ -1,4 +1,12 @@
 export const ASSISTANT_CONTINUE_MARKER = "<<<CONTINUE_ASSISTANT_MESSAGE>>>";
+export const MESSAGE_PAGE_SIZE = 50;
+
+export function newestMessagePage<T>(rows: readonly T[]) {
+  return {
+    messages: rows.slice(0, MESSAGE_PAGE_SIZE).reverse(),
+    hasMore: rows.length > MESSAGE_PAGE_SIZE,
+  };
+}
 
 export function parseAssistantReply(text: string): {
   content: string;

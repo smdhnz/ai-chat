@@ -95,7 +95,7 @@ export function ConfirmDialog({
     return (
       <Drawer open={open} onOpenChange={change}>
         <DrawerContent className={drawerPanelClass}>
-          <DrawerHeader className={dialogHeaderClass}>
+          <DrawerHeader className={`${dialogHeaderClass} h-auto min-h-[68px] py-[18px]`}>
             <DrawerTitle className={dialogTitleClass}>{title}</DrawerTitle>
           </DrawerHeader>
           <Separator />
@@ -129,7 +129,7 @@ export function ConfirmDialog({
     <AlertDialog open={open} onOpenChange={change}>
       <AlertDialogContent className={`${dialogPanelClass} gap-0 sm:max-w-[510px]`}>
         <AlertDialogHeader
-          className={`${dialogHeaderClass} place-items-center justify-start sm:place-items-center`}
+          className={`${dialogHeaderClass} h-auto min-h-[68px] place-items-center justify-start py-[18px] sm:place-items-center`}
         >
           <AlertDialogTitle className={dialogTitleClass}>{title}</AlertDialogTitle>
         </AlertDialogHeader>

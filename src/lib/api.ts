@@ -44,6 +44,7 @@ export type Message = {
   skills?: string[];
   auth?: DeviceAuth;
 };
+export type MessagePage = { messages: Message[]; hasMore: boolean };
 export type DeviceAuth = { userCode: string; verificationUri: string; expiresInSeconds: number };
 
 export function parseDeviceAuth(content: string): DeviceAuth | undefined {

@@ -16,7 +16,13 @@ import {
 import { config, storedFilePath } from "./config";
 import { attachmentText } from "./attachments";
 import { cleanupExpired, db, id, now } from "./db";
-import { ASSISTANT_CONTINUE_MARKER, parseAssistantReply, regenerationIndex } from "./messages";
+import {
+  ASSISTANT_CONTINUE_MARKER,
+  MESSAGE_PAGE_SIZE,
+  newestMessagePage,
+  parseAssistantReply,
+  regenerationIndex,
+} from "./messages";
 import { parseTurnPlan, type TurnPlan } from "./turn-plan";
 import { webSearch } from "./web-search";
 
@@ -93,7 +99,7 @@ const server = Bun.serve<SocketData>({
         return createConversation(request, user);
       const conversationMatch = url.pathname.match(/^\/api\/conversations\/([\w-]+)$/);
       if (conversationMatch && request.method === "GET")
-        return conversationMessages(conversationMatch[1], user.id);
+        return conversationMessages(conversationMatch[1], user.id, url.searchParams.get("before"));
       if (conversationMatch && request.method === "DELETE")
         return deleteConversation(request, conversationMatch[1], user.id);
       const generationMatch = url.pathname.match(
@@ -261,24 +267,47 @@ function publishSocket(userId: string, event: SocketEvent): void {
   server.publish(userTopic(userId), JSON.stringify(event));
 }
 
-function conversationMessages(conversationId: string, userId: string): Response {
+function conversationMessages(
+  conversationId: string,
+  userId: string,
+  before: string | null,
+): Response {
   if (!ownedConversation(conversationId, userId)) return json({ error: "not found" }, 404);
   db.query("UPDATE conversations SET unread=0 WHERE id=? AND user_id=?").run(
     conversationId,
     userId,
   );
-  const messages = db
-    .query(
-      "SELECT id,role,content,file_ids,skills,created_at FROM messages WHERE conversation_id=? ORDER BY created_at,id",
-    )
-    .all(conversationId) as MessageRow[];
-  return json(
-    messages.map((message) => ({
+  const cursor = before
+    ? (db
+        .query("SELECT created_at,id FROM messages WHERE id=? AND conversation_id=?")
+        .get(before, conversationId) as { created_at: string; id: string } | null)
+    : null;
+  if (before && !cursor) return json({ error: "invalid cursor" }, 400);
+  const messages = (
+    cursor
+      ? db
+          .query(
+            `SELECT id,role,content,file_ids,skills,created_at FROM messages
+             WHERE conversation_id=? AND (created_at < ? OR (created_at = ? AND id < ?))
+             ORDER BY created_at DESC,id DESC LIMIT ${MESSAGE_PAGE_SIZE + 1}`,
+          )
+          .all(conversationId, cursor.created_at, cursor.created_at, cursor.id)
+      : db
+          .query(
+            `SELECT id,role,content,file_ids,skills,created_at FROM messages
+             WHERE conversation_id=? ORDER BY created_at DESC,id DESC LIMIT ${MESSAGE_PAGE_SIZE + 1}`,
+          )
+          .all(conversationId)
+  ) as MessageRow[];
+  const page = newestMessagePage(messages);
+  return json({
+    messages: page.messages.map((message) => ({
       ...message,
       files: filesByIds(JSON.parse(message.file_ids)),
       skills: JSON.parse(message.skills),
     })),
-  );
+    hasMore: page.hasMore,
+  });
 }
 
 async function deleteConversation(

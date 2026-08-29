@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation, Project } from "@/lib/api";
@@ -25,6 +26,7 @@ const rowButtonClass =
 
 const rowActionClass =
   "h-[41px] w-[30px] shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-[15px]";
+const openProjectsKey = "ai-chat:open-projects:v1";
 
 function ConversationRow({
   item,
@@ -86,6 +88,32 @@ export function ChatSidebar({
   askDeleteConversation: (item: Conversation) => void;
   askDeleteProject: (item: Project) => void;
 }) {
+  const [conversationLimit, setConversationLimit] = useState(10);
+  const [projectLimits, setProjectLimits] = useState<Record<string, number>>({});
+  const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(openProjectsKey) || "[]") as unknown;
+      if (Array.isArray(saved))
+        setOpenProjects(new Set(saved.filter((id): id is string => typeof id === "string")));
+    } catch {
+      localStorage.removeItem(openProjectsKey);
+    }
+  }, []);
+
+  function setProjectOpen(id: string, open: boolean) {
+    setOpenProjects((current) => {
+      const next = new Set(current);
+      if (open) next.add(id);
+      else next.delete(id);
+      localStorage.setItem(openProjectsKey, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  const conversations = data.conversations.filter((item) => !item.temporary && !item.project_id);
+
   return (
     <Sidebar collapsible="offcanvas" className="border-border">
       <SidebarHeader className="px-3.5 pt-[18px] pb-0">
@@ -100,43 +128,52 @@ export function ChatSidebar({
       </SidebarHeader>
       <SidebarContent className="gap-0 px-3.5">
         <SidebarMenu className="gap-0">
-          {data.projects.map((group) => (
-            <Collapsible key={group.id} asChild className="group/collapsible mb-[5px]">
-              <SidebarMenuItem>
-                <div className="flex items-center rounded-[11px] hover:bg-sidebar-accent">
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton
-                      className={`${rowButtonClass} h-[39px] min-w-0 flex-1 px-2.5 text-xs font-semibold`}
+          {data.projects.map((group) => {
+            const conversations = data.conversations.filter(
+              (item) => !item.temporary && item.project_id === group.id,
+            );
+            const limit = projectLimits[group.id] ?? 5;
+            return (
+              <Collapsible
+                key={group.id}
+                asChild
+                className="group/collapsible mb-[5px]"
+                open={openProjects.has(group.id)}
+                onOpenChange={(open) => setProjectOpen(group.id, open)}
+              >
+                <SidebarMenuItem>
+                  <div className="flex items-center rounded-[11px] hover:bg-sidebar-accent">
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        className={`${rowButtonClass} h-[39px] min-w-0 flex-1 px-2.5 text-xs font-semibold`}
+                      >
+                        <ChevronRight className="size-[13px]! transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        <ProjectIcon project={group} className="size-[22px]" />
+                        <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
+                      aria-label={`${group.name}で新しいチャット`}
+                      onClick={() => newChat(group.id)}
                     >
-                      <ChevronRight className="size-[13px]! transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                      <ProjectIcon project={group} className="size-[22px]" />
-                      <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
-                    aria-label={`${group.name}で新しいチャット`}
-                    onClick={() => newChat(group.id)}
-                  >
-                    <Plus />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
-                    aria-label={`${group.name}を削除`}
-                    onClick={() => askDeleteProject(group)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-                <CollapsibleContent>
-                  <SidebarMenuSub className="mx-0 gap-0 border-0 px-0 py-0 pl-0">
-                    {data.conversations
-                      .filter((item) => !item.temporary && item.project_id === group.id)
-                      .map((item) => (
+                      <Plus />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
+                      aria-label={`${group.name}を削除`}
+                      onClick={() => askDeleteProject(group)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <SidebarMenuSub className="mx-0 gap-0 border-0 px-0 py-0 pl-0">
+                      {conversations.slice(0, limit).map((item) => (
                         <ConversationRow
                           key={item.id}
                           item={item}
@@ -146,22 +183,48 @@ export function ChatSidebar({
                           remove={() => askDeleteConversation(item)}
                         />
                       ))}
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </SidebarMenuItem>
-            </Collapsible>
+                      {conversations.length > limit && (
+                        <SidebarMenuItem className="pl-5">
+                          <Button
+                            variant="ghost"
+                            className="h-8 w-full justify-start px-[11px] text-[11px] font-normal text-muted-foreground"
+                            onClick={() =>
+                              setProjectLimits((current) => ({
+                                ...current,
+                                [group.id]: limit + 5,
+                              }))
+                            }
+                          >
+                            もっと見る
+                          </Button>
+                        </SidebarMenuItem>
+                      )}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            );
+          })}
+          {conversations.slice(0, conversationLimit).map((item) => (
+            <ConversationRow
+              key={item.id}
+              item={item}
+              active={item.id === conversationId}
+              select={() => selectConversation(item)}
+              remove={() => askDeleteConversation(item)}
+            />
           ))}
-          {data.conversations
-            .filter((item) => !item.temporary && !item.project_id)
-            .map((item) => (
-              <ConversationRow
-                key={item.id}
-                item={item}
-                active={item.id === conversationId}
-                select={() => selectConversation(item)}
-                remove={() => askDeleteConversation(item)}
-              />
-            ))}
+          {conversations.length > conversationLimit && (
+            <SidebarMenuItem>
+              <Button
+                variant="ghost"
+                className="h-8 w-full justify-start px-[11px] text-[11px] font-normal text-muted-foreground"
+                onClick={() => setConversationLimit((current) => current + 10)}
+              >
+                もっと見る
+              </Button>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="px-3.5 pt-2.5 pb-3.5">

@@ -4,16 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  ArrowLeft,
-  File,
-  LogOut,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, File, LogOut, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, getBootstrap, type Project, type Skill, type ThinkingLevel } from "@/lib/api";
 import { useBootstrap } from "@/hooks/use-bootstrap";
@@ -32,12 +23,6 @@ import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Field,
   FieldContent,
@@ -181,18 +166,20 @@ export function SettingsShell() {
           </Button>
         </header>
         <Tabs value={tab} className="gap-0">
-          <TabsList className="mb-[38px] h-auto w-max gap-1 rounded-[15px] border border-border bg-[color-mix(in_srgb,var(--card)_65%,transparent)] p-[5px] backdrop-blur-[18px] max-md:mb-7 max-md:w-full max-md:justify-start max-md:overflow-x-auto">
-            {settingsTabs.map((item) => (
-              <TabsTrigger
-                key={item}
-                value={item}
-                asChild
-                className="h-[35px] rounded-[10px] border-0 px-[17px] text-[11px] font-semibold text-muted-foreground transition duration-200 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-[0_4px_14px_#27243112] max-md:flex-1 max-md:justify-center max-md:px-[13px]"
-              >
-                <Link href={`/settings/${item}`}>{settingsTabLabels[item]}</Link>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div className="mb-[38px] w-max rounded-[15px] border border-border bg-[color-mix(in_srgb,var(--card)_65%,transparent)] p-1.5 backdrop-blur-[18px] max-md:mb-7 max-md:w-full max-md:overflow-x-auto">
+            <TabsList className="h-auto w-max gap-1 bg-transparent p-0 max-md:w-full max-md:justify-start">
+              {settingsTabs.map((item) => (
+                <TabsTrigger
+                  key={item}
+                  value={item}
+                  asChild
+                  className="h-[35px] rounded-[10px] border-0 px-[17px] text-[11px] font-semibold text-muted-foreground transition duration-200 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-[0_4px_14px_#27243112] max-md:flex-1 max-md:justify-center max-md:px-[13px]"
+                >
+                  <Link href={`/settings/${item}`}>{settingsTabLabels[item]}</Link>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
           <TabsContent value={tab}>
             <AnimatePresence mode="wait">
               <motion.section
@@ -265,7 +252,7 @@ export function SettingsShell() {
                           <Item
                             asChild
                             variant="outline"
-                            className="min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-[17px] border-border bg-card p-0 shadow-none transition duration-200 hover:-translate-y-[3px] hover:shadow-[0_24px_70px_#4c392718] dark:hover:shadow-[0_28px_80px_#100d0966]"
+                            className="min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-[17px] border-border bg-card p-0 shadow-none hover:bg-card"
                             key={file.id}
                           >
                             <a href={`/files/${file.id}`} target="_blank">
@@ -548,50 +535,44 @@ export function SettingsCard({
   remove: () => void;
 }) {
   return (
-    <motion.div whileHover={{ y: -3 }} className="h-full">
-      <Item
-        variant="outline"
-        className="h-full min-h-[170px] flex-nowrap items-start gap-[13px] rounded-[19px] border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-[19px] shadow-[0_8px_30px_#302d3a0a]"
-      >
-        <ItemMedia className="size-10 rounded-[13px] bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-primary [&_svg]:w-[18px]">
-          {icon}
-        </ItemMedia>
-        <ItemContent className="min-w-0 gap-0">
-          <ItemTitle className="mt-0.5 mb-[5px] text-sm font-semibold">
-            <span className="truncate">{title}</span>
-            {badge && (
-              <Badge className="rounded-[5px] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-1.5 py-0.5 text-[8px] font-normal text-primary">
-                {badge}
-              </Badge>
-            )}
-          </ItemTitle>
-          <ItemDescription className="h-[38px] text-[10px] leading-[1.55]">{text}</ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-[31px] rounded-[9px] text-muted-foreground [&_svg:not([class*='size-'])]:size-3.5"
-                aria-label={`${title}の操作`}
-              >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[140px] rounded-[13px]">
-              <DropdownMenuItem className="text-[11px]" onSelect={edit}>
-                <Pencil />
-                編集
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" className="text-[11px]" onSelect={remove}>
-                <Trash2 />
-                削除
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </ItemActions>
-      </Item>
-    </motion.div>
+    <Item
+      variant="outline"
+      className="h-full min-h-[120px] flex-nowrap items-start gap-3 rounded-[17px] border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-[15px] shadow-[0_8px_30px_#302d3a0a]"
+    >
+      <ItemMedia className="size-9 rounded-xl bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-primary [&_svg]:w-4">
+        {icon}
+      </ItemMedia>
+      <ItemContent className="min-w-0 gap-0">
+        <ItemTitle className="mb-1 text-[13px] font-semibold">
+          <span className="truncate">{title}</span>
+          {badge && (
+            <Badge className="rounded-[5px] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-1.5 py-0.5 text-[8px] font-normal text-primary">
+              {badge}
+            </Badge>
+          )}
+        </ItemTitle>
+        <ItemDescription className="line-clamp-2 text-[9px] leading-[1.5]">{text}</ItemDescription>
+      </ItemContent>
+      <ItemActions className="gap-0.5">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="rounded-lg text-muted-foreground"
+          aria-label={`${title}を編集`}
+          onClick={edit}
+        >
+          <Pencil />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="rounded-lg text-destructive hover:text-destructive"
+          aria-label={`${title}を削除`}
+          onClick={remove}
+        >
+          <Trash2 />
+        </Button>
+      </ItemActions>
+    </Item>
   );
 }

@@ -11,6 +11,7 @@ import {
   socketUrl,
   type Conversation,
   type Message,
+  type MessagePage,
   type Project,
 } from "@/lib/api";
 import { useBootstrap } from "@/hooks/use-bootstrap";
@@ -21,7 +22,6 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ProjectIcon } from "@/components/project-icon";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
 import { Composer } from "@/app/(chat)/_components/composer";
@@ -43,7 +43,8 @@ export function ChatShell() {
   const [projectId, setProjectId] = useState("");
   const [temporary, setTemporary] = useState(temporaryParam);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [visibleMessageCount, setVisibleMessageCount] = useState(50);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [desktopSidebar, setDesktopSidebar] = useState(true);
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -52,18 +53,22 @@ export function ChatShell() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const autoScrollRef = useRef(true);
   const openConversationRef = useRef<string | null>(conversationId);
   openConversationRef.current = conversationId;
 
   useEffect(() => {
-    setVisibleMessageCount(50);
-    if (!conversationId) {
-      setMessages([]);
-      return;
-    }
-    void api<Message[]>(`/api/conversations/${conversationId}`).then(setMessages);
+    setMessages([]);
+    setHasOlderMessages(false);
+    if (!conversationId) return;
+    let active = true;
+    void api<MessagePage>(`/api/conversations/${conversationId}`).then((page) => {
+      if (!active) return;
+      setMessages(page.messages);
+      setHasOlderMessages(page.hasMore);
+    });
+    return () => {
+      active = false;
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -99,14 +104,16 @@ export function ChatShell() {
         if (event.type === "done") {
           const current =
             openConversationRef.current === event.conversationId
-              ? api<Message[]>(`/api/conversations/${event.conversationId}`)
+              ? api<MessagePage>(`/api/conversations/${event.conversationId}`)
               : Promise.resolve(null);
           void Promise.all([getBootstrap(), current])
-            .then(([fresh, messages]) => {
+            .then(([fresh, page]) => {
               if (!active) return;
               setData(fresh);
-              if (messages && openConversationRef.current === event.conversationId)
-                setMessages(messages);
+              if (page && openConversationRef.current === event.conversationId) {
+                setMessages(page.messages);
+                setHasOlderMessages(page.hasMore);
+              }
             })
             .catch(() => undefined);
           return;
@@ -152,23 +159,15 @@ export function ChatShell() {
     setTemporary(temporaryParam);
   }, [conversations, pathname, temporaryParam, router]);
 
-  const lastMessage = messages.at(-1);
-  const visibleMessages = messages.slice(-visibleMessageCount);
-  useEffect(() => {
-    if (!autoScrollRef.current) return;
-    requestAnimationFrame(() =>
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }),
-    );
-  }, [lastMessage?.content, lastMessage?.id, sending]);
-
   const refreshChat = useCallback(
     async (id: string) => {
-      const [fresh, current] = await Promise.all([
+      const [fresh, page] = await Promise.all([
         getBootstrap(),
-        api<Message[]>(`/api/conversations/${id}`),
+        api<MessagePage>(`/api/conversations/${id}`),
       ]);
       setData(fresh);
-      setMessages(current);
+      setMessages(page.messages);
+      setHasOlderMessages(page.hasMore);
     },
     [setData],
   );
@@ -182,7 +181,6 @@ export function ChatShell() {
 
   function selectConversation(item: Conversation) {
     const isTemporary = item.temporary === 1;
-    autoScrollRef.current = true;
     setEditingMessageId(null);
     setPrompt("");
     setConversationId(item.id);
@@ -192,7 +190,6 @@ export function ChatShell() {
     setMobileSidebar(false);
   }
   function newChat(targetProjectId = "", isTemporary = temporary) {
-    autoScrollRef.current = true;
     setEditingMessageId(null);
     setPrompt("");
     setConversationId(null);
@@ -250,7 +247,6 @@ export function ChatShell() {
   async function send(event: FormEvent) {
     event.preventDefault();
     if ((!prompt.trim() && !files.length) || generating) return;
-    autoScrollRef.current = true;
     setSending(true);
     let currentId = conversationId;
     try {
@@ -307,6 +303,22 @@ export function ChatShell() {
       appendError("エラー", error);
     } finally {
       setSending(false);
+    }
+  }
+  async function loadOlderMessages() {
+    const oldest = messages[0];
+    const currentConversationId = conversationId;
+    if (!oldest || !currentConversationId || loadingOlderMessages) return;
+    setLoadingOlderMessages(true);
+    try {
+      const page = await api<MessagePage>(
+        `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
+      );
+      if (openConversationRef.current !== currentConversationId) return;
+      setMessages((value) => [...page.messages, ...value]);
+      setHasOlderMessages(page.hasMore);
+    } finally {
+      setLoadingOlderMessages(false);
     }
   }
   async function stop() {
@@ -410,31 +422,21 @@ export function ChatShell() {
             <TimerReset />
           </Button>
         </header>
-        <ScrollArea
-          className="min-h-0 flex-1"
-          viewportRef={scrollRef}
-          viewportProps={{
-            className: "overscroll-none scroll-smooth",
-            onScroll: (event) => {
-              const element = event.currentTarget;
-              autoScrollRef.current =
-                element.scrollHeight - element.scrollTop - element.clientHeight < 120;
-            },
-          }}
-        >
+        <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
           {messages.length > 0 && (
-            <div className="mx-auto w-[min(820px,calc(100%-32px))] pt-11 pb-10 max-md:pt-[27px]">
-              {visibleMessages.length < messages.length && (
+            <div className="mx-auto w-[min(820px,calc(100%-32px))] shrink-0 pt-11 pb-10 max-md:pt-[27px]">
+              {hasOlderMessages && (
                 <Button
                   variant="outline"
                   className="mx-auto mb-8 flex h-auto rounded-[10px] bg-card px-3.5 py-2 text-[11px] font-normal text-muted-foreground"
-                  onClick={() => setVisibleMessageCount((count) => count + 50)}
+                  disabled={loadingOlderMessages}
+                  onClick={() => void loadOlderMessages()}
                 >
-                  以前のメッセージを表示
+                  {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
                 </Button>
               )}
               <AnimatePresence initial={false}>
-                {visibleMessages.map((message) => (
+                {messages.map((message) => (
                   <MessageView
                     key={message.id}
                     message={message}
@@ -451,7 +453,7 @@ export function ChatShell() {
               {generating && <Thinking />}
             </div>
           )}
-        </ScrollArea>
+        </div>
         <Composer
           prompt={prompt}
           setPrompt={setPrompt}
