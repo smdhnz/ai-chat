@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 skills/imagegen/LICENSE.txt
 skills/imagegen/assets/
 skills/imagegen/scripts/
+.agents/skills/
