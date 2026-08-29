@@ -334,16 +334,12 @@ function Chat({ initial }: { initial: Bootstrap }) {
     if (!mobile || !viewport || !shell) return;
     const update = () => {
       shell.style.height = `${viewport.height}px`;
-      shell.style.top = `${viewport.offsetTop}px`;
     };
     update();
     viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
     return () => {
       viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
       shell.style.removeProperty("height");
-      shell.style.removeProperty("top");
     };
   }, [mobile]);
   useEffect(() => {
@@ -567,6 +563,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
 
   return (
     <div
+      id="chat-shell"
       ref={shellRef}
       className={`fixed inset-0 grid overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
       onTouchStart={startSidebarSwipe}
@@ -1020,7 +1017,7 @@ function Composer(props: {
   return (
     <footer className="z-5 mx-auto w-[min(850px,calc(100%-32px))] pb-[max(10px,env(safe-area-inset-bottom))] transition-[width] max-md:w-[calc(100%-64px)] max-md:pb-[max(7px,env(safe-area-inset-bottom))] max-md:focus-within:w-[calc(100%-18px)]">
       <form
-        className={`overflow-hidden rounded-[22px] border bg-glass shadow-[0_15px_50px_#28253318] backdrop-blur-[22px] transition duration-200 focus-within:border-[color-mix(in_srgb,var(--accent)_48%,var(--line))] focus-within:shadow-[0_18px_55px_#7a4a3220] max-md:rounded-[18px] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--accent)_55%,var(--line))]" : "border-line"}`}
+        className={`overflow-hidden rounded-[22px] border bg-glass shadow-[0_15px_50px_#28253318] backdrop-blur-[22px] max-md:rounded-[18px] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--accent)_55%,var(--line))]" : "border-line"}`}
         onSubmit={props.send}
       >
         {props.temporary && (

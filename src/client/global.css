@@ -56,6 +56,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+@media (max-width: 767px) {
+  html:has(#chat-shell),
+  body:has(#chat-shell),
+  #root:has(#chat-shell) {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body:has(#chat-shell) {
+    position: fixed;
+    inset: 0;
+  }
+}
+
 button,
 input,
 textarea {
