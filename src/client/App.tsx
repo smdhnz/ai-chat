@@ -260,13 +260,18 @@ function Chat({ initial }: { initial: Bootstrap }) {
     const shell = shellRef.current;
     if (!mobile || !viewport || !shell) return;
     const update = () => {
+      const keyboardOpen = shell.querySelector(".composer textarea:focus");
       shell.style.height = `${viewport.height}px`;
+      shell.style.top = keyboardOpen ? `${viewport.offsetTop}px` : "0px";
     };
     update();
     viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
     return () => {
       viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
       shell.style.removeProperty("height");
+      shell.style.removeProperty("top");
     };
   }, [mobile]);
   useEffect(() => {
