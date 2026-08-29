@@ -2,6 +2,7 @@
 FROM oven/bun:1-alpine AS build
 WORKDIR /app
 COPY package.json bun.lock ./
+COPY patches ./patches
 RUN bun install --frozen-lockfile
 COPY tsconfig.json next.config.mjs postcss.config.mjs components.json ./
 COPY src ./src
@@ -11,6 +12,7 @@ RUN bun run build
 FROM oven/bun:1-alpine AS production-deps
 WORKDIR /app
 COPY package.json bun.lock ./
+COPY patches ./patches
 RUN bun install --frozen-lockfile --production
 
 FROM oven/bun:1-alpine
