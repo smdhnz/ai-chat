@@ -1615,20 +1615,19 @@ a {
     width: calc(100% - 18px);
   }
   .composer {
+    border-radius: 18px;
+  }
+  .composer-row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: end;
-    border-radius: 18px;
-  }
-  .temporary-label,
-  .editing-label,
-  .attachment-row {
-    grid-column: 1 / -1;
   }
   .composer textarea {
     grid-column: 2;
+    grid-row: 1;
     min-width: 0;
-    padding: 13px 8px 9px;
+    min-height: 48px;
+    padding: 11px 8px 8px;
     font-size: 16px;
   }
   .composer-tools {
@@ -1636,14 +1635,16 @@ a {
   }
   .composer-tools .tool {
     grid-column: 1;
-    margin: 0 0 8px 8px;
+    grid-row: 1;
+    margin: 0 0 7px 8px;
   }
   .composer-tools .grow {
     display: none;
   }
   .composer-tools .send-button {
     grid-column: 3;
-    margin: 0 8px 8px 0;
+    grid-row: 1;
+    margin: 0 8px 7px 0;
   }
   .settings-shell {
     width: calc(100% - 26px);

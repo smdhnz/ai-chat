@@ -261,16 +261,12 @@ function Chat({ initial }: { initial: Bootstrap }) {
     if (!mobile || !viewport || !shell) return;
     const update = () => {
       shell.style.height = `${viewport.height}px`;
-      shell.style.top = `${viewport.offsetTop}px`;
     };
     update();
     viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
     return () => {
       viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
       shell.style.removeProperty("height");
-      shell.style.removeProperty("top");
     };
   }, [mobile]);
   useEffect(() => {
@@ -978,75 +974,77 @@ function Composer(props: {
             ))}
           </div>
         )}
-        <textarea
-          value={props.prompt}
-          onChange={(event) => {
-            props.setPrompt(event.target.value);
-            event.target.style.height = "auto";
-            event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`;
-          }}
-          onPaste={(event) => {
-            if (props.editing) return;
-            const images = Array.from(event.clipboardData.files).filter((file) =>
-              file.type.startsWith("image/"),
-            );
-            if (images.length) {
-              event.preventDefault();
-              props.setFiles([...props.files, ...images]);
-            }
-          }}
-          onKeyDown={(event) => {
-            if (props.mobile || event.key !== "Enter") return;
-            const send = props.ctrlEnterSend ? event.ctrlKey : !event.shiftKey;
-            if (send) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          placeholder="メッセージを入力"
-          rows={1}
-        />
-        <div className="composer-tools">
-          <input
-            ref={input}
-            type="file"
-            multiple
-            hidden
-            onChange={(event) =>
-              props.setFiles([...props.files, ...Array.from(event.target.files || [])])
-            }
+        <div className="composer-row">
+          <textarea
+            value={props.prompt}
+            onChange={(event) => {
+              props.setPrompt(event.target.value);
+              event.target.style.height = "auto";
+              event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`;
+            }}
+            onPaste={(event) => {
+              if (props.editing) return;
+              const images = Array.from(event.clipboardData.files).filter((file) =>
+                file.type.startsWith("image/"),
+              );
+              if (images.length) {
+                event.preventDefault();
+                props.setFiles([...props.files, ...images]);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (props.mobile || event.key !== "Enter") return;
+              const send = props.ctrlEnterSend ? event.ctrlKey : !event.shiftKey;
+              if (send) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="メッセージを入力"
+            rows={1}
           />
-          {!props.editing && (
-            <button
-              type="button"
-              className="tool"
-              onClick={() => input.current?.click()}
-              aria-label="ファイルを添付"
-              title="ファイルを添付"
-            >
-              <Paperclip />
-            </button>
-          )}
-          <span className="grow" />
-          {props.generating ? (
-            <button
-              type="button"
-              className="send-button stop-button"
-              onClick={() => void props.stop()}
-              aria-label="生成を停止"
-              title="生成を停止"
-            >
-              <Square />
-            </button>
-          ) : (
-            <button
-              className="send-button"
-              disabled={!props.prompt.trim() && !props.files.length}
-              aria-label={props.editing ? "編集して再生成" : "送信"}
-            >
-              <ArrowUp />
-            </button>
-          )}
+          <div className="composer-tools">
+            <input
+              ref={input}
+              type="file"
+              multiple
+              hidden
+              onChange={(event) =>
+                props.setFiles([...props.files, ...Array.from(event.target.files || [])])
+              }
+            />
+            {!props.editing && (
+              <button
+                type="button"
+                className="tool"
+                onClick={() => input.current?.click()}
+                aria-label="ファイルを添付"
+                title="ファイルを添付"
+              >
+                <Paperclip />
+              </button>
+            )}
+            <span className="grow" />
+            {props.generating ? (
+              <button
+                type="button"
+                className="send-button stop-button"
+                onClick={() => void props.stop()}
+                aria-label="生成を停止"
+                title="生成を停止"
+              >
+                <Square />
+              </button>
+            ) : (
+              <button
+                className="send-button"
+                disabled={!props.prompt.trim() && !props.files.length}
+                aria-label={props.editing ? "編集して再生成" : "送信"}
+              >
+                <ArrowUp />
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </footer>
