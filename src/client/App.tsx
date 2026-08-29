@@ -334,12 +334,16 @@ function Chat({ initial }: { initial: Bootstrap }) {
     if (!mobile || !viewport || !shell) return;
     const update = () => {
       shell.style.height = `${viewport.height}px`;
+      shell.style.top = `${viewport.offsetTop}px`;
     };
     update();
     viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
     return () => {
       viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
       shell.style.removeProperty("height");
+      shell.style.removeProperty("top");
     };
   }, [mobile]);
   useEffect(() => {
