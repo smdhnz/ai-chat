@@ -1,0 +1,31 @@
+{
+  "name": "image_gen.imagegen",
+  "kind": "built-in-tool",
+  "target_channel": "commentary",
+  "description": "The built-in image generation tool enables image generation from descriptions and editing of existing images based on specific instructions. It is used for scene descriptions such as diagrams, portraits, comics, memes, and other visuals, and for modifying attached images with requested changes such as adding or removing elements, changing colors, improving quality, or transforming style.",
+  "notes": [
+    "This is not a standalone MCP server implementation exposed on disk in this workspace.",
+    "The runnable tool is provided by the host environment as the image_gen namespace.",
+    "This file records the callable interface and behavior available to Codex in this session."
+  ],
+  "tool": {
+    "namespace": "image_gen",
+    "function": "imagegen",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Description of the image to generate or edit instructions for an existing image."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "usage_guidelines": [
+    "Directly generate the image without reconfirmation or clarification when the prompt is sufficiently actionable.",
+    "Use this tool for image editing unless the user explicitly requests otherwise.",
+    "If a request violates policy, refuse the violating request and provide a sufficiently different allowed alternative."
+  ]
+}

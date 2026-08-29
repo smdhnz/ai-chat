@@ -1,0 +1,102 @@
+export type FileItem = {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  source: string;
+  created_at: string;
+  preview?: string;
+};
+export type Project = {
+  id: string;
+  name: string;
+  system_prompt: string;
+  icon: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+};
+export type Skill = {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  enabled: number;
+  created_at: string;
+  updated_at: string;
+};
+export type Conversation = {
+  id: string;
+  project_id: string | null;
+  title: string;
+  temporary: number;
+  generation_status: "idle" | "running" | "stopped";
+  unread: number;
+  created_at: string;
+  updated_at: string;
+};
+export type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  files: FileItem[];
+  created_at: string;
+  skills?: string[];
+  auth?: DeviceAuth;
+};
+export type DeviceAuth = { userCode: string; verificationUri: string; expiresInSeconds: number };
+
+export function parseDeviceAuth(content: string): DeviceAuth | undefined {
+  const match = content.match(
+    /^OpenAI Codexの再認証が必要です。\n\n\[認証ページを開く\]\((https:\/\/[^\s)]+)\)\n\nコード: `([^`]+)`$/,
+  );
+  if (!match) return;
+  return { verificationUri: match[1], userCode: match[2], expiresInSeconds: 0 };
+}
+
+export type CodexModel = { id: string; name: string };
+export type ThinkingLevel = "low" | "medium" | "high";
+export type Bootstrap = {
+  user: {
+    id: string;
+    username: string;
+    display_name: string;
+    avatar: string | null;
+    language: string;
+    ctrl_enter_send: number;
+    model: string;
+    thinking_level: ThinkingLevel;
+  };
+  models: CodexModel[];
+  projects: Project[];
+  skills: Skill[];
+  conversations: Conversation[];
+  files: FileItem[];
+};
+
+export async function readJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`サーバーがJSONではない応答を返しました (HTTP ${response.status})`);
+  }
+}
+
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  });
+  if (response.status === 401) {
+    location.href = "/login";
+    throw new Error("unauthorized");
+  }
+  if (!response.ok) {
+    const body = await readJson<{ error?: string }>(response).catch(() => null);
+    throw new Error(body?.error || `HTTP ${response.status}`);
+  }
+  return response.status === 204 ? (undefined as T) : readJson<T>(response);
+}
+
+export const getBootstrap = () => api<Bootstrap>("/api/bootstrap");

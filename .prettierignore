@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/
+.env
+bun.lock
+skills/imagegen/LICENSE.txt
+skills/imagegen/assets/
+skills/imagegen/scripts/
