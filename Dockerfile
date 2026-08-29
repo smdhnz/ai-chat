@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package.json bun.lock vite.config.ts tsconfig.json index.html ./
 RUN bun install --frozen-lockfile
 COPY src ./src
+COPY public ./public
 RUN bun run build
 
 FROM oven/bun:1-alpine AS production-deps

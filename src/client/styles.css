@@ -985,32 +985,34 @@ a {
   padding: 36px 0 80px;
 }
 .settings-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 28px;
   margin-bottom: 30px;
 }
 .settings-header h1 {
+  grid-column: 2;
   font-size: 25px;
   letter-spacing: -0.035em;
   margin: 0;
 }
-.settings-header > .icon-button {
-  margin-left: auto;
-}
 .back-link {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: max-content;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel);
   color: var(--muted);
-  font-size: 12px;
+  transition: 0.2s ease;
 }
 .back-link:hover {
   color: var(--text);
+  transform: translateX(-2px);
 }
 .back-link svg {
-  width: 17px;
+  width: 18px;
 }
 .settings-tabs {
   display: flex;
@@ -1615,9 +1617,6 @@ a {
     width: calc(100% - 26px);
     padding-top: 20px;
   }
-  .settings-header {
-    gap: 16px;
-  }
   .settings-tabs {
     width: 100%;
     overflow-x: auto;
@@ -1625,6 +1624,7 @@ a {
     margin-bottom: 28px;
   }
   .settings-tabs a {
+    justify-content: center;
     padding: 0 13px;
     flex: 1;
   }

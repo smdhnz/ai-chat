@@ -123,8 +123,9 @@ function useTheme() {
 }
 
 function ThemeButton({ dark, toggle }: { dark: boolean; toggle: () => void }) {
+  const label = dark ? "ライトテーマに変更" : "ダークテーマに変更";
   return (
-    <button className="icon-button" onClick={toggle} aria-label="テーマを切り替える">
+    <button className="icon-button" onClick={toggle} aria-label={label} title={label}>
       {dark ? <Sun /> : <Moon />}
     </button>
   );
@@ -186,7 +187,7 @@ function SidebarConversation({
   );
 }
 
-function Chat({ initial, theme }: { initial: Bootstrap; theme: ReturnType<typeof useTheme> }) {
+function Chat({ initial }: { initial: Bootstrap }) {
   const [data, setData] = useState(initial);
   const initialConversation = initial.conversations.find(
     (item) => item.id === conversationFromPath(),
@@ -620,7 +621,6 @@ function Chat({ initial, theme }: { initial: Bootstrap; theme: ReturnType<typeof
           >
             <TimerReset />
           </button>
-          <ThemeButton {...theme} />
         </header>
         <section
           ref={scrollRef}
@@ -1174,12 +1174,10 @@ function SettingsPage({
       <div className="aurora" />
       <main className="settings-shell">
         <header className="settings-header">
-          <Link href="/" className="back-link">
+          <Link href="/" className="back-link" aria-label="チャットに戻る" title="チャットに戻る">
             <ArrowLeft />
-            チャット
           </Link>
           <h1>設定</h1>
-          <ThemeButton {...theme} />
         </header>
         <nav className="settings-tabs">
           {(["projects", "skills", "files", "general"] as const).map((item) => (
@@ -1282,6 +1280,10 @@ function SettingsPage({
               <>
                 <PanelTitle title="一般" text="回答とアカウントの設定です。" />
                 <div className="language-settings">
+                  <div className="general-setting-row">
+                    <span>テーマ</span>
+                    <ThemeButton {...theme} />
+                  </div>
                   <div className="general-setting-row">
                     <span>回答言語</span>
                     <input
@@ -1656,7 +1658,7 @@ export default function App() {
   return path.startsWith("/settings/") ? (
     <SettingsPage initial={data} theme={theme} />
   ) : (
-    <Chat initial={data} theme={theme} />
+    <Chat initial={data} />
   );
 }
 
