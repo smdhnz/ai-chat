@@ -1,19 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, MessageSquare, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react";
+import { ChevronRight, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation, Project } from "@/lib/api";
 import { ProjectIcon } from "@/components/project-icon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import {
   Sidebar,
@@ -31,10 +25,6 @@ const rowButtonClass =
 
 const rowActionClass =
   "h-[41px] w-[30px] shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-[15px]";
-
-const menuContentClass = "min-w-[170px] rounded-[13px]";
-
-const menuItemClass = "rounded-[9px] text-xs";
 
 function ConversationRow({
   item,
@@ -68,24 +58,15 @@ function ConversationRow({
           />
         )}
       </SidebarMenuButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={rowActionClass}
-            aria-label={`${item.title}の操作`}
-          >
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className={menuContentClass}>
-          <DropdownMenuItem variant="destructive" className={menuItemClass} onSelect={remove}>
-            <Trash2 />
-            削除
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={rowActionClass}
+        aria-label={`${item.title}を削除`}
+        onClick={remove}
+      >
+        <Trash2 />
+      </Button>
     </SidebarMenuItem>
   );
 }
@@ -132,35 +113,24 @@ export function ChatSidebar({
                       <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
-                        aria-label={`${group.name}の操作`}
-                      >
-                        <MoreHorizontal />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className={menuContentClass}>
-                      <DropdownMenuItem
-                        className={menuItemClass}
-                        onSelect={() => newChat(group.id)}
-                      >
-                        <Plus />
-                        新しいチャット
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        className={menuItemClass}
-                        onSelect={() => askDeleteProject(group)}
-                      >
-                        <Trash2 />
-                        削除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
+                    aria-label={`${group.name}で新しいチャット`}
+                    onClick={() => newChat(group.id)}
+                  >
+                    <Plus />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 rounded-[11px] text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg:not([class*='size-'])]:size-3.5"
+                    aria-label={`${group.name}を削除`}
+                    onClick={() => askDeleteProject(group)}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
                 <CollapsibleContent>
                   <SidebarMenuSub className="mx-0 gap-0 border-0 px-0 py-0 pl-0">
