@@ -1604,13 +1604,25 @@ a {
     max-height: 170px;
   }
   .composer-area {
-    width: calc(100% - 18px);
+    width: calc(100% - 32px);
     padding-bottom: max(7px, env(safe-area-inset-bottom));
   }
+  .composer-area:focus-within {
+    width: calc(100% - 18px);
+  }
   .composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
     border-radius: 18px;
   }
+  .temporary-label,
+  .editing-label,
+  .attachment-row {
+    grid-column: 1 / -1;
+  }
   .composer textarea {
+    min-width: 0;
     font-size: 16px;
   }
   .settings-shell {
