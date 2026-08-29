@@ -41,45 +41,12 @@
   --accent-2: #c96e4c;
 }
 
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100%;
-}
-
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-}
-
-/*
- * チャット画面だけドキュメントを固定高にし、スクロールは内側の領域に閉じる。
- * 高さは min-height ではなく height で確定させること（min-height だと子の
- * height: 100% が解決できない）。
- */
-html:has(#chat-shell),
-body:has(#chat-shell),
-#root:has(#chat-shell) {
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-/*
- * iOS はキーボード表示時、フォーカス要素を見せるためにドキュメントを勝手に
- * スクロールする。overflow: hidden では止まらず、body の position: fixed だけが
- * これを止められる。消さないこと。
- */
-body:has(#chat-shell) {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
 }
 
 button,

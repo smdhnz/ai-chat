@@ -549,7 +549,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   return (
     <div
       id="chat-shell"
-      className={`grid h-full overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
+      className={`grid h-dvh overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
       onTouchStart={startSidebarSwipe}
       onTouchEnd={endSidebarSwipe}
       onTouchCancel={() => (swipeStartRef.current = null)}
