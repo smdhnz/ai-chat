@@ -90,7 +90,7 @@ export function getCodexModels(): { id: string; name: string }[] {
   return models
     .getModels("openai-codex")
     .map(({ id, name }) => ({ id, name }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .sort((a, b) => b.name.localeCompare(a.name));
 }
 
 export function resolveAiSettings(model: string, thinking: string): AiSettings {

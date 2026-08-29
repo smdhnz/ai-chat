@@ -238,6 +238,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   const [deleteTarget, setDeleteTarget] = useState<
     { type: "conversation"; item: Conversation } | { type: "project"; item: Project } | null
   >(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
   const autoScrollRef = useRef(true);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -327,6 +328,24 @@ function Chat({ initial }: { initial: Bootstrap }) {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const shell = shellRef.current;
+    if (!mobile || !viewport || !shell) return;
+    const update = () => {
+      shell.style.height = `${viewport.height}px`;
+      shell.style.top = `${viewport.offsetTop}px`;
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      shell.style.removeProperty("height");
+      shell.style.removeProperty("top");
+    };
+  }, [mobile]);
   useEffect(() => {
     const syncRoute = () => {
       const id = conversationFromPath();
@@ -548,6 +567,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
 
   return (
     <div
+      ref={shellRef}
       className={`fixed inset-0 grid overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
       onTouchStart={startSidebarSwipe}
       onTouchEnd={endSidebarSwipe}
@@ -1040,7 +1060,7 @@ function Composer(props: {
         )}
         <div className="max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)_auto] max-md:items-end">
           <textarea
-            className="block min-h-[50px] max-h-[180px] w-full resize-none border-0 bg-transparent px-[17px] pt-[15px] pb-[7px] text-sm leading-[1.6] text-text outline-0 placeholder:text-muted max-md:col-start-2 max-md:row-start-1 max-md:min-h-12 max-md:min-w-0 max-md:px-2 max-md:pt-[11px] max-md:pb-2 max-md:text-base"
+            className="block min-h-[50px] max-h-[180px] w-full resize-none border-0 bg-transparent px-[17px] pt-[15px] pb-[7px] text-sm leading-[1.6] text-text outline-0 placeholder:text-muted focus-visible:outline-none max-md:col-start-2 max-md:row-start-1 max-md:min-h-12 max-md:min-w-0 max-md:px-2 max-md:pt-[11px] max-md:pb-2 max-md:text-base"
             value={props.prompt}
             onChange={(event) => {
               props.setPrompt(event.target.value);
@@ -1289,7 +1309,7 @@ function SettingsPage({
     <div className="relative min-h-svh">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0,#c15f3c12,transparent_38%)]" />
       <main className="relative z-1 mx-auto w-[min(1060px,calc(100%-40px))] pt-9 pb-20 max-md:w-[calc(100%-26px)] max-md:pt-5">
-        <header className="mb-[30px] grid grid-cols-[1fr_auto_1fr] items-center [&_h1]:col-start-2 [&_h1]:m-0 [&_h1]:text-[25px] [&_h1]:tracking-[-0.035em]">
+        <header className="mb-[30px] flex items-center">
           <Link
             href="/"
             className="grid size-10 place-items-center rounded-[13px] border border-line bg-panel text-muted transition duration-200 hover:-translate-x-0.5 hover:text-text [&_svg]:w-[18px]"
@@ -1298,7 +1318,6 @@ function SettingsPage({
           >
             <ArrowLeft />
           </Link>
-          <h1>設定</h1>
         </header>
         <nav className="mb-[38px] flex w-max gap-1 rounded-[15px] border border-line bg-[color-mix(in_srgb,var(--panel)_65%,transparent)] p-[5px] backdrop-blur-[18px] max-md:mb-7 max-md:w-full max-md:justify-start max-md:overflow-x-auto">
           {(["projects", "skills", "files", "general"] as const).map((item) => (
@@ -1449,7 +1468,7 @@ function SettingsPage({
                     >
                       {data.models.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.name} ({item.id})
+                          {item.name}
                         </option>
                       ))}
                     </select>
@@ -1467,9 +1486,9 @@ function SettingsPage({
                         autoSaveSettings(language, ctrlEnterSend, model, value);
                       }}
                     >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
                       <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
                     </select>
                   </div>
                   <div className={settingRowClass}>
