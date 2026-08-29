@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type TouchEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence } from "motion/react";
 import { Menu, Plus, TimerReset } from "lucide-react";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/api";
 import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
-import { chatUrl, conversationIdFromPath, horizontalSwipe } from "@/app/(chat)/_libs/chat";
+import { chatUrl, conversationIdFromPath } from "@/app/(chat)/_libs/chat";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -54,7 +54,6 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
-  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const openConversationRef = useRef<string | null>(conversationId);
   openConversationRef.current = conversationId;
 
@@ -342,23 +341,6 @@ export function ChatShell() {
     }
   }
 
-  function startSidebarSwipe(event: TouchEvent) {
-    swipeStartRef.current = null;
-    if (!mobile || event.touches.length !== 1) return;
-    const touch = event.touches[0];
-    if (!mobileSidebar && touch.clientX > 32) return;
-    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
-  }
-  function endSidebarSwipe(event: TouchEvent) {
-    const start = swipeStartRef.current;
-    swipeStartRef.current = null;
-    const touch = event.changedTouches[0];
-    if (!start || !touch) return;
-    const direction = horizontalSwipe(start, { x: touch.clientX, y: touch.clientY });
-    if (direction > 0 && !mobileSidebar) setMobileSidebar(true);
-    if (direction < 0 && mobileSidebar) setMobileSidebar(false);
-  }
-
   return (
     <SidebarProvider
       className="h-dvh min-h-0 overflow-hidden overscroll-none"
@@ -366,9 +348,6 @@ export function ChatShell() {
       onOpenChange={setDesktopSidebar}
       openMobile={mobileSidebar}
       onOpenMobileChange={setMobileSidebar}
-      onTouchStart={startSidebarSwipe}
-      onTouchEnd={endSidebarSwipe}
-      onTouchCancel={() => (swipeStartRef.current = null)}
     >
       <ChatSidebar
         data={data}
