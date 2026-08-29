@@ -6,6 +6,7 @@ import {
   type AnchorHTMLAttributes,
   type ComponentProps,
   type FormEvent,
+  type TouchEvent,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import ReactMarkdown from "react-markdown";
@@ -54,7 +55,9 @@ import {
   type Skill,
   type ThinkingLevel,
 } from "./api";
+import { horizontalSwipe } from "./swipe";
 const ease = [0.22, 1, 0.36, 1] as const;
+
 const projectIcons = {
   folder: Folder,
   briefcase: Briefcase,
@@ -214,6 +217,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
   const autoScrollRef = useRef(true);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setData(initial);
@@ -500,8 +504,32 @@ function Chat({ initial }: { initial: Bootstrap }) {
     }
   }
 
+  function startSidebarSwipe(event: TouchEvent) {
+    swipeStartRef.current = null;
+    if (!mobile || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (!mobileSidebar && touch.clientX > 32) return;
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function endSidebarSwipe(event: TouchEvent) {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch) return;
+    const direction = horizontalSwipe(start, { x: touch.clientX, y: touch.clientY });
+    if (direction > 0 && !mobileSidebar) setMobileSidebar(true);
+    if (direction < 0 && mobileSidebar) setMobileSidebar(false);
+  }
+
   return (
-    <div ref={shellRef} className={`app-shell ${sidebar ? "" : "sidebar-closed"}`}>
+    <div
+      ref={shellRef}
+      className={`app-shell ${sidebar ? "" : "sidebar-closed"}`}
+      onTouchStart={startSidebarSwipe}
+      onTouchEnd={endSidebarSwipe}
+      onTouchCancel={() => (swipeStartRef.current = null)}
+    >
       <AnimatePresence>
         {sidebar && (
           <motion.button
