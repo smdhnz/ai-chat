@@ -7,8 +7,6 @@ services:
     env_file: .env
     environment:
       PI_AUTH_PATH: /app/data/auth.json
-    ports:
-      - "127.0.0.1:3000:3000"
     volumes:
       - ./data:/app/data
 
