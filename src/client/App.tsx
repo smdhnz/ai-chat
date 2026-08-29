@@ -327,6 +327,22 @@ function Chat({ initial }: { initial: Bootstrap }) {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+  // iOS はキーボードでレイアウトビューポートを縮めないため、CSS だけでは
+  // 入力欄がキーボードの裏に隠れる。ビジュアルビューポートの高さを変数として
+  // 渡し、シェルの高さだけをそこに合わせる。位置は一切書き換えないので
+  // ヘッダーは動かない。
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!mobile || !viewport) return;
+    const update = () =>
+      document.documentElement.style.setProperty("--app-height", `${viewport.height}px`);
+    update();
+    viewport.addEventListener("resize", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      document.documentElement.style.removeProperty("--app-height");
+    };
+  }, [mobile]);
   useEffect(() => {
     const syncRoute = () => {
       const id = conversationFromPath();
@@ -549,7 +565,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   return (
     <div
       id="chat-shell"
-      className={`grid h-full overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
+      className={`grid h-[var(--app-height,100%)] overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
       onTouchStart={startSidebarSwipe}
       onTouchEnd={endSidebarSwipe}
       onTouchCancel={() => (swipeStartRef.current = null)}

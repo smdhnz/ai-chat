@@ -58,10 +58,8 @@ body {
 
 /*
  * チャット画面だけドキュメントを固定高にし、スクロールは内側の領域に閉じる。
- * ビューポートの interactive-widget=resizes-content により、キーボード表示時は
- * レイアウトビューポート自体が縮むので、この 100% チェーンがそのまま追従する。
- * position: fixed は使わないこと（キーボードのアニメーション中に
- * コンポジタが fixed 要素をビジュアルビューポートへ貼り付けるため、ヘッダーがちらつく）。
+ * 高さは min-height ではなく height で確定させること（min-height だと子の
+ * height: 100% が解決できず、position: fixed での代用が必要になる）。
  */
 html:has(#chat-shell),
 body:has(#chat-shell),
@@ -70,6 +68,16 @@ body:has(#chat-shell),
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+/*
+ * iOS はキーボード表示時、フォーカス要素を見せるためにドキュメントを勝手に
+ * スクロールする。overflow: hidden では止まらず、body の position: fixed だけが
+ * これを止められる。消さないこと。
+ */
+body:has(#chat-shell) {
+  position: fixed;
+  inset: 0;
 }
 
 button,
