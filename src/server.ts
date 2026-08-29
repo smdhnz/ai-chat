@@ -54,7 +54,7 @@ Bun.serve({
 
       if (url.pathname === "/login") return user ? redirect("/") : staticFile("index.html");
       if (
-        /^\/(?:favicon\.svg|apple-touch-icon\.png|icon-512\.png|site\.webmanifest)$/.test(
+        /^\/(?:favicon\.svg|apple-touch-icon\.png|icon-(?:192|512)\.png|site\.webmanifest)$/.test(
           url.pathname,
         )
       )

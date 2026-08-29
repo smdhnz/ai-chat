@@ -211,6 +211,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   const [deleteTarget, setDeleteTarget] = useState<
     { type: "conversation"; item: Conversation } | { type: "project"; item: Project } | null
   >(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
   const autoScrollRef = useRef(true);
 
@@ -250,6 +251,24 @@ function Chat({ initial }: { initial: Bootstrap }) {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const shell = shellRef.current;
+    if (!mobile || !viewport || !shell) return;
+    const update = () => {
+      shell.style.height = `${viewport.height}px`;
+      shell.style.top = `${viewport.offsetTop}px`;
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      shell.style.removeProperty("height");
+      shell.style.removeProperty("top");
+    };
+  }, [mobile]);
   useEffect(() => {
     const navigate = () => {
       const id = conversationFromPath();
@@ -482,7 +501,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   }
 
   return (
-    <div className={`app-shell ${sidebar ? "" : "sidebar-closed"}`}>
+    <div ref={shellRef} className={`app-shell ${sidebar ? "" : "sidebar-closed"}`}>
       <AnimatePresence>
         {sidebar && (
           <motion.button
