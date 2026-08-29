@@ -1,4 +1,4 @@
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, join } from "node:path";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import {
   beginCodexReauthentication,
@@ -13,14 +13,13 @@ import {
   type HistoryEntry,
   type ThinkingLevel,
 } from "./ai";
-import { config } from "./config";
+import { config, storedFilePath } from "./config";
 import { attachmentText } from "./attachments";
 import { cleanupExpired, db, id, now } from "./db";
 import { ASSISTANT_CONTINUE_MARKER, parseAssistantReply, regenerationIndex } from "./messages";
 import { parseTurnPlan, type TurnPlan } from "./turn-plan";
 import { webSearch } from "./web-search";
 
-const publicDir = resolve("dist");
 const queues = new Map<string, Promise<unknown>>();
 const generationControllers = new Map<string, AbortController>();
 const maxAssistantMessages = 3;
@@ -55,14 +54,14 @@ const server = Bun.serve<SocketData>({
       const url = new URL(request.url);
       const user = sessionUser(request);
 
-      if (url.pathname === "/login") return user ? redirect("/") : staticFile("index.html");
       if (
+        url.pathname.startsWith("/_next/") ||
         /^\/(?:favicon\.svg|apple-touch-icon\.png|icon-(?:192|512)\.png|site\.webmanifest)$/.test(
           url.pathname,
         )
       )
-        return staticFile(url.pathname.slice(1));
-      if (url.pathname.startsWith("/assets/")) return staticFile(url.pathname.slice(1));
+        return webApp(request);
+      if (url.pathname === "/login") return user ? redirect("/") : webApp(request);
       if (url.pathname === "/api/auth/discord") return startDiscordLogin();
       if (url.pathname === "/api/auth/callback/discord") return finishDiscordLogin(request, url);
       if (url.pathname === "/logout" && request.method === "POST") {
@@ -87,14 +86,7 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/settings") return redirect("/settings/projects");
       if (url.pathname === "/settings/account") return redirect("/settings/general");
       if (/^\/chat\/[\w-]+$/.test(url.pathname))
-        return ownedConversation(url.pathname.slice(6), user.id)
-          ? staticFile("index.html")
-          : redirect("/");
-      if (
-        url.pathname === "/" ||
-        /^\/settings\/(projects|skills|files|general)$/.test(url.pathname)
-      )
-        return staticFile("index.html");
+        return ownedConversation(url.pathname.slice(6), user.id) ? webApp(request) : redirect("/");
 
       if (url.pathname === "/api/bootstrap" && request.method === "GET") return bootstrap(user);
       if (url.pathname === "/api/conversations" && request.method === "POST")
@@ -132,7 +124,9 @@ const server = Bun.serve<SocketData>({
         return removeOwned(request, "skills", skillMatch[1], user.id);
       const fileMatch = url.pathname.match(/^\/files\/([\w-]+)$/);
       if (fileMatch && request.method === "GET") return serveUserFile(fileMatch[1], user.id);
-      return json({ error: "not found" }, 404);
+      if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))
+        return json({ error: "not found" }, 404);
+      return webApp(request);
     } catch (error) {
       console.error(error);
       return json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -866,15 +860,17 @@ function deleteFileRecords(files: { id: string }[], userId: string): void {
 }
 
 async function removeFiles(files: { path: string }[]): Promise<void> {
-  await Promise.all(files.map((file) => unlink(file.path).catch(() => undefined)));
+  await Promise.all(files.map((file) => unlink(storedFilePath(file.path)).catch(() => undefined)));
 }
 
-function serveUserFile(fileId: string, userId: string): Response {
+async function serveUserFile(fileId: string, userId: string): Promise<Response> {
   const file = db
     .query("SELECT name,path,mime FROM files WHERE id=? AND user_id=?")
     .get(fileId, userId) as FileRow | null;
   if (!file) return json({ error: "not found" }, 404);
-  return new Response(Bun.file(file.path), {
+  const path = storedFilePath(file.path);
+  if (!(await Bun.file(path).exists())) return json({ error: "not found" }, 404);
+  return new Response(Bun.file(path), {
     headers: {
       "Content-Type": file.mime,
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
@@ -978,7 +974,7 @@ function conversationImagePaths(history: HistoryRow[], userId: string): string[]
         Boolean(file && /^(image\/(png|jpeg|webp|gif))$/i.test(file.mime)),
       )
       .slice(0, 5)
-      .map((file) => file.path);
+      .map((file) => storedFilePath(file.path));
     if (paths.length) return paths;
   }
   return [];
@@ -1011,7 +1007,7 @@ async function historyWithAttachments(
           .map(async (file) => ({
             type: "image" as const,
             mimeType: file.mime,
-            data: Buffer.from(await readFile(file.path)).toString("base64"),
+            data: Buffer.from(await readFile(storedFilePath(file.path))).toString("base64"),
           })),
       );
       return {
@@ -1160,17 +1156,27 @@ function redirect(location: string): Response {
 function json(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 }
-function staticFile(name: string): Response {
-  const path = resolve(publicDir, name);
-  if (!path.startsWith(`${publicDir}/`) && path !== publicDir)
-    return json({ error: "not found" }, 404);
-  return new Response(Bun.file(path), {
-    headers: {
-      "Cache-Control": "no-cache",
-      "Content-Security-Policy":
-        "default-src 'self'; img-src 'self' https://cdn.discordapp.com data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-    },
-  });
+async function webApp(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  headers.delete("connection");
+  headers.set("accept-encoding", "identity");
+  const streamed = request.method !== "GET" && request.method !== "HEAD";
+  try {
+    return await fetch(new URL(url.pathname + url.search, config.webOrigin), {
+      method: request.method,
+      headers,
+      body: streamed ? request.body : undefined,
+      redirect: "manual",
+      ...(streamed ? { duplex: "half" } : {}),
+    } as RequestInit);
+  } catch {
+    return new Response("web app is starting", {
+      status: 503,
+      headers: { "Retry-After": "2", "Cache-Control": "no-store" },
+    });
+  }
 }
 async function enqueue<T>(key: string, task: () => Promise<T>): Promise<T> {
   const previous = queues.get(key) || Promise.resolve();

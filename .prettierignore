@@ -1,8 +1,11 @@
 node_modules/
 dist/
+.next/
 data/
 .env
 bun.lock
+next-env.d.ts
+tsconfig.tsbuildinfo
 skills/imagegen/LICENSE.txt
 skills/imagegen/assets/
 skills/imagegen/scripts/

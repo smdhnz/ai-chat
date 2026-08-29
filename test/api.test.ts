@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseDeviceAuth, readJson } from "../src/client/api";
+import { parseDeviceAuth, readJson } from "../src/lib/api";
 
 describe("readJson", () => {
   test("HTML応答をJSON構文エラーではなくHTTPエラーとして扱う", async () => {

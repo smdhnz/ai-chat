@@ -4,7 +4,7 @@ ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`
 
 ## 構成
 
-- React 19 / Vite / Tailwind CSS 4 / Motion
+- Next.js 16 (App Router) / React 19 / shadcn/ui / Tailwind CSS 4 / Motion
 - Bun HTTP API / SQLite
 - Discord OAuth2、DiscordユーザーID許可リスト
 - Codexサブスク認証による会話（一般設定でモデルとThinkingを選択、既定は`gpt-5.6-sol` / `low`）
@@ -13,6 +13,8 @@ ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`
 - 会話履歴、プロジェクト別システムプロンプト、ユーザー追加スキル
 - ユーザー別ファイル保存・Web閲覧
 - `/login`、`/`、`/settings` の3ページ
+
+UIコンポーネントは `src/components/ui` のshadcn/uiに統一しています。配色はshadcnのトークン（`--background`、`--card`、`--primary` など）へ既存パレットを割り当てているため、見た目は従来のままです。
 
 `skills/imagegen` のみ `../pi-discord-bot/.pi/skills/imagegen` から移植しています。その他のpiスキルやコーディングエージェント用プロンプトは読み込みません。Web検索は `pi-web-access` と同じ公開 Exa MCP を利用し、ターンプランナーが最新情報・外部根拠・URL調査の必要性を判断した場合だけ実行します。
 
@@ -47,7 +49,18 @@ bun run dev
 # http://localhost:3000
 ```
 
-ローカル開発時のDiscord Redirect URIは `http://localhost:3000/api/auth/callback/discord` です。Viteが画面を3000番で配信し、APIリクエストだけ3001番へ転送します。
+ローカル開発時のDiscord Redirect URIは `http://localhost:3000/api/auth/callback/discord` です。Next.jsが画面を3000番で配信し、`/api`・`/files`・`/logout` だけrewritesで3001番のBunサーバーへ転送します。WebSocket (`/api/socket`) はrewritesを通せないため、開発時のみ `NEXT_PUBLIC_API_ORIGIN` を使って3001番へ直接接続します。
+
+## サーバー構成
+
+本番は1コンテナで2プロセスを動かします。
+
+```text
+:3000 Bunサーバー ─┬─ /api/*、/files/*、/logout、/api/socket (WebSocket)
+                   └─ それ以外 → プロキシ → :3002 next start
+```
+
+Bunサーバーが前段に立つことで、セッションcookieの検証、未ログイン時の `/login` へのリダイレクト、`/chat/:id` の所有者チェックを従来どおりページ配信前に行えます。WebSocketとCodex生成処理はBun側に残しています。CSPのnonceは `src/proxy.ts` がリクエストごとに発行します。
 
 ## データ
 

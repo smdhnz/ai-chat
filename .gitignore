@@ -1,6 +1,9 @@
 node_modules/
 dist/
+.next/
 .env
 data/*
 !data/.gitkeep
 *.log
+next-env.d.ts
+tsconfig.tsbuildinfo
