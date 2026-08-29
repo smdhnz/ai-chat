@@ -4,7 +4,6 @@ import { useEffect, useRef, type FormEvent } from "react";
 import { ArrowUp, File, Paperclip, Pencil, Square, TimerReset, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 
 export function Composer(props: {
@@ -60,7 +59,7 @@ export function Composer(props: {
           </div>
         )}
         {props.files.length > 0 && (
-          <ScrollArea scrollBars="horizontal" className="px-2.5 pt-2.5">
+          <div className="overflow-x-auto overscroll-x-contain px-2.5 pt-2.5">
             <div className="flex w-max gap-[7px]">
               {props.files.map((file, index) => (
                 <Badge
@@ -83,7 +82,7 @@ export function Composer(props: {
                 </Badge>
               ))}
             </div>
-          </ScrollArea>
+          </div>
         )}
         <div className="max-md:flex max-md:items-end">
           <Textarea

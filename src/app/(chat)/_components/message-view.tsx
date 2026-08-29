@@ -18,7 +18,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
@@ -211,10 +210,8 @@ export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; ali
   const previewUrl = preview?.preview || (preview?.id ? `/files/${preview.id}` : "");
   return (
     <>
-      <ScrollArea
-        scrollBars="horizontal"
-        className={`max-w-full ${alignEnd ? "mb-2" : "mt-3"}`}
-        viewportProps={{ className: "overscroll-x-contain" }}
+      <div
+        className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
       >
         <div className="flex w-max flex-nowrap gap-[9px] pb-[5px]">
           {files.map((file) =>
@@ -243,7 +240,7 @@ export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; ali
             ),
           )}
         </div>
-      </ScrollArea>
+      </div>
       <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
         <DialogContent
           showCloseButton={false}
