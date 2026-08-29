@@ -197,6 +197,7 @@ function Chat({ initial, theme }: { initial: Bootstrap; theme: ReturnType<typeof
   const [projectId, setProjectId] = useState(initialConversation?.project_id || "");
   const [temporary, setTemporary] = useState(temporaryFromUrl);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [visibleMessageCount, setVisibleMessageCount] = useState(50);
   const [mobile, setMobile] = useState(() => matchMedia("(max-width: 767px)").matches);
   const [desktopSidebar, setDesktopSidebar] = useState(true);
   const [mobileSidebar, setMobileSidebar] = useState(false);
@@ -216,6 +217,7 @@ function Chat({ initial, theme }: { initial: Bootstrap; theme: ReturnType<typeof
     setData(initial);
   }, [initial]);
   useEffect(() => {
+    setVisibleMessageCount(50);
     if (!conversationId) {
       setMessages([]);
       return;
@@ -259,6 +261,7 @@ function Chat({ initial, theme }: { initial: Bootstrap; theme: ReturnType<typeof
     return () => removeEventListener("popstate", navigate);
   }, [data.conversations]);
   const lastMessage = messages.at(-1);
+  const visibleMessages = messages.slice(-visibleMessageCount);
   useEffect(() => {
     if (!autoScrollRef.current) return;
     requestAnimationFrame(() =>
@@ -630,8 +633,16 @@ function Chat({ initial, theme }: { initial: Bootstrap; theme: ReturnType<typeof
         >
           {messages.length > 0 && (
             <div className="message-column">
+              {visibleMessages.length < messages.length && (
+                <button
+                  className="load-older"
+                  onClick={() => setVisibleMessageCount((count) => count + 50)}
+                >
+                  以前のメッセージを表示
+                </button>
+              )}
               <AnimatePresence initial={false}>
-                {messages.map((message) => (
+                {visibleMessages.map((message) => (
                   <MessageView
                     key={message.id}
                     message={message}
@@ -685,6 +696,8 @@ function MessageView({
   const auth = message.auth ?? parseDeviceAuth(message.content);
   const content = auth ? "" : message.content;
   const hasBody = Boolean(content || auth || message.skills?.length);
+  const collapsible = message.role === "user" && content.length > 1200;
+  const [expanded, setExpanded] = useState(false);
   return (
     <motion.article
       className={`message ${message.role}`}
@@ -697,20 +710,31 @@ function MessageView({
           <FileBlocks files={message.files} />
         )}
         {hasBody && (
-          <div className="message-body">
-            {message.skills && message.skills.length > 0 && (
-              <div className="used-skills">
-                <Sparkles />
-                {message.skills.map((skill) => (
-                  <span key={skill}>{skill}</span>
-                ))}
-              </div>
+          <>
+            <div className={`message-body ${collapsible && !expanded ? "collapsed" : ""}`}>
+              {message.skills && message.skills.length > 0 && (
+                <div className="used-skills">
+                  <Sparkles />
+                  {message.skills.map((skill) => (
+                    <span key={skill}>{skill}</span>
+                  ))}
+                </div>
+              )}
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock }}>
+                {content}
+              </ReactMarkdown>
+              {auth && <AuthCard auth={auth} />}
+            </div>
+            {collapsible && (
+              <button
+                className="expand-message"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded ? "一部表示に戻す" : "全文を表示"}
+              </button>
             )}
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ pre: CodeBlock }}>
-              {content}
-            </ReactMarkdown>
-            {auth && <AuthCard auth={auth} />}
-          </div>
+          </>
         )}
         {message.role === "assistant" && message.files?.length > 0 && (
           <FileBlocks files={message.files} />

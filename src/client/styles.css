@@ -140,7 +140,10 @@ a {
 
 /* Layout */
 .app-shell {
+  position: fixed;
+  inset: 0;
   height: 100svh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: 280px 1fr;
   overflow: hidden;
@@ -346,7 +349,7 @@ a {
 }
 .chat-main {
   min-width: 0;
-  height: 100svh;
+  height: 100%;
   display: grid;
   grid-template-rows: 64px 1fr auto;
   position: relative;
@@ -394,12 +397,24 @@ a {
 }
 .message-scroll {
   overflow-y: auto;
+  overscroll-behavior: contain;
   scroll-behavior: smooth;
 }
 .message-column {
   width: min(820px, calc(100% - 32px));
   margin: 0 auto;
   padding: 44px 0 40px;
+}
+.load-older {
+  display: block;
+  margin: 0 auto 32px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
 }
 .message {
   display: flex;
@@ -431,6 +446,20 @@ a {
   border-radius: 20px 20px 6px 20px;
   background: color-mix(in srgb, var(--accent) 9%, var(--panel));
   box-shadow: 0 6px 20px #5b403010;
+}
+.message-body.collapsed {
+  max-height: 14rem;
+  overflow: hidden;
+  mask-image: linear-gradient(#000 75%, transparent);
+}
+.expand-message {
+  margin-top: 5px;
+  padding: 4px 7px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
 }
 .message-body p {
   margin: 0 0 12px;
@@ -1548,7 +1577,7 @@ a {
     display: grid;
   }
   .chat-main {
-    height: 100svh;
+    height: 100%;
   }
   .topbar {
     height: 58px;
@@ -1578,6 +1607,9 @@ a {
   }
   .composer {
     border-radius: 18px;
+  }
+  .composer textarea {
+    font-size: 16px;
   }
   .settings-shell {
     width: calc(100% - 26px);

@@ -52,7 +52,7 @@ let activeLogin: Promise<DeviceAuthInfo> | null = null;
 
 export function isAuthenticationError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /oauth|authenticat|credentials?.*(missing|not|invalid)|api key|token.*(expired|refresh|invalid)|unauthorized|HTTP 401/i.test(
+  return /oauth|authenticat|provider is not configured|credentials?.*(missing|not|invalid)|api key|token.*(expired|refresh|invalid)|unauthorized|HTTP 401/i.test(
     message,
   );
 }

@@ -53,6 +53,12 @@ Bun.serve({
       const user = sessionUser(request);
 
       if (url.pathname === "/login") return user ? redirect("/") : staticFile("index.html");
+      if (
+        /^\/(?:favicon\.svg|apple-touch-icon\.png|icon-512\.png|site\.webmanifest)$/.test(
+          url.pathname,
+        )
+      )
+        return staticFile(url.pathname.slice(1));
       if (url.pathname.startsWith("/assets/")) return staticFile(url.pathname.slice(1));
       if (url.pathname === "/api/auth/discord") return startDiscordLogin();
       if (url.pathname === "/api/auth/callback/discord") return finishDiscordLogin(request, url);

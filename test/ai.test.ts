@@ -4,12 +4,17 @@ import {
   DEFAULT_CODEX_MODEL,
   DEFAULT_THINKING_LEVEL,
   getCodexModels,
+  isAuthenticationError,
   resolveAiSettings,
 } from "../src/ai";
 
 describe("Codex設定", () => {
   test("providerのモデル一覧にデフォルトモデルがある", () => {
     expect(getCodexModels().some((model) => model.id === DEFAULT_CODEX_MODEL)).toBe(true);
+  });
+
+  test("未設定providerを認証エラーとして扱う", () => {
+    expect(isAuthenticationError(new Error("Provider is not configured: openai-codex"))).toBe(true);
   });
 
   test("不正な保存値をデフォルトへ戻す", () => {
