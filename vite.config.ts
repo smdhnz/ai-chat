@@ -8,7 +8,10 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     proxy: Object.fromEntries(
-      ["/api", "/files", "/logout"].map((path) => [path, "http://localhost:3001"]),
+      ["/api", "/files", "/logout"].map((path) => [
+        path,
+        { target: "http://localhost:3001", ws: path === "/api" },
+      ]),
     ),
   },
   build: {

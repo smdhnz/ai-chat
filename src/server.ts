@@ -23,9 +23,12 @@ import { webSearch } from "./web-search";
 const publicDir = resolve("dist");
 const queues = new Map<string, Promise<unknown>>();
 const generationControllers = new Map<string, AbortController>();
-const streamClients = new Map<string, Set<ReadableStreamDefaultController<Uint8Array>>>();
-const streamSnapshots = new Map<string, string>();
 const maxAssistantMessages = 3;
+type SocketData = { userId: string };
+type SocketEvent =
+  | { type: "status"; conversationId: string; status: ConversationRow["generation_status"] }
+  | { type: "content"; conversationId: string; content: string }
+  | { type: "done"; conversationId: string };
 const basePrompt = [
   "You are a general-purpose conversational assistant in a private web chat.",
   "Do not behave like a coding agent unless the user explicitly asks for programming help.",
@@ -45,9 +48,9 @@ setInterval(() => {
   void cleanupTemporaryConversations();
 }, 60 * 60_000).unref();
 
-Bun.serve({
+const server = Bun.serve<SocketData>({
   port: config.port,
-  async fetch(request) {
+  async fetch(request, server) {
     try {
       const url = new URL(request.url);
       const user = sessionUser(request);
@@ -75,21 +78,27 @@ Bun.serve({
         return url.pathname.startsWith("/api/")
           ? json({ error: "unauthorized" }, 401)
           : redirect("/login");
+      if (url.pathname === "/api/socket") {
+        if (request.headers.get("origin") !== config.origin)
+          return json({ error: "invalid origin" }, 403);
+        if (server.upgrade(request, { data: { userId: user.id } })) return;
+        return json({ error: "websocket upgrade required" }, 426);
+      }
       if (url.pathname === "/settings") return redirect("/settings/projects");
       if (url.pathname === "/settings/account") return redirect("/settings/general");
+      if (/^\/chat\/[\w-]+$/.test(url.pathname))
+        return ownedConversation(url.pathname.slice(6), user.id)
+          ? staticFile("index.html")
+          : redirect("/");
       if (
         url.pathname === "/" ||
-        /^\/settings\/(projects|skills|files|general)$/.test(url.pathname) ||
-        /^\/chat\/[\w-]+$/.test(url.pathname)
+        /^\/settings\/(projects|skills|files|general)$/.test(url.pathname)
       )
         return staticFile("index.html");
 
       if (url.pathname === "/api/bootstrap" && request.method === "GET") return bootstrap(user);
       if (url.pathname === "/api/conversations" && request.method === "POST")
         return createConversation(request, user);
-      const streamMatch = url.pathname.match(/^\/api\/conversations\/([\w-]+)\/stream$/);
-      if (streamMatch && request.method === "GET")
-        return conversationStream(streamMatch[1], user.id);
       const conversationMatch = url.pathname.match(/^\/api\/conversations\/([\w-]+)$/);
       if (conversationMatch && request.method === "GET")
         return conversationMessages(conversationMatch[1], user.id);
@@ -128,6 +137,14 @@ Bun.serve({
       console.error(error);
       return json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
+  },
+  websocket: {
+    open(socket) {
+      socket.subscribe(userTopic(socket.data.userId));
+    },
+    message(socket) {
+      socket.close(1003, "server events only");
+    },
   },
 });
 console.log(`ai-chat listening on ${config.origin}`);
@@ -242,50 +259,12 @@ async function createConversation(request: Request, user: User): Promise<Respons
   return json(conversation, 201);
 }
 
-function conversationStream(conversationId: string, userId: string): Response {
-  if (!ownedConversation(conversationId, userId)) return json({ error: "not found" }, 404);
-  let client: ReadableStreamDefaultController<Uint8Array>;
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      client = controller;
-      const clients = streamClients.get(conversationId) ?? new Set();
-      clients.add(controller);
-      streamClients.set(conversationId, clients);
-      sendStreamEvent(controller, { content: streamSnapshots.get(conversationId) ?? "" });
-    },
-    cancel() {
-      streamClients.get(conversationId)?.delete(client);
-    },
-  });
-  return new Response(body, {
-    headers: {
-      "Cache-Control": "no-cache",
-      "Content-Type": "text/event-stream",
-      Connection: "keep-alive",
-    },
-  });
+function userTopic(userId: string): string {
+  return `user:${userId}`;
 }
 
-function sendStreamEvent(
-  client: ReadableStreamDefaultController<Uint8Array>,
-  event: { content?: string; done?: boolean },
-): void {
-  client.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
-}
-
-function publishStream(conversationId: string, content: string): void {
-  streamSnapshots.set(conversationId, content);
-  for (const client of streamClients.get(conversationId) ?? [])
-    sendStreamEvent(client, { content });
-}
-
-function finishStream(conversationId: string): void {
-  for (const client of streamClients.get(conversationId) ?? []) {
-    sendStreamEvent(client, { done: true });
-    client.close();
-  }
-  streamClients.delete(conversationId);
-  streamSnapshots.delete(conversationId);
+function publishSocket(userId: string, event: SocketEvent): void {
+  server.publish(userTopic(userId), JSON.stringify(event));
 }
 
 function conversationMessages(conversationId: string, userId: string): Response {
@@ -360,10 +339,10 @@ async function sendMessage(request: Request, user: User): Promise<Response> {
 function startGeneration(conversationId: string, user: User): void {
   const controller = new AbortController();
   generationControllers.set(conversationId, controller);
-  streamSnapshots.set(conversationId, "");
   db.query(
     "UPDATE conversations SET generation_status='running',unread=0,updated_at=? WHERE id=? AND user_id=?",
   ).run(now(), conversationId, user.id);
+  publishSocket(user.id, { type: "status", conversationId, status: "running" });
   void enqueue(conversationId, () => generateReply(conversationId, user, controller.signal))
     .catch(async (error) => {
       if (controller.signal.aborted) return;
@@ -386,7 +365,7 @@ function startGeneration(conversationId: string, user: User): void {
     })
     .finally(() => {
       if (generationControllers.get(conversationId) === controller) {
-        finishStream(conversationId);
+        publishSocket(user.id, { type: "done", conversationId });
         generationControllers.delete(conversationId);
       }
     });
@@ -521,7 +500,8 @@ async function generateReply(
         ...aiSettings,
         sessionId,
         signal,
-        onText: (text) => publishStream(conversationId, text),
+        onText: (text) =>
+          publishSocket(user.id, { type: "content", conversationId, content: text }),
       });
       signal.throwIfAborted();
       const parsed = parseAssistantReply(response.text);
@@ -597,6 +577,7 @@ function stopGeneration(request: Request, conversationId: string, userId: string
   db.query(
     "UPDATE conversations SET generation_status='stopped',updated_at=? WHERE id=? AND user_id=?",
   ).run(now(), conversationId, userId);
+  publishSocket(userId, { type: "status", conversationId, status: "stopped" });
   return new Response(null, { status: 204 });
 }
 

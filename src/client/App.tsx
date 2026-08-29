@@ -231,21 +231,70 @@ function Chat({ initial }: { initial: Bootstrap }) {
   }, [conversationId]);
   useEffect(() => {
     let active = true;
-    const refresh = async () => {
-      const fresh = await getBootstrap();
-      if (!active) return;
-      setData(fresh);
-      const id = conversationFromPath();
-      const conversation = fresh.conversations.find((item) => item.id === id);
-      if (id && conversation?.generation_status !== "running") {
-        const current = await api<Message[]>(`/api/conversations/${id}`);
-        if (active && conversationFromPath() === id) setMessages(current);
-      }
+    let socket: WebSocket | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const connect = () => {
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      socket = new WebSocket(`${protocol}://${location.host}/api/socket`);
+      socket.onmessage = ({ data: message }) => {
+        const event = JSON.parse(String(message)) as
+          | {
+              type: "status";
+              conversationId: string;
+              status: Conversation["generation_status"];
+            }
+          | { type: "content"; conversationId: string; content: string }
+          | { type: "done"; conversationId: string };
+        if (event.type === "status") {
+          setData((value) => ({
+            ...value,
+            conversations: value.conversations.map((conversation) =>
+              conversation.id === event.conversationId
+                ? { ...conversation, generation_status: event.status }
+                : conversation,
+            ),
+          }));
+          return;
+        }
+        if (event.type === "done") {
+          const current =
+            conversationFromPath() === event.conversationId
+              ? api<Message[]>(`/api/conversations/${event.conversationId}`)
+              : Promise.resolve(null);
+          void Promise.all([getBootstrap(), current])
+            .then(([fresh, messages]) => {
+              if (!active) return;
+              setData(fresh);
+              if (messages && conversationFromPath() === event.conversationId)
+                setMessages(messages);
+            })
+            .catch(() => undefined);
+          return;
+        }
+        if (conversationFromPath() !== event.conversationId || !event.content) return;
+        const streamId = `stream-${event.conversationId}`;
+        setMessages((value) => {
+          const streamed: Message = {
+            id: streamId,
+            role: "assistant",
+            content: event.content,
+            files: [],
+            created_at: new Date().toISOString(),
+          };
+          return value.some((item) => item.id === streamId)
+            ? value.map((item) => (item.id === streamId ? streamed : item))
+            : [...value, streamed];
+        });
+      };
+      socket.onclose = () => {
+        if (active) retry = setTimeout(connect, 1_000);
+      };
     };
-    const timer = setInterval(() => void refresh().catch(() => undefined), 2_000);
+    connect();
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(retry);
+      socket?.close();
     };
   }, []);
   useEffect(() => {
@@ -255,15 +304,20 @@ function Chat({ initial }: { initial: Bootstrap }) {
     return () => media.removeEventListener("change", update);
   }, []);
   useEffect(() => {
-    const navigate = () => {
+    const syncRoute = () => {
       const id = conversationFromPath();
       const conversation = data.conversations.find((item) => item.id === id);
+      if (id && !conversation) {
+        navigate(chatUrl("/", temporaryFromUrl()), true);
+        return;
+      }
       setConversationId(conversation?.id || null);
       setProjectId(conversation?.project_id || "");
       setTemporary(temporaryFromUrl());
     };
-    addEventListener("popstate", navigate);
-    return () => removeEventListener("popstate", navigate);
+    syncRoute();
+    addEventListener("popstate", syncRoute);
+    return () => removeEventListener("popstate", syncRoute);
   }, [data.conversations]);
   const lastMessage = messages.at(-1);
   const visibleMessages = messages.slice(-visibleMessageCount);
@@ -277,41 +331,6 @@ function Chat({ initial }: { initial: Bootstrap }) {
   const activeConversation = data.conversations.find((item) => item.id === conversationId);
   const generating = sending || activeConversation?.generation_status === "running";
   const editing = editingMessageId !== null;
-
-  useEffect(() => {
-    if (!conversationId || !generating) return;
-    const streamId = `stream-${conversationId}`;
-    const source = new EventSource(`/api/conversations/${conversationId}/stream`);
-    source.onmessage = (event) => {
-      const update = JSON.parse(event.data) as { content?: string; done?: boolean };
-      if (update.done) {
-        source.close();
-        void Promise.all([
-          getBootstrap(),
-          api<Message[]>(`/api/conversations/${conversationId}`),
-        ]).then(([fresh, current]) => {
-          setData(fresh);
-          setMessages(current);
-        });
-        return;
-      }
-      if (!update.content) return;
-      setMessages((value) => {
-        const message: Message = {
-          id: streamId,
-          role: "assistant",
-          content: update.content ?? "",
-          files: [],
-          created_at: new Date().toISOString(),
-        };
-        const index = value.findIndex((item) => item.id === streamId);
-        return index < 0
-          ? [...value, message]
-          : value.map((item) => (item.id === streamId ? message : item));
-      });
-    };
-    return () => source.close();
-  }, [conversationId, generating]);
 
   function selectConversation(item: Conversation) {
     const isTemporary = item.temporary === 1;
