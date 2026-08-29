@@ -49,6 +49,12 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+html:has(.app-shell),
+body:has(.app-shell) {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 button,
 input,
 textarea {
@@ -1584,6 +1590,7 @@ a {
   }
   .chat-main {
     height: 100%;
+    grid-template-rows: 58px minmax(0, 1fr) auto;
   }
   .topbar {
     height: 58px;
