@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import { Check, Copy, File, MoreHorizontal, Pencil, RotateCcw, Sparkles } from "lucide-react";
 import { parseDeviceAuth, type DeviceAuth, type FileItem, type Message } from "@/lib/api";
 import { ease } from "@/lib/ui";
-import { useCopy } from "@/lib/use-copy";
+import { useCopy } from "@/app/(chat)/_hooks/use-copy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

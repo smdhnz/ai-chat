@@ -13,9 +13,9 @@ import {
   type Message,
   type Project,
 } from "@/lib/api";
-import { useBootstrap } from "@/lib/use-bootstrap";
-import { chatUrl, conversationIdFromPath, iconButtonClass } from "@/lib/ui";
-import { horizontalSwipe } from "@/lib/swipe";
+import { useBootstrap } from "@/hooks/use-bootstrap";
+import { iconButtonClass } from "@/lib/ui";
+import { chatUrl, conversationIdFromPath, horizontalSwipe } from "@/app/(chat)/_libs/chat";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -23,9 +23,9 @@ import { ProjectIcon } from "@/components/project-icon";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { ChatSidebar } from "@/components/chat/chat-sidebar";
-import { Composer } from "@/components/chat/composer";
-import { MessageView, Thinking } from "@/components/chat/message-view";
+import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
+import { Composer } from "@/app/(chat)/_components/composer";
+import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
 
 type DeleteTarget =
   { type: "conversation"; item: Conversation } | { type: "project"; item: Project };

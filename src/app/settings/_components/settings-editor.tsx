@@ -3,8 +3,9 @@
 import { useId, useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import { api, type Project, type Skill } from "@/lib/api";
-import { projectColorClasses, projectColors, projectIcons } from "@/lib/ui";
+import { projectColorClasses, projectIcons } from "@/lib/ui";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { projectColors } from "@/app/settings/_libs/settings";
 import {
   dialogHeaderClass,
   dialogPanelClass,

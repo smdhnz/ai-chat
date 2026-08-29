@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/app/_components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 

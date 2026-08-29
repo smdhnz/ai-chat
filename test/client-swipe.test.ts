@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { horizontalSwipe } from "../src/lib/swipe";
+import { horizontalSwipe } from "../src/app/(chat)/_libs/chat";
 
 describe("horizontalSwipe", () => {
   test("横方向に60px以上動いたスワイプだけを判定する", () => {

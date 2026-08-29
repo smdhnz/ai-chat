@@ -16,13 +16,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, getBootstrap, type Project, type Skill, type ThinkingLevel } from "@/lib/api";
-import { useBootstrap } from "@/lib/use-bootstrap";
-import { formatSize, settingsTabFromPath, settingsTabLabels, settingsTabs } from "@/lib/ui";
+import { useBootstrap } from "@/hooks/use-bootstrap";
+import {
+  formatSize,
+  settingsTabFromPath,
+  settingsTabLabels,
+  settingsTabs,
+} from "@/app/settings/_libs/settings";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ProjectIcon } from "@/components/project-icon";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { Editor } from "@/components/settings/settings-editor";
+import { Editor } from "@/app/settings/_components/settings-editor";
+import { ThemeToggle } from "@/app/settings/_components/theme-toggle";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
