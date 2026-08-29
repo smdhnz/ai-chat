@@ -688,8 +688,8 @@ function Chat({ initial }: { initial: Bootstrap }) {
         )}
       </AnimatePresence>
 
-      <main className="relative grid h-full min-h-0 min-w-0 grid-rows-[64px_minmax(0,1fr)_auto] overflow-hidden bg-[radial-gradient(circle_at_50%_0,#c15f3c08,transparent_34%)] max-md:grid-rows-[58px_minmax(0,1fr)_auto]">
-        <header className="z-10 flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--line)_62%,transparent)] bg-[color-mix(in_srgb,var(--bg)_80%,transparent)] px-[22px] backdrop-blur-[18px] max-md:h-[58px] max-md:px-2.5">
+      <main className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_0,#c15f3c08,transparent_34%)]">
+        <header className="z-10 flex h-16 shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--line)_62%,transparent)] bg-[color-mix(in_srgb,var(--bg)_80%,transparent)] px-[22px] backdrop-blur-[18px] max-md:h-[58px] max-md:px-2.5">
           <button
             className={iconButtonClass}
             onClick={() => setSidebar(!sidebar)}
@@ -722,7 +722,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
         </header>
         <section
           ref={scrollRef}
-          className="min-h-0 overflow-y-auto overscroll-none scroll-smooth"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-none scroll-smooth"
           onScroll={(event) => {
             const element = event.currentTarget;
             autoScrollRef.current =
@@ -1055,7 +1055,7 @@ function Composer(props: {
 }) {
   const input = useRef<HTMLInputElement>(null);
   return (
-    <footer className="z-5 mx-auto w-[min(850px,calc(100%-32px))] pb-[max(10px,env(safe-area-inset-bottom))] transition-[width] max-md:w-[calc(100%-64px)] max-md:pb-[max(7px,env(safe-area-inset-bottom))] max-md:focus-within:w-[calc(100%-18px)]">
+    <footer className="z-5 mx-auto w-[min(850px,calc(100%-32px))] shrink-0 pb-[max(10px,env(safe-area-inset-bottom))] transition-[width] max-md:w-[calc(100%-64px)] max-md:pb-[max(7px,env(safe-area-inset-bottom))] max-md:focus-within:w-[calc(100%-18px)]">
       <form
         className={`overflow-hidden rounded-[22px] border bg-glass shadow-[0_15px_50px_#28253318] backdrop-blur-[22px] max-md:rounded-[18px] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--accent)_55%,var(--line))]" : "border-line"}`}
         onSubmit={props.send}
