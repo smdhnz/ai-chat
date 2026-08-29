@@ -327,22 +327,6 @@ function Chat({ initial }: { initial: Bootstrap }) {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  // iOS はキーボードでレイアウトビューポートを縮めないため、CSS だけでは
-  // 入力欄がキーボードの裏に隠れる。ビジュアルビューポートの高さを変数として
-  // 渡し、シェルの高さだけをそこに合わせる。位置は一切書き換えないので
-  // ヘッダーは動かない。
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!mobile || !viewport) return;
-    const update = () =>
-      document.documentElement.style.setProperty("--app-height", `${viewport.height}px`);
-    update();
-    viewport.addEventListener("resize", update);
-    return () => {
-      viewport.removeEventListener("resize", update);
-      document.documentElement.style.removeProperty("--app-height");
-    };
-  }, [mobile]);
   useEffect(() => {
     const syncRoute = () => {
       const id = conversationFromPath();
@@ -776,7 +760,6 @@ function Chat({ initial }: { initial: Bootstrap }) {
           send={send}
         />
       </main>
-      {location.search.includes("debug") && <ViewportDebug />}
     </div>
   );
 }
@@ -997,45 +980,6 @@ function Thinking() {
         <i className={`${dotClass} [animation-delay:300ms]`} />
       </div>
     </motion.div>
-  );
-}
-
-// ?debug 付きで開いた時だけ出る一時的な計測用オーバーレイ。
-// キーボード表示時に各要素が実際にどの位置・高さになっているかを読むためのもの。
-// 原因が確定したら削除する。
-function ViewportDebug() {
-  const [lines, setLines] = useState<string[]>([]);
-  useEffect(() => {
-    const rect = (label: string, selector: string) => {
-      const element = document.querySelector(selector);
-      if (!element) return `${label} なし`;
-      const { top, bottom, height } = element.getBoundingClientRect();
-      return `${label} top${Math.round(top)} h${Math.round(height)} bot${Math.round(bottom)}`;
-    };
-    const read = () => {
-      const viewport = window.visualViewport;
-      setLines([
-        `inner ${window.innerHeight} scrollY ${Math.round(window.scrollY)}`,
-        `vv h${viewport ? Math.round(viewport.height) : "-"} off${viewport ? Math.round(viewport.offsetTop) : "-"}`,
-        `--app-height ${getComputedStyle(document.documentElement).getPropertyValue("--app-height").trim() || "未設定"}`,
-        rect("html  ", "html"),
-        rect("body  ", "body"),
-        rect("root  ", "#root"),
-        rect("shell ", "#chat-shell"),
-        rect("main  ", "#chat-shell main"),
-        rect("head  ", "#chat-shell main > header"),
-        rect("sect  ", "#chat-shell main > section"),
-        rect("foot  ", "#chat-shell main > footer"),
-      ]);
-    };
-    read();
-    const timer = setInterval(read, 250);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <pre className="pointer-events-none fixed top-0 left-0 z-[999] m-0 bg-[#000000d0] p-1 font-mono text-[9px] leading-[1.35] whitespace-pre text-[#5f5]">
-      {lines.join("\n")}
-    </pre>
   );
 }
 
