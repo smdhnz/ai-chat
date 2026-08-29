@@ -214,7 +214,6 @@ function Chat({ initial }: { initial: Bootstrap }) {
   const [deleteTarget, setDeleteTarget] = useState<
     { type: "conversation"; item: Conversation } | { type: "project"; item: Project } | null
   >(null);
-  const shellRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
   const autoScrollRef = useRef(true);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -255,25 +254,6 @@ function Chat({ initial }: { initial: Bootstrap }) {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    const shell = shellRef.current;
-    if (!mobile || !viewport || !shell) return;
-    const update = () => {
-      const keyboardOpen = shell.querySelector(".composer textarea:focus");
-      shell.style.height = `${viewport.height}px`;
-      shell.style.top = keyboardOpen ? `${viewport.offsetTop}px` : "0px";
-    };
-    update();
-    viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
-    return () => {
-      viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
-      shell.style.removeProperty("height");
-      shell.style.removeProperty("top");
-    };
-  }, [mobile]);
   useEffect(() => {
     const navigate = () => {
       const id = conversationFromPath();
@@ -525,7 +505,6 @@ function Chat({ initial }: { initial: Bootstrap }) {
 
   return (
     <div
-      ref={shellRef}
       className={`app-shell ${sidebar ? "" : "sidebar-closed"}`}
       onTouchStart={startSidebarSwipe}
       onTouchEnd={endSidebarSwipe}
