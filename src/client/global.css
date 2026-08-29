@@ -58,13 +58,20 @@ body {
 
 /*
  * チャット画面だけドキュメントを固定高にし、スクロールは内側の領域に閉じる。
+ *
+ * --app-height は visualViewport の高さ（App.tsx が設定、未設定なら 100%）。
+ * iOS はキーボードでレイアウトビューポートを縮めないので、これを html から
+ * 下まで通しきることが重要。1要素でも 100% のまま取り残すと、その要素が
+ * キーボードの高さぶん画面外にはみ出し、そこが余白として見えたうえ
+ * iOS がそこまでパンできてしまう。
+ *
  * 高さは min-height ではなく height で確定させること（min-height だと子の
- * height: 100% が解決できず、position: fixed での代用が必要になる）。
+ * height: 100% が解決できない）。
  */
 html:has(#chat-shell),
 body:has(#chat-shell),
 #root:has(#chat-shell) {
-  height: 100%;
+  height: var(--app-height, 100%);
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -77,7 +84,9 @@ body:has(#chat-shell),
  */
 body:has(#chat-shell) {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 button,
