@@ -58,7 +58,7 @@ import {
 import { horizontalSwipe } from "./swipe";
 const ease = [0.22, 1, 0.36, 1] as const;
 const iconButtonClass =
-  "grid size-10 shrink-0 cursor-pointer place-items-center rounded-[13px] border-0 bg-transparent transition duration-200 ease-out hover:-translate-y-px hover:bg-panel-2 [&_svg]:w-5";
+  "flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[13px] border-0 bg-transparent transition duration-200 ease-out hover:-translate-y-px hover:bg-panel-2 [&_svg]:w-5";
 const projectColorClasses = {
   clay: "[--project-color:#c15f3c]",
   blue: "[--project-color:#4d78c8]",
@@ -83,7 +83,7 @@ function ProjectIcon({ project, className = "" }: { project?: Project; className
   const color = project?.color as keyof typeof projectColorClasses;
   return (
     <span
-      className={`inline-grid size-9 shrink-0 place-items-center rounded-[11px] bg-[color-mix(in_srgb,var(--project-color)_13%,var(--panel))] text-[var(--project-color)] [&_svg]:w-4 ${projectColorClasses[color] || projectColorClasses.clay} ${className}`}
+      className={`inline-flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-[color-mix(in_srgb,var(--project-color)_13%,var(--panel))] text-[var(--project-color)] [&_svg]:w-4 ${projectColorClasses[color] || projectColorClasses.clay} ${className}`}
     >
       <Icon />
     </span>
@@ -150,7 +150,7 @@ function ThemeButton({ dark, toggle }: { dark: boolean; toggle: () => void }) {
 function Login() {
   const error = new URLSearchParams(location.search).get("error");
   return (
-    <main className="relative grid min-h-svh place-items-center overflow-hidden p-6">
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden p-6">
       <motion.section
         className="relative w-[min(360px,100%)] text-center [&_h1]:mb-9 [&_h1]:text-[32px] [&_h1]:font-semibold [&_h1]:tracking-[-0.04em]"
         initial={{ opacity: 0, y: 16 }}
@@ -549,7 +549,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
   return (
     <div
       id="chat-shell"
-      className={`grid h-dvh overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
+      className={`flex h-dvh overflow-hidden overscroll-none max-md:block`}
       onTouchStart={startSidebarSwipe}
       onTouchEnd={endSidebarSwipe}
       onTouchCancel={() => (swipeStartRef.current = null)}
@@ -567,7 +567,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
         )}
       </AnimatePresence>
       <aside
-        className={`z-30 flex min-w-0 flex-col overflow-hidden border-r border-line bg-[color-mix(in_srgb,var(--panel)_87%,var(--bg))] px-3.5 pt-[18px] pb-3.5 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[min(310px,86vw)] max-md:-translate-x-[105%] max-md:shadow-[20px_0_70px_#06070a55] max-md:transition-transform max-md:duration-300 max-md:ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebar ? "visible max-md:translate-x-0" : "invisible"}`}
+        className={`z-30 flex shrink-0 flex-col overflow-hidden border-r border-line transition-[width] duration-200 bg-[color-mix(in_srgb,var(--panel)_87%,var(--bg))] px-3.5 pt-[18px] pb-3.5 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[min(310px,86vw)] max-md:-translate-x-[105%] max-md:shadow-[20px_0_70px_#06070a55] max-md:transition-transform max-md:duration-300 max-md:ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebar ? "w-[280px] visible max-md:translate-x-0" : "w-0 invisible"}`}
       >
         <button
           className="mx-0.5 mt-1 mb-6 flex h-[45px] cursor-pointer items-center gap-2.5 rounded-[14px] border border-line bg-panel px-3.5 text-[13px] font-semibold shadow-[0_5px_16px_#2926320a] transition duration-200 hover:-translate-y-px hover:border-[color-mix(in_srgb,var(--accent)_40%,var(--line))] max-md:hidden [&_svg]:w-[17px] [&_svg]:text-accent"
@@ -637,13 +637,13 @@ function Chat({ initial }: { initial: Bootstrap }) {
             ))}
         </nav>
         <Link
-          className="mt-2.5 flex items-center gap-2.5 rounded-[15px] p-[9px] transition duration-200 hover:bg-panel-2 [&>img]:grid [&>img]:size-[34px] [&>img]:place-items-center [&>img]:rounded-[11px] [&>img]:object-cover [&>svg]:w-4 [&>svg]:text-muted"
+          className="mt-2.5 flex items-center gap-2.5 rounded-[15px] p-[9px] transition duration-200 hover:bg-panel-2 [&>img]:block [&>img]:size-[34px] [&>img]:rounded-[11px] [&>img]:object-cover [&>svg]:w-4 [&>svg]:text-muted"
           href="/settings/projects"
         >
           {data.user.avatar ? (
             <img src={data.user.avatar} alt="" />
           ) : (
-            <span className="grid size-[34px] place-items-center rounded-[11px] bg-panel-2 font-bold">
+            <span className="flex size-[34px] items-center justify-center rounded-[11px] bg-panel-2 font-bold">
               {data.user.display_name[0]}
             </span>
           )}
@@ -672,7 +672,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
         )}
       </AnimatePresence>
 
-      <main className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_0,#c15f3c08,transparent_34%)]">
+      <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_0,#c15f3c08,transparent_34%)]">
         <header className="z-10 flex h-16 shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--line)_62%,transparent)] bg-[color-mix(in_srgb,var(--bg)_80%,transparent)] px-[22px] backdrop-blur-[18px] max-md:h-[58px] max-md:px-2.5">
           <button
             className={iconButtonClass}
@@ -682,7 +682,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
             <Menu />
           </button>
           <button
-            className={`${iconButtonClass} hidden max-md:grid`}
+            className={`${iconButtonClass} hidden max-md:flex`}
             onClick={() => newChat()}
             aria-label="新しいチャット"
             title="新しいチャット"
@@ -823,7 +823,7 @@ function MessageView({
         )}
         {!isUser && message.files?.length > 0 && <FileBlocks files={message.files} />}
         {isUser && (
-          <div className="mt-[3px] flex self-end [&_button]:grid [&_button]:size-7 [&_button]:cursor-pointer [&_button]:place-items-center [&_button]:rounded-lg [&_button]:border-0 [&_button]:bg-transparent [&_button]:p-0 [&_button]:text-muted [&_button:disabled]:cursor-default [&_button:disabled]:opacity-35 [&_button:hover:not(:disabled)]:bg-panel-2 [&_button:hover:not(:disabled)]:text-text [&_svg]:w-3.5">
+          <div className="mt-[3px] flex self-end [&_button]:flex [&_button]:size-7 [&_button]:cursor-pointer [&_button]:items-center [&_button]:justify-center [&_button]:rounded-lg [&_button]:border-0 [&_button]:bg-transparent [&_button]:p-0 [&_button]:text-muted [&_button:disabled]:cursor-default [&_button:disabled]:opacity-35 [&_button:hover:not(:disabled)]:bg-panel-2 [&_button:hover:not(:disabled)]:text-text [&_svg]:w-3.5">
             <button
               onClick={regenerate}
               disabled={disabled}
@@ -868,7 +868,7 @@ function CodeBlock({ children, ...props }: ComponentProps<"pre">) {
   return (
     <div className="relative">
       <button
-        className="absolute top-2 right-2 z-1 grid size-7 cursor-pointer place-items-center rounded-[7px] border border-line bg-panel [&_svg]:w-3.5"
+        className="absolute top-2 right-2 z-1 flex size-7 cursor-pointer items-center justify-center rounded-[7px] border border-line bg-panel [&_svg]:w-3.5"
         type="button"
         aria-label="コードをコピー"
         title="コードをコピー"
@@ -890,7 +890,7 @@ function CodeBlock({ children, ...props }: ComponentProps<"pre">) {
 function AuthCard({ auth }: { auth: DeviceAuth }) {
   const copy = useCopy();
   return (
-    <div className="mt-[15px] grid gap-2.5 rounded-[17px] border border-[color-mix(in_srgb,#e4a356_38%,var(--line))] bg-[color-mix(in_srgb,#e4a356_8%,var(--panel))] p-[17px]">
+    <div className="mt-[15px] flex flex-col gap-2.5 rounded-[17px] border border-[color-mix(in_srgb,#e4a356_38%,var(--line))] bg-[color-mix(in_srgb,#e4a356_8%,var(--panel))] p-[17px]">
       <div className="flex items-center gap-[9px]">
         <span className="size-2 animate-pulse rounded-full bg-[#e4a356] shadow-[0_0_0_5px_#e4a35620]" />
         <strong>Codexの再認証が必要です</strong>
@@ -951,7 +951,7 @@ function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; alignEnd?:
       <AnimatePresence>
         {preview && (
           <motion.button
-            className="fixed inset-0 z-80 grid size-full cursor-zoom-out place-items-center border-0 bg-[#090a0dcc] p-7 backdrop-blur-[7px] [&_img]:block [&_img]:h-auto [&_img]:max-h-[calc(100dvh-56px)] [&_img]:w-auto [&_img]:max-w-[calc(100vw-56px)] [&_img]:object-contain"
+            className="fixed inset-0 z-80 flex size-full cursor-zoom-out items-center justify-center border-0 bg-[#090a0dcc] p-7 backdrop-blur-[7px] [&_img]:block [&_img]:h-auto [&_img]:max-h-[calc(100dvh-56px)] [&_img]:w-auto [&_img]:max-w-[calc(100vw-56px)] [&_img]:object-contain"
             onClick={() => setPreview(null)}
             aria-label="拡大表示を閉じる"
             initial={{ opacity: 0 }}
@@ -1039,9 +1039,9 @@ function Composer(props: {
             ))}
           </div>
         )}
-        <div className="max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)_auto] max-md:items-end">
+        <div className="max-md:flex max-md:items-end">
           <textarea
-            className="block min-h-[50px] max-h-[180px] w-full resize-none border-0 bg-transparent px-[17px] pt-[15px] pb-[7px] text-sm leading-[1.6] text-text outline-0 placeholder:text-muted focus-visible:outline-none max-md:col-start-2 max-md:row-start-1 max-md:min-h-12 max-md:min-w-0 max-md:px-2 max-md:pt-[11px] max-md:pb-2 max-md:text-base"
+            className="block min-h-[50px] max-h-[180px] w-full resize-none border-0 bg-transparent px-[17px] pt-[15px] pb-[7px] text-sm leading-[1.6] text-text outline-0 placeholder:text-muted focus-visible:outline-none max-md:order-2 max-md:min-h-12 max-md:w-auto max-md:min-w-0 max-md:flex-1 max-md:px-2 max-md:pt-[11px] max-md:pb-2 max-md:text-base"
             value={props.prompt}
             onChange={(event) => {
               props.setPrompt(event.target.value);
@@ -1082,7 +1082,7 @@ function Composer(props: {
             {!props.editing && (
               <button
                 type="button"
-                className="flex h-[34px] cursor-pointer items-center gap-1.5 rounded-[10px] border-0 bg-transparent px-[9px] text-[11px] text-muted transition duration-200 hover:bg-panel-2 hover:text-text max-md:col-start-1 max-md:row-start-1 max-md:mr-0 max-md:mb-[7px] max-md:ml-2 [&_svg]:w-4"
+                className="flex h-[34px] cursor-pointer items-center gap-1.5 rounded-[10px] border-0 bg-transparent px-[9px] text-[11px] text-muted transition duration-200 hover:bg-panel-2 hover:text-text max-md:order-1 max-md:mr-0 max-md:mb-[7px] max-md:ml-2 [&_svg]:w-4"
                 onClick={() => input.current?.click()}
                 aria-label="ファイルを添付"
                 title="ファイルを添付"
@@ -1094,7 +1094,7 @@ function Composer(props: {
             {props.generating ? (
               <button
                 type="button"
-                className="grid size-[34px] cursor-pointer place-items-center rounded-[11px] border-0 bg-accent text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--accent)_30%,transparent)] transition duration-200 hover:-translate-y-0.5 max-md:col-start-3 max-md:row-start-1 max-md:mr-2 max-md:mb-[7px] [&_svg]:w-3 [&_svg]:fill-current"
+                className="flex size-[34px] cursor-pointer items-center justify-center rounded-[11px] border-0 bg-accent text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--accent)_30%,transparent)] transition duration-200 hover:-translate-y-0.5 max-md:order-3 max-md:mr-2 max-md:mb-[7px] [&_svg]:w-3 [&_svg]:fill-current"
                 onClick={() => void props.stop()}
                 aria-label="生成を停止"
                 title="生成を停止"
@@ -1103,7 +1103,7 @@ function Composer(props: {
               </button>
             ) : (
               <button
-                className="grid size-[34px] cursor-pointer place-items-center rounded-[11px] border-0 bg-accent text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--accent)_30%,transparent)] transition duration-200 hover:not-disabled:-translate-y-0.5 disabled:opacity-30 disabled:shadow-none max-md:col-start-3 max-md:row-start-1 max-md:mr-2 max-md:mb-[7px] [&_svg]:w-[17px]"
+                className="flex size-[34px] cursor-pointer items-center justify-center rounded-[11px] border-0 bg-accent text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--accent)_30%,transparent)] transition duration-200 hover:not-disabled:-translate-y-0.5 disabled:opacity-30 disabled:shadow-none max-md:order-3 max-md:mr-2 max-md:mb-[7px] [&_svg]:w-[17px]"
                 disabled={!props.prompt.trim() && !props.files.length}
                 aria-label={props.editing ? "編集して再生成" : "送信"}
               >
@@ -1129,7 +1129,7 @@ function Modal({
   const titleId = useId();
   return (
     <motion.div
-      className="fixed inset-0 z-60 grid place-items-center bg-[#0c0d12a6] p-[18px] backdrop-blur-[5px] max-md:items-end max-md:p-0"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-[#0c0d12a6] p-[18px] backdrop-blur-[5px] max-md:items-end max-md:p-0"
       onMouseDown={close}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -1293,7 +1293,7 @@ function SettingsPage({
         <header className="mb-[30px] flex items-center">
           <Link
             href="/"
-            className="grid size-10 place-items-center rounded-[13px] border border-line bg-panel text-muted transition duration-200 hover:-translate-x-0.5 hover:text-text [&_svg]:w-[18px]"
+            className="flex size-10 items-center justify-center rounded-[13px] border border-line bg-panel text-muted transition duration-200 hover:-translate-x-0.5 hover:text-text [&_svg]:w-[18px]"
             aria-label="チャットに戻る"
             title="チャットに戻る"
           >
@@ -1335,7 +1335,7 @@ function SettingsPage({
                   action={() => setEditor({ type: "project" })}
                   actionText="作成"
                 />
-                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+                <div className="flex flex-wrap gap-3 [&>*]:basis-[calc(50%-6px)] [&>*]:grow max-md:[&>*]:basis-full">
                   {data.projects.map((item) => (
                     <SettingsCard
                       key={item.id}
@@ -1359,7 +1359,7 @@ function SettingsPage({
                   action={() => setEditor({ type: "skill" })}
                   actionText="追加"
                 />
-                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+                <div className="flex flex-wrap gap-3 [&>*]:basis-[calc(50%-6px)] [&>*]:grow max-md:[&>*]:basis-full">
                   {data.skills.map((item) => (
                     <SettingsCard
                       key={item.id}
@@ -1379,7 +1379,7 @@ function SettingsPage({
             {tab === "files" && (
               <>
                 <PanelTitle title="ファイル" text="アップロードしたファイルと生成画像です。" />
-                <div className="grid grid-cols-4 gap-3 max-md:grid-cols-2">
+                <div className="flex flex-wrap gap-3 [&>*]:basis-[calc(25%-9px)] [&>*]:grow max-md:[&>*]:basis-[calc(50%-6px)]">
                   {data.files.map((file) => (
                     <a
                       className="min-w-0 overflow-hidden rounded-[17px] border border-line bg-panel transition duration-200 hover:-translate-y-[3px] hover:shadow-[0_24px_70px_#4c392718] dark:hover:shadow-[0_28px_80px_#100d0966]"
@@ -1389,13 +1389,13 @@ function SettingsPage({
                     >
                       {file.mime.startsWith("image/") ? (
                         <img
-                          className="grid aspect-4/3 w-full place-items-center object-cover"
+                          className="block aspect-4/3 w-full object-cover"
                           src={`/files/${file.id}`}
                           alt={file.name}
                           loading="lazy"
                         />
                       ) : (
-                        <span className="grid aspect-4/3 w-full place-items-center bg-panel-2 [&_svg]:w-[35px] [&_svg]:text-muted">
+                        <span className="flex aspect-4/3 w-full items-center justify-center bg-panel-2 [&_svg]:w-[35px] [&_svg]:text-muted">
                           <File />
                         </span>
                       )}
@@ -1473,7 +1473,7 @@ function SettingsPage({
                     </select>
                   </div>
                   <div className={settingRowClass}>
-                    <span className="grid! gap-0.5">
+                    <span className="flex! flex-col gap-0.5">
                       Ctrl + Enterで送信
                       <small className="text-[8px] font-normal text-muted">
                         PCのみ。スマートフォンではEnterで改行します。
@@ -1495,7 +1495,7 @@ function SettingsPage({
                   {data.user.avatar ? (
                     <img src={data.user.avatar} alt="" />
                   ) : (
-                    <span className="grid size-[54px] place-items-center rounded-[17px] bg-panel-2 font-bold">
+                    <span className="flex size-[54px] items-center justify-center rounded-[17px] bg-panel-2 font-bold">
                       {data.user.display_name[0]}
                     </span>
                   )}
@@ -1627,13 +1627,13 @@ function SettingsCard({
 }) {
   return (
     <motion.article
-      className="grid min-h-[170px] grid-cols-[40px_1fr] gap-[13px] rounded-[19px] border border-line bg-[color-mix(in_srgb,var(--panel)_82%,transparent)] p-[19px] shadow-[0_8px_30px_#302d3a0a]"
+      className="flex min-h-[170px] gap-[13px] rounded-[19px] border border-line bg-[color-mix(in_srgb,var(--panel)_82%,transparent)] p-[19px] shadow-[0_8px_30px_#302d3a0a]"
       whileHover={{ y: -3 }}
     >
-      <span className="grid size-10 place-items-center rounded-[13px] bg-[color-mix(in_srgb,var(--accent)_11%,var(--panel))] text-accent [&_svg]:w-[18px]">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-[13px] bg-[color-mix(in_srgb,var(--accent)_11%,var(--panel))] text-accent [&_svg]:w-[18px]">
         {icon}
       </span>
-      <div>
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="mt-0.5 mb-[5px] text-sm">{title}</h3>
           {badge && (
@@ -1679,7 +1679,7 @@ function Editor({
   const [color, setColor] = useState(project?.color || "clay");
   const [enabled, setEnabled] = useState(skill?.enabled !== 0);
   const [saving, setSaving] = useState(false);
-  const labelClass = "grid gap-[7px] text-[10px] font-bold text-muted";
+  const labelClass = "flex flex-col gap-[7px] text-[10px] font-bold text-muted";
   const controlClass =
     "w-full rounded-[11px] border border-line bg-bg px-[11px] py-2.5 text-xs leading-[1.55] text-text outline-none focus:border-accent";
   async function submit(event: FormEvent) {
@@ -1701,7 +1701,7 @@ function Editor({
       title={`${isSkill ? "スキル" : "プロジェクト"}${item ? "を編集" : "を作成"}`}
       close={close}
     >
-      <form className="grid gap-[15px] p-5" onSubmit={submit}>
+      <form className="flex flex-col gap-[15px] p-5" onSubmit={submit}>
         <label className={labelClass}>
           名前
           <input
@@ -1714,14 +1714,14 @@ function Editor({
           />
         </label>
         {!isSkill && (
-          <fieldset className="grid gap-[7px] border-0 p-0 [&_legend]:p-0 [&_legend]:text-[10px] [&_legend]:font-bold [&_legend]:text-muted">
+          <fieldset className="flex flex-col gap-[7px] border-0 p-0 [&_legend]:p-0 [&_legend]:text-[10px] [&_legend]:font-bold [&_legend]:text-muted">
             <legend>アイコン</legend>
             <div className="mb-[5px] flex gap-[7px]">
               {Object.entries(projectIcons).map(([value, Icon]) => (
                 <button
                   key={value}
                   type="button"
-                  className={`grid size-[34px] cursor-pointer place-items-center rounded-[10px] border bg-bg [&_svg]:w-4 ${icon === value ? "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_18%,transparent)]" : "border-line"}`}
+                  className={`flex size-[34px] cursor-pointer items-center justify-center rounded-[10px] border bg-bg [&_svg]:w-4 ${icon === value ? "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_18%,transparent)]" : "border-line"}`}
                   onClick={() => setIcon(value)}
                   aria-label={value}
                 >
@@ -1817,7 +1817,7 @@ export default function App() {
   if (login) return <Login />;
   if (!data)
     return (
-      <div className="grid h-svh place-items-center">
+      <div className="flex h-svh items-center justify-center">
         <motion.div
           className="size-2 rounded-full bg-accent"
           animate={{ opacity: [0.25, 1, 0.25] }}
