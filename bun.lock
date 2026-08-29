@@ -40,6 +40,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@radix-ui/react-scroll-area@1.2.18": "patches/@radix-ui%2Freact-scroll-area@1.2.18.patch",
+  },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 
