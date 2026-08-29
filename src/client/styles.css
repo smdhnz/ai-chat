@@ -40,7 +40,7 @@ html,
 body,
 #root {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   margin: 0;
 }
 body {
@@ -51,7 +51,6 @@ body {
 }
 html:has(.app-shell),
 body:has(.app-shell) {
-  height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -146,10 +145,7 @@ a {
 
 /* Layout */
 .app-shell {
-  position: fixed;
-  inset: 0;
-  height: 100svh;
-  height: 100dvh;
+  height: 100%;
   display: grid;
   grid-template-columns: 280px 1fr;
   overflow: hidden;
@@ -1589,7 +1585,6 @@ a {
     display: grid;
   }
   .chat-main {
-    height: 100%;
     grid-template-rows: 58px minmax(0, 1fr) auto;
   }
   .topbar {
