@@ -310,8 +310,7 @@ class JsonCredentialStore implements CredentialStore {
   }
 }
 
-const authPath =
-  process.env.PI_AUTH_PATH || join(process.env.HOME || "", ".pi", "agent", "auth.json");
+const authPath = process.env.PI_AUTH_PATH || join(config.dataDir, "auth.json");
 const models = createModels({ credentials: new JsonCredentialStore(authPath) });
 models.setProvider(openaiCodexProvider());
 function getModel(modelId: string) {
