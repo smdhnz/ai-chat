@@ -57,6 +57,16 @@ import {
 } from "./api";
 import { horizontalSwipe } from "./swipe";
 const ease = [0.22, 1, 0.36, 1] as const;
+const iconButtonClass =
+  "grid size-10 shrink-0 cursor-pointer place-items-center rounded-[13px] border-0 bg-transparent transition duration-200 ease-out hover:-translate-y-px hover:bg-panel-2 [&_svg]:w-5";
+const projectColorClasses = {
+  clay: "[--project-color:#c15f3c]",
+  blue: "[--project-color:#4d78c8]",
+  green: "[--project-color:#4b8b62]",
+  purple: "[--project-color:#8064b3]",
+  gold: "[--project-color:#b8862f]",
+  rose: "[--project-color:#b85d79]",
+} as const;
 
 const projectIcons = {
   folder: Folder,
@@ -68,10 +78,13 @@ const projectIcons = {
 };
 const projectColors = ["clay", "blue", "green", "purple", "gold", "rose"] as const;
 
-function ProjectIcon({ project }: { project?: Project }) {
+function ProjectIcon({ project, className = "" }: { project?: Project; className?: string }) {
   const Icon = projectIcons[project?.icon as keyof typeof projectIcons] || Folder;
+  const color = project?.color as keyof typeof projectColorClasses;
   return (
-    <span className={`project-icon project-${project?.color || "clay"}`}>
+    <span
+      className={`inline-grid size-9 shrink-0 place-items-center rounded-[11px] bg-[color-mix(in_srgb,var(--project-color)_13%,var(--panel))] text-[var(--project-color)] [&_svg]:w-4 ${projectColorClasses[color] || projectColorClasses.clay} ${className}`}
+    >
       <Icon />
     </span>
   );
@@ -128,7 +141,7 @@ function useTheme() {
 function ThemeButton({ dark, toggle }: { dark: boolean; toggle: () => void }) {
   const label = dark ? "ライトテーマに変更" : "ダークテーマに変更";
   return (
-    <button className="icon-button" onClick={toggle} aria-label={label} title={label}>
+    <button className={iconButtonClass} onClick={toggle} aria-label={label} title={label}>
       {dark ? <Sun /> : <Moon />}
     </button>
   );
@@ -137,19 +150,22 @@ function ThemeButton({ dark, toggle }: { dark: boolean; toggle: () => void }) {
 function Login() {
   const error = new URLSearchParams(location.search).get("error");
   return (
-    <main className="login-screen">
+    <main className="relative grid min-h-svh place-items-center overflow-hidden p-6">
       <motion.section
-        className="login-card"
+        className="relative w-[min(360px,100%)] text-center [&_h1]:mb-9 [&_h1]:text-[32px] [&_h1]:font-semibold [&_h1]:tracking-[-0.04em]"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease }}
       >
         <h1>Chat</h1>
-        <a className="discord-button" href="/api/auth/discord">
+        <a
+          className="flex h-[50px] items-center justify-center rounded-xl bg-accent text-sm font-semibold text-white transition-colors duration-200 hover:bg-accent-2"
+          href="/api/auth/discord"
+        >
           Discordでログイン
         </a>
         {error && (
-          <p className="error-text">
+          <p className="mt-3.5 text-[13px] text-[#b54e4e]">
             {error === "forbidden"
               ? "このアカウントは利用できません。"
               : "ログインに失敗しました。"}
@@ -163,23 +179,31 @@ function Login() {
 function SidebarConversation({
   item,
   active,
+  nested = false,
   select,
   remove,
 }: {
   item: Conversation;
   active: boolean;
+  nested?: boolean;
   select: () => void;
   remove: () => void;
 }) {
+  const buttonClass =
+    "flex h-[41px] cursor-pointer items-center gap-2.5 rounded-[11px] border-0 bg-transparent px-[11px] text-muted transition duration-200 hover:text-text [&_svg]:w-[15px] [&_svg]:shrink-0";
   return (
-    <div className={`conversation-item ${active ? "active" : ""}`}>
-      <button onClick={select}>
+    <div
+      className={`flex items-center rounded-[11px] hover:bg-panel-2 hover:text-text ${nested ? "pl-5" : ""} ${active ? "bg-[color-mix(in_srgb,var(--accent)_11%,var(--panel))] text-text" : ""}`}
+    >
+      <button className={`${buttonClass} min-w-0 flex-1`} onClick={select}>
         <MessageSquare />
-        <span>{item.title}</span>
-        {item.unread === 1 && !active && <i className="unread-dot" aria-label="新しい応答" />}
+        <span className="truncate text-xs">{item.title}</span>
+        {item.unread === 1 && !active && (
+          <i className="size-[7px] shrink-0 rounded-full bg-accent" aria-label="新しい応答" />
+        )}
       </button>
       <button
-        className="sidebar-delete"
+        className={`${buttonClass} w-[30px] justify-center p-0 hover:bg-transparent`}
         aria-label={`${item.title}を削除`}
         onClick={remove}
         title="削除"
@@ -524,7 +548,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
 
   return (
     <div
-      className={`app-shell ${sidebar ? "" : "sidebar-closed"}`}
+      className={`fixed inset-0 grid overflow-hidden overscroll-none transition-[grid-template-columns] duration-200 max-md:block ${sidebar ? "grid-cols-[280px_1fr]" : "grid-cols-[0_1fr]"}`}
       onTouchStart={startSidebarSwipe}
       onTouchEnd={endSidebarSwipe}
       onTouchCancel={() => (swipeStartRef.current = null)}
@@ -532,7 +556,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
       <AnimatePresence>
         {sidebar && (
           <motion.button
-            className="scrim md:hidden"
+            className="fixed inset-0 z-25 hidden border-0 bg-[#0c0d12a6] backdrop-blur-[5px] max-md:block"
             aria-label="メニューを閉じる"
             onClick={() => setMobileSidebar(false)}
             initial={{ opacity: 0 }}
@@ -541,21 +565,26 @@ function Chat({ initial }: { initial: Bootstrap }) {
           />
         )}
       </AnimatePresence>
-      <aside className={`sidebar ${sidebar ? "open" : ""}`}>
-        <button className="new-chat" onClick={() => newChat()}>
+      <aside
+        className={`z-30 flex min-w-0 flex-col overflow-hidden border-r border-line bg-[color-mix(in_srgb,var(--panel)_87%,var(--bg))] px-3.5 pt-[18px] pb-3.5 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[min(310px,86vw)] max-md:-translate-x-[105%] max-md:shadow-[20px_0_70px_#06070a55] max-md:transition-transform max-md:duration-300 max-md:ease-[cubic-bezier(0.22,1,0.36,1)] ${sidebar ? "visible max-md:translate-x-0" : "invisible"}`}
+      >
+        <button
+          className="mx-0.5 mt-1 mb-6 flex h-[45px] cursor-pointer items-center gap-2.5 rounded-[14px] border border-line bg-panel px-3.5 text-[13px] font-semibold shadow-[0_5px_16px_#2926320a] transition duration-200 hover:-translate-y-px hover:border-[color-mix(in_srgb,var(--accent)_40%,var(--line))] max-md:hidden [&_svg]:w-[17px] [&_svg]:text-accent"
+          onClick={() => newChat()}
+        >
           <Plus />
           新しいチャット
         </button>
-        <nav className="conversation-list">
+        <nav className="flex-1 overflow-auto">
           {data.projects.map((group) => (
-            <details key={group.id}>
-              <summary>
+            <details className="group/details mb-[5px]" key={group.id}>
+              <summary className="flex h-[39px] cursor-pointer list-none items-center gap-2 rounded-[11px] px-2.5 text-muted hover:bg-panel-2 hover:text-text [&>svg:first-child]:w-[13px] [&>svg:first-child]:transition-transform group-open/details:[&>svg:first-child]:rotate-90">
                 <ChevronRight />
-                <ProjectIcon project={group} />
-                <span>{group.name}</span>
+                <ProjectIcon project={group} className="size-[22px]" />
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold">{group.name}</span>
                 <button
                   type="button"
-                  className="project-new-chat"
+                  className="flex size-[26px] h-7 shrink-0 cursor-pointer items-center justify-center rounded-[11px] border-0 bg-transparent p-0 text-muted transition hover:text-text [&_svg]:w-3.5"
                   aria-label={`${group.name}で新しいチャット`}
                   title="新しいチャット"
                   onClick={(event) => {
@@ -568,7 +597,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
                 </button>
                 <button
                   type="button"
-                  className="project-delete"
+                  className="flex size-[26px] h-7 shrink-0 cursor-pointer items-center justify-center rounded-[11px] border-0 bg-transparent p-0 text-muted transition hover:text-text [&_svg]:w-3.5"
                   aria-label={`${group.name}を削除`}
                   title="削除"
                   onClick={(event) => {
@@ -587,6 +616,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
                     key={item.id}
                     item={item}
                     active={item.id === conversationId}
+                    nested
                     select={() => selectConversation(item)}
                     remove={() => setDeleteTarget({ type: "conversation", item })}
                   />
@@ -605,14 +635,19 @@ function Chat({ initial }: { initial: Bootstrap }) {
               />
             ))}
         </nav>
-        <Link className="profile-link" href="/settings/projects">
+        <Link
+          className="mt-2.5 flex items-center gap-2.5 rounded-[15px] p-[9px] transition duration-200 hover:bg-panel-2 [&>img]:grid [&>img]:size-[34px] [&>img]:place-items-center [&>img]:rounded-[11px] [&>img]:object-cover [&>svg]:w-4 [&>svg]:text-muted"
+          href="/settings/projects"
+        >
           {data.user.avatar ? (
             <img src={data.user.avatar} alt="" />
           ) : (
-            <span className="avatar">{data.user.display_name[0]}</span>
+            <span className="grid size-[34px] place-items-center rounded-[11px] bg-panel-2 font-bold">
+              {data.user.display_name[0]}
+            </span>
           )}
-          <span>
-            <strong>{data.user.display_name}</strong>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <strong className="truncate text-xs">{data.user.display_name}</strong>
           </span>
           <Settings />
         </Link>
@@ -636,17 +671,17 @@ function Chat({ initial }: { initial: Bootstrap }) {
         )}
       </AnimatePresence>
 
-      <main className="chat-main">
-        <header className="topbar">
+      <main className="relative grid h-full min-h-0 min-w-0 grid-rows-[64px_minmax(0,1fr)_auto] overflow-hidden bg-[radial-gradient(circle_at_50%_0,#c15f3c08,transparent_34%)] max-md:grid-rows-[58px_minmax(0,1fr)_auto]">
+        <header className="z-10 flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--line)_62%,transparent)] bg-[color-mix(in_srgb,var(--bg)_80%,transparent)] px-[22px] backdrop-blur-[18px] max-md:h-[58px] max-md:px-2.5">
           <button
-            className="icon-button"
+            className={iconButtonClass}
             onClick={() => setSidebar(!sidebar)}
             aria-label={sidebar ? "サイドバーを閉じる" : "サイドバーを開く"}
           >
             <Menu />
           </button>
           <button
-            className="icon-button mobile-new-chat"
+            className={`${iconButtonClass} hidden max-md:grid`}
             onClick={() => newChat()}
             aria-label="新しいチャット"
             title="新しいチャット"
@@ -654,13 +689,13 @@ function Chat({ initial }: { initial: Bootstrap }) {
             <Plus />
           </button>
           {project && (
-            <div className="project-label">
-              <ProjectIcon project={project} />
-              <span>{project.name}</span>
+            <div className="flex h-10 min-w-0 max-w-[280px] items-center gap-2 px-2 text-[13px] font-semibold">
+              <ProjectIcon project={project} className="size-[26px]" />
+              <span className="truncate">{project.name}</span>
             </div>
           )}
           <button
-            className={`icon-button temporary-chat ${temporary ? "active" : ""}`}
+            className={`${iconButtonClass} ml-auto ${temporary ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-accent" : ""}`}
             onClick={toggleTemporary}
             aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
             title="一時チャット"
@@ -670,7 +705,7 @@ function Chat({ initial }: { initial: Bootstrap }) {
         </header>
         <section
           ref={scrollRef}
-          className="message-scroll"
+          className="min-h-0 overflow-y-auto overscroll-none scroll-smooth"
           onScroll={(event) => {
             const element = event.currentTarget;
             autoScrollRef.current =
@@ -678,10 +713,10 @@ function Chat({ initial }: { initial: Bootstrap }) {
           }}
         >
           {messages.length > 0 && (
-            <div className="message-column">
+            <div className="mx-auto w-[min(820px,calc(100%-32px))] pt-11 pb-10 max-md:pt-[27px]">
               {visibleMessages.length < messages.length && (
                 <button
-                  className="load-older"
+                  className="mx-auto mb-8 block cursor-pointer rounded-[10px] border border-line bg-panel px-3.5 py-2 text-[11px] text-muted"
                   onClick={() => setVisibleMessageCount((count) => count + 50)}
                 >
                   以前のメッセージを表示
@@ -742,24 +777,27 @@ function MessageView({
   const auth = message.auth ?? parseDeviceAuth(message.content);
   const content = auth ? "" : message.content;
   const hasBody = Boolean(content || auth || message.skills?.length);
-  const collapsible = message.role === "user" && content.length > 1200;
+  const isUser = message.role === "user";
+  const collapsible = isUser && content.length > 1200;
   const [expanded, setExpanded] = useState(false);
   return (
     <motion.article
-      className={`message ${message.role}`}
+      className={`mb-7 flex gap-3.5 max-md:mb-6 max-md:gap-2.5 ${isUser ? "justify-end" : ""}`}
       initial={{ opacity: 0, y: 14, scale: 0.99 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.38, ease }}
     >
-      <div className="message-stack">
-        {message.role === "user" && message.files?.length > 0 && (
-          <FileBlocks files={message.files} />
-        )}
+      <div
+        className={`flex min-w-0 max-w-[min(680px,86%)] flex-col items-start max-md:max-w-[87%] ${isUser ? "items-end" : ""}`}
+      >
+        {isUser && message.files?.length > 0 && <FileBlocks files={message.files} alignEnd />}
         {hasBody && (
           <>
-            <div className={`message-body ${collapsible && !expanded ? "collapsed" : ""}`}>
+            <div
+              className={`min-w-0 max-w-full text-sm leading-[1.78] max-md:text-[13px] [&_a]:text-accent [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-panel-2 [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_td]:border [&_td]:border-line [&_td]:px-[9px] [&_td]:py-[7px] [&_td]:text-left [&_th]:border [&_th]:border-line [&_th]:px-[9px] [&_th]:py-[7px] [&_th]:text-left [&_ul]:pl-5 ${isUser ? "rounded-[20px_20px_6px_20px] border border-[color-mix(in_srgb,var(--accent)_16%,var(--line))] bg-[color-mix(in_srgb,var(--accent)_9%,var(--panel))] px-4 py-[11px] shadow-[0_6px_20px_#5b403010]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
+            >
               {message.skills && message.skills.length > 0 && (
-                <div className="used-skills">
+                <div className="mb-2 flex items-center gap-1.5 text-[10px] text-accent [&_svg]:w-[13px] [&_span]:rounded-full [&_span]:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] [&_span]:px-[7px] [&_span]:py-[3px]">
                   <Sparkles />
                   {message.skills.map((skill) => (
                     <span key={skill}>{skill}</span>
@@ -773,7 +811,7 @@ function MessageView({
             </div>
             {collapsible && (
               <button
-                className="expand-message"
+                className="mt-[5px] cursor-pointer border-0 bg-transparent px-[7px] py-1 text-[10px] text-muted"
                 aria-expanded={expanded}
                 onClick={() => setExpanded((value) => !value)}
               >
@@ -782,11 +820,9 @@ function MessageView({
             )}
           </>
         )}
-        {message.role === "assistant" && message.files?.length > 0 && (
-          <FileBlocks files={message.files} />
-        )}
-        {message.role === "user" && (
-          <div className="message-actions">
+        {!isUser && message.files?.length > 0 && <FileBlocks files={message.files} />}
+        {isUser && (
+          <div className="mt-[3px] flex self-end [&_button]:grid [&_button]:size-7 [&_button]:cursor-pointer [&_button]:place-items-center [&_button]:rounded-lg [&_button]:border-0 [&_button]:bg-transparent [&_button]:p-0 [&_button]:text-muted [&_button:disabled]:cursor-default [&_button:disabled]:opacity-35 [&_button:hover:not(:disabled)]:bg-panel-2 [&_button:hover:not(:disabled)]:text-text [&_svg]:w-3.5">
             <button
               onClick={regenerate}
               disabled={disabled}
@@ -829,8 +865,9 @@ function CodeBlock({ children, ...props }: ComponentProps<"pre">) {
   const copy = useCopy();
   const code = useRef<HTMLPreElement>(null);
   return (
-    <div className="code-block">
+    <div className="relative">
       <button
+        className="absolute top-2 right-2 z-1 grid size-7 cursor-pointer place-items-center rounded-[7px] border border-line bg-panel [&_svg]:w-3.5"
         type="button"
         aria-label="コードをコピー"
         title="コードをコピー"
@@ -838,7 +875,11 @@ function CodeBlock({ children, ...props }: ComponentProps<"pre">) {
       >
         {copy.copied ? <Check /> : <Copy />}
       </button>
-      <pre ref={code} {...props}>
+      <pre
+        className="overflow-auto rounded-[14px] border border-line bg-panel-2 py-4 pr-[52px] pl-4 text-xs leading-[1.6]"
+        ref={code}
+        {...props}
+      >
         {children}
       </pre>
     </div>
@@ -848,15 +889,21 @@ function CodeBlock({ children, ...props }: ComponentProps<"pre">) {
 function AuthCard({ auth }: { auth: DeviceAuth }) {
   const copy = useCopy();
   return (
-    <div className="auth-card">
-      <div>
-        <span className="pulse-dot" />
+    <div className="mt-[15px] grid gap-2.5 rounded-[17px] border border-[color-mix(in_srgb,#e4a356_38%,var(--line))] bg-[color-mix(in_srgb,#e4a356_8%,var(--panel))] p-[17px]">
+      <div className="flex items-center gap-[9px]">
+        <span className="size-2 animate-pulse rounded-full bg-[#e4a356] shadow-[0_0_0_5px_#e4a35620]" />
         <strong>Codexの再認証が必要です</strong>
       </div>
-      <a href={auth.verificationUri} target="_blank" rel="noopener noreferrer">
+      <a
+        className="w-max font-semibold [text-decoration:none]!"
+        href={auth.verificationUri}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         認証ページを新しいタブで開く ↗
       </a>
       <button
+        className="flex w-full cursor-pointer items-center justify-between rounded-[11px] border border-line bg-panel px-3 py-2.5 [&_svg]:w-4"
         type="button"
         aria-label="認証コードをコピー"
         title="認証コードをコピー"
@@ -869,17 +916,19 @@ function AuthCard({ auth }: { auth: DeviceAuth }) {
   );
 }
 
-function FileBlocks({ files }: { files: FileItem[] }) {
+function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; alignEnd?: boolean }) {
   const [preview, setPreview] = useState<FileItem | null>(null);
   const previewUrl = preview?.preview || (preview?.id ? `/files/${preview.id}` : "");
   return (
     <>
-      <div className="message-files">
+      <div
+        className={`flex max-w-full flex-nowrap gap-[9px] overflow-x-auto pb-[5px] ${alignEnd ? "mb-2 justify-end" : "mt-3"}`}
+      >
         {files.map((file) =>
           file.mime.startsWith("image/") && (file.id || file.preview) ? (
             <button
               key={file.id || file.name}
-              className="image-thumb"
+              className="shrink-0 cursor-zoom-in rounded-[14px] border-0 bg-transparent p-0 [&_img]:block [&_img]:h-auto [&_img]:max-h-[210px] [&_img]:max-w-80 [&_img]:rounded-[14px] [&_img]:border [&_img]:border-line [&_img]:object-cover [&_img]:shadow-[0_24px_70px_#4c392718] max-md:[&_img]:max-h-[170px] max-md:[&_img]:max-w-[260px] dark:[&_img]:shadow-[0_28px_80px_#100d0966]"
               onClick={() => setPreview(file)}
               aria-label={`${file.name}を拡大表示`}
             >
@@ -888,7 +937,7 @@ function FileBlocks({ files }: { files: FileItem[] }) {
           ) : (
             <a
               key={file.id || file.name}
-              className="file-chip"
+              className="flex shrink-0 items-center gap-2 rounded-xl border border-line bg-panel px-3 py-[9px] [&_svg]:w-4 [&_svg]:text-accent"
               href={file.id ? `/files/${file.id}` : undefined}
               target="_blank"
             >
@@ -901,7 +950,7 @@ function FileBlocks({ files }: { files: FileItem[] }) {
       <AnimatePresence>
         {preview && (
           <motion.button
-            className="image-lightbox"
+            className="fixed inset-0 z-80 grid size-full cursor-zoom-out place-items-center border-0 bg-[#090a0dcc] p-7 backdrop-blur-[7px] [&_img]:block [&_img]:h-auto [&_img]:max-h-[calc(100dvh-56px)] [&_img]:w-auto [&_img]:max-w-[calc(100vw-56px)] [&_img]:object-contain"
             onClick={() => setPreview(null)}
             aria-label="拡大表示を閉じる"
             initial={{ opacity: 0 }}
@@ -917,12 +966,17 @@ function FileBlocks({ files }: { files: FileItem[] }) {
 }
 
 function Thinking() {
+  const dotClass = "size-1.5 animate-bounce rounded-full bg-muted";
   return (
-    <motion.div className="message assistant" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div className="thinking">
-        <i />
-        <i />
-        <i />
+    <motion.div
+      className="mb-7 flex gap-3.5 max-md:mb-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+    >
+      <div className="flex h-[30px] items-center gap-[5px]">
+        <i className={dotClass} />
+        <i className={`${dotClass} [animation-delay:150ms]`} />
+        <i className={`${dotClass} [animation-delay:300ms]`} />
       </div>
     </motion.div>
   );
@@ -944,25 +998,32 @@ function Composer(props: {
 }) {
   const input = useRef<HTMLInputElement>(null);
   return (
-    <footer className="composer-area">
-      <form className={`composer ${props.temporary ? "temporary" : ""}`} onSubmit={props.send}>
+    <footer className="z-5 mx-auto w-[min(850px,calc(100%-32px))] pb-[max(10px,env(safe-area-inset-bottom))] transition-[width] max-md:w-[calc(100%-64px)] max-md:pb-[max(7px,env(safe-area-inset-bottom))] max-md:focus-within:w-[calc(100%-18px)]">
+      <form
+        className={`overflow-hidden rounded-[22px] border bg-glass shadow-[0_15px_50px_#28253318] backdrop-blur-[22px] transition duration-200 focus-within:border-[color-mix(in_srgb,var(--accent)_48%,var(--line))] focus-within:shadow-[0_18px_55px_#7a4a3220] max-md:rounded-[18px] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--accent)_55%,var(--line))]" : "border-line"}`}
+        onSubmit={props.send}
+      >
         {props.temporary && (
-          <span className="temporary-label">
+          <span className="mx-3.5 mt-2.5 mb-[-6px] flex w-max items-center gap-[5px] text-[9px] font-bold text-accent [&_svg]:w-3">
             <TimerReset />
             一時チャット
           </span>
         )}
         {props.editing && (
-          <div className="editing-label">
+          <div className="mx-3.5 mt-2.5 mb-[-5px] flex items-center gap-1.5 text-[10px] text-accent [&_svg]:w-[13px]">
             <Pencil />
             選択したメッセージを編集中
-            <button type="button" onClick={props.cancelEditing}>
+            <button
+              className="ml-auto cursor-pointer border-0 bg-transparent text-muted"
+              type="button"
+              onClick={props.cancelEditing}
+            >
               キャンセル
             </button>
           </div>
         )}
         {props.files.length > 0 && (
-          <div className="attachment-row">
+          <div className="flex gap-[7px] overflow-x-auto px-2.5 pt-2.5 [&>span]:flex [&>span]:h-[30px] [&>span]:max-w-[220px] [&>span]:items-center [&>span]:gap-1.5 [&>span]:whitespace-nowrap [&>span]:rounded-[9px] [&>span]:bg-panel-2 [&>span]:pr-[7px] [&>span]:pl-[9px] [&>span]:text-[10px] [&>span>svg]:w-[13px] [&>span>svg]:shrink-0 [&_button]:cursor-pointer [&_button]:border-0 [&_button]:bg-transparent [&_button]:p-0.5 [&_button_svg]:w-3">
             {props.files.map((file, index) => (
               <span key={`${file.name}-${index}`}>
                 <File />
@@ -977,8 +1038,9 @@ function Composer(props: {
             ))}
           </div>
         )}
-        <div className="composer-row">
+        <div className="max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)_auto] max-md:items-end">
           <textarea
+            className="block min-h-[50px] max-h-[180px] w-full resize-none border-0 bg-transparent px-[17px] pt-[15px] pb-[7px] text-sm leading-[1.6] text-text outline-0 placeholder:text-muted max-md:col-start-2 max-md:row-start-1 max-md:min-h-12 max-md:min-w-0 max-md:px-2 max-md:pt-[11px] max-md:pb-2 max-md:text-base"
             value={props.prompt}
             onChange={(event) => {
               props.setPrompt(event.target.value);
@@ -1006,7 +1068,7 @@ function Composer(props: {
             placeholder="メッセージを入力"
             rows={1}
           />
-          <div className="composer-tools">
+          <div className="flex h-[45px] items-center gap-[3px] px-2 pt-[3px] pb-[7px] max-md:contents">
             <input
               ref={input}
               type="file"
@@ -1019,7 +1081,7 @@ function Composer(props: {
             {!props.editing && (
               <button
                 type="button"
-                className="tool"
+                className="flex h-[34px] cursor-pointer items-center gap-1.5 rounded-[10px] border-0 bg-transparent px-[9px] text-[11px] text-muted transition duration-200 hover:bg-panel-2 hover:text-text max-md:col-start-1 max-md:row-start-1 max-md:mr-0 max-md:mb-[7px] max-md:ml-2 [&_svg]:w-4"
                 onClick={() => input.current?.click()}
                 aria-label="ファイルを添付"
                 title="ファイルを添付"
@@ -1027,11 +1089,11 @@ function Composer(props: {
                 <Paperclip />
               </button>
             )}
-            <span className="grow" />
+            <span className="flex-1 max-md:hidden" />
             {props.generating ? (
               <button
                 type="button"
-                className="send-button stop-button"
+                className="grid size-[34px] cursor-pointer place-items-center rounded-[11px] border-0 bg-accent text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--accent)_30%,transparent)] transition duration-200 hover:-translate-y-0.5 max-md:col-start-3 max-md:row-start-1 max-md:mr-2 max-md:mb-[7px] [&_svg]:w-3 [&_svg]:fill-current"
                 onClick={() => void props.stop()}
                 aria-label="生成を停止"
                 title="生成を停止"
@@ -1040,7 +1102,7 @@ function Composer(props: {
               </button>
             ) : (
               <button
-                className="send-button"
+                className="grid size-[34px] cursor-pointer place-items-center rounded-[11px] border-0 bg-accent text-white shadow-[0_7px_18px_color-mix(in_srgb,var(--accent)_30%,transparent)] transition duration-200 hover:not-disabled:-translate-y-0.5 disabled:opacity-30 disabled:shadow-none max-md:col-start-3 max-md:row-start-1 max-md:mr-2 max-md:mb-[7px] [&_svg]:w-[17px]"
                 disabled={!props.prompt.trim() && !props.files.length}
                 aria-label={props.editing ? "編集して再生成" : "送信"}
               >
@@ -1066,14 +1128,14 @@ function Modal({
   const titleId = useId();
   return (
     <motion.div
-      className="modal-backdrop"
+      className="fixed inset-0 z-60 grid place-items-center bg-[#0c0d12a6] p-[18px] backdrop-blur-[5px] max-md:items-end max-md:p-0"
       onMouseDown={close}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
       <motion.div
-        className="modal"
+        className="max-h-[min(760px,90svh)] w-[min(510px,100%)] overflow-auto rounded-3xl border border-line bg-panel shadow-[0_30px_100px_#06070a70] max-md:max-h-[88svh] max-md:w-full max-md:rounded-[25px_25px_0_0] max-md:border-b-0"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -1083,9 +1145,11 @@ function Modal({
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.3, ease }}
       >
-        <header>
-          <strong id={titleId}>{title}</strong>
-          <button className="icon-button" onClick={close}>
+        <header className="flex h-[62px] items-center border-b border-line pr-[18px] pl-[22px]">
+          <strong className="flex-1" id={titleId}>
+            {title}
+          </strong>
+          <button className={iconButtonClass} onClick={close}>
             <X />
           </button>
         </header>
@@ -1110,15 +1174,15 @@ function ConfirmDialog({
   const [error, setError] = useState("");
   return (
     <Modal title={title} close={close}>
-      <div className="confirm-dialog">
-        <p>{text}</p>
-        {error && <p className="error-text">{error}</p>}
-        <div>
+      <div className="p-[22px]">
+        <p className="m-0 text-[13px] leading-[1.7] text-muted">{text}</p>
+        {error && <p className="mt-2.5 text-[13px] text-[#d15f6b]">{error}</p>}
+        <div className="mt-[22px] flex justify-end gap-2 [&_button]:flex [&_button]:h-[38px] [&_button]:cursor-pointer [&_button]:items-center [&_button]:gap-1.5 [&_button]:rounded-[11px] [&_button]:border [&_button]:border-line [&_button]:bg-transparent [&_button]:px-3.5 [&_button]:text-text [&_button:disabled]:opacity-50 [&_svg]:w-3.5">
           <button onClick={close} disabled={deleting}>
             キャンセル
           </button>
           <button
-            className="danger-button"
+            className="border-[color-mix(in_srgb,#de6b76_35%,var(--line))]! bg-[color-mix(in_srgb,#de6b76_10%,transparent)]! text-[#d15f6b]!"
             disabled={deleting}
             onClick={async () => {
               setDeleting(true);
@@ -1217,19 +1281,32 @@ function SettingsPage({
     await api(path, { method: "DELETE" });
     await refresh("削除しました");
   }
+  const settingRowClass =
+    "flex min-h-[70px] items-center gap-5 border-t border-line py-[15px] first:border-t-0 [&>span]:flex-1 [&>span]:text-[10px] [&>span]:font-bold [&>span]:text-text";
+  const settingControlClass =
+    "h-[38px] w-[min(320px,55%)] rounded-[11px] border border-line bg-bg px-[11px] text-text outline-none focus:border-accent max-md:w-[55%]";
   return (
-    <div className="settings-page">
-      <div className="aurora" />
-      <main className="settings-shell">
-        <header className="settings-header">
-          <Link href="/" className="back-link" aria-label="チャットに戻る" title="チャットに戻る">
+    <div className="relative min-h-svh">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0,#c15f3c12,transparent_38%)]" />
+      <main className="relative z-1 mx-auto w-[min(1060px,calc(100%-40px))] pt-9 pb-20 max-md:w-[calc(100%-26px)] max-md:pt-5">
+        <header className="mb-[30px] grid grid-cols-[1fr_auto_1fr] items-center [&_h1]:col-start-2 [&_h1]:m-0 [&_h1]:text-[25px] [&_h1]:tracking-[-0.035em]">
+          <Link
+            href="/"
+            className="grid size-10 place-items-center rounded-[13px] border border-line bg-panel text-muted transition duration-200 hover:-translate-x-0.5 hover:text-text [&_svg]:w-[18px]"
+            aria-label="チャットに戻る"
+            title="チャットに戻る"
+          >
             <ArrowLeft />
           </Link>
           <h1>設定</h1>
         </header>
-        <nav className="settings-tabs">
+        <nav className="mb-[38px] flex w-max gap-1 rounded-[15px] border border-line bg-[color-mix(in_srgb,var(--panel)_65%,transparent)] p-[5px] backdrop-blur-[18px] max-md:mb-7 max-md:w-full max-md:justify-start max-md:overflow-x-auto">
           {(["projects", "skills", "files", "general"] as const).map((item) => (
-            <Link className={tab === item ? "active" : ""} href={`/settings/${item}`} key={item}>
+            <Link
+              className={`flex h-[35px] cursor-pointer items-center rounded-[10px] px-[17px] text-[11px] font-semibold text-muted transition duration-200 max-md:flex-1 max-md:justify-center max-md:px-[13px] ${tab === item ? "bg-panel text-text shadow-[0_4px_14px_#27243112]" : ""}`}
+              href={`/settings/${item}`}
+              key={item}
+            >
               {
                 {
                   projects: "プロジェクト",
@@ -1244,7 +1321,7 @@ function SettingsPage({
         <AnimatePresence mode="wait">
           <motion.section
             key={tab}
-            className="settings-panel"
+            className="min-h-[420px]"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
@@ -1258,7 +1335,7 @@ function SettingsPage({
                   action={() => setEditor({ type: "project" })}
                   actionText="作成"
                 />
-                <div className="card-grid">
+                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
                   {data.projects.map((item) => (
                     <SettingsCard
                       key={item.id}
@@ -1282,7 +1359,7 @@ function SettingsPage({
                   action={() => setEditor({ type: "skill" })}
                   actionText="追加"
                 />
-                <div className="card-grid">
+                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
                   {data.skills.map((item) => (
                     <SettingsCard
                       key={item.id}
@@ -1302,19 +1379,29 @@ function SettingsPage({
             {tab === "files" && (
               <>
                 <PanelTitle title="ファイル" text="アップロードしたファイルと生成画像です。" />
-                <div className="file-grid">
+                <div className="grid grid-cols-4 gap-3 max-md:grid-cols-2">
                   {data.files.map((file) => (
-                    <a href={`/files/${file.id}`} target="_blank" key={file.id}>
+                    <a
+                      className="min-w-0 overflow-hidden rounded-[17px] border border-line bg-panel transition duration-200 hover:-translate-y-[3px] hover:shadow-[0_24px_70px_#4c392718] dark:hover:shadow-[0_28px_80px_#100d0966]"
+                      href={`/files/${file.id}`}
+                      target="_blank"
+                      key={file.id}
+                    >
                       {file.mime.startsWith("image/") ? (
-                        <img src={`/files/${file.id}`} alt={file.name} loading="lazy" />
+                        <img
+                          className="grid aspect-4/3 w-full place-items-center object-cover"
+                          src={`/files/${file.id}`}
+                          alt={file.name}
+                          loading="lazy"
+                        />
                       ) : (
-                        <span className="file-placeholder">
+                        <span className="grid aspect-4/3 w-full place-items-center bg-panel-2 [&_svg]:w-[35px] [&_svg]:text-muted">
                           <File />
                         </span>
                       )}
-                      <div>
-                        <strong>{file.name}</strong>
-                        <small>
+                      <div className="flex flex-col px-[11px] py-2.5">
+                        <strong className="truncate text-[10px]">{file.name}</strong>
+                        <small className="mt-[3px] text-[8px] text-muted">
                           {file.source === "generated" ? "生成画像" : "アップロード"} ·{" "}
                           {formatSize(file.size)}
                         </small>
@@ -1327,14 +1414,15 @@ function SettingsPage({
             {tab === "general" && (
               <>
                 <PanelTitle title="一般" text="回答とアカウントの設定です。" />
-                <div className="language-settings">
-                  <div className="general-setting-row">
+                <div className="border-b border-line">
+                  <div className={settingRowClass}>
                     <span>テーマ</span>
                     <ThemeButton {...theme} />
                   </div>
-                  <div className="general-setting-row">
+                  <div className={settingRowClass}>
                     <span>回答言語</span>
                     <input
+                      className={settingControlClass}
                       id="response-language"
                       aria-label="回答言語"
                       type="text"
@@ -1347,9 +1435,10 @@ function SettingsPage({
                       placeholder="Japanese"
                     />
                   </div>
-                  <div className="general-setting-row">
+                  <div className={settingRowClass}>
                     <span>モデル</span>
                     <select
+                      className={settingControlClass}
                       id="codex-model"
                       aria-label="モデル"
                       value={model}
@@ -1365,9 +1454,10 @@ function SettingsPage({
                       ))}
                     </select>
                   </div>
-                  <div className="general-setting-row">
+                  <div className={settingRowClass}>
                     <span>Thinking</span>
                     <select
+                      className={settingControlClass}
                       id="thinking-level"
                       aria-label="Thinking"
                       value={thinking}
@@ -1382,12 +1472,15 @@ function SettingsPage({
                       <option value="high">High</option>
                     </select>
                   </div>
-                  <div className="general-setting-row send-shortcut">
-                    <span>
+                  <div className={settingRowClass}>
+                    <span className="grid! gap-0.5">
                       Ctrl + Enterで送信
-                      <small>PCのみ。スマートフォンではEnterで改行します。</small>
+                      <small className="text-[8px] font-normal text-muted">
+                        PCのみ。スマートフォンではEnterで改行します。
+                      </small>
                     </span>
                     <input
+                      className="relative m-0 h-[22px] w-[38px] shrink-0 cursor-pointer appearance-none rounded-[20px] bg-panel-2 after:absolute after:top-[3px] after:left-[3px] after:size-4 after:rounded-full after:bg-muted after:content-[''] after:transition-[left] checked:bg-accent checked:after:left-[19px] checked:after:bg-white"
                       type="checkbox"
                       aria-label="Ctrl + Enterで送信"
                       checked={ctrlEnterSend}
@@ -1398,29 +1491,32 @@ function SettingsPage({
                     />
                   </div>
                 </div>
-                <div className="account-card">
+                <div className="flex items-center gap-[15px] border-b border-line py-[18px] max-md:flex-wrap max-md:items-start [&>img]:size-[54px] [&>img]:rounded-[17px] [&>img]:object-cover">
                   {data.user.avatar ? (
                     <img src={data.user.avatar} alt="" />
                   ) : (
-                    <span className="avatar large">{data.user.display_name[0]}</span>
+                    <span className="grid size-[54px] place-items-center rounded-[17px] bg-panel-2 font-bold">
+                      {data.user.display_name[0]}
+                    </span>
                   )}
-                  <div>
-                    <h2>{data.user.display_name}</h2>
-                    <p>@{data.user.username}</p>
+                  <div className="flex-1">
+                    <h2 className="mb-1 text-base">{data.user.display_name}</h2>
+                    <p className="text-[11px] text-muted">@{data.user.username}</p>
                   </div>
-                  <form method="post" action="/logout">
-                    <button>
+                  <form className="max-md:w-full" method="post" action="/logout">
+                    <button className="flex h-[38px] cursor-pointer items-center gap-[7px] rounded-[11px] border border-[color-mix(in_srgb,#de6b76_28%,var(--line))] bg-transparent px-3 text-[10px] text-[#d15f6b] max-md:w-full max-md:justify-center [&_svg]:w-3.5">
                       <LogOut />
                       ログアウト
                     </button>
                   </form>
                 </div>
-                <section className="danger-zone">
-                  <div>
-                    <h2>データ削除</h2>
-                    <p>この操作は取り消せません。</p>
+                <section className="flex items-center gap-2 py-[18px] max-md:flex-col max-md:items-stretch">
+                  <div className="flex-1">
+                    <h2 className="mb-[3px] text-[13px]">データ削除</h2>
+                    <p className="text-[9px] text-muted">この操作は取り消せません。</p>
                   </div>
                   <button
+                    className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-[10px] border border-[color-mix(in_srgb,#de6b76_30%,var(--line))] bg-transparent px-2.5 text-[9px] text-[#d15f6b] max-md:justify-center [&_svg]:w-[13px]"
                     onClick={() =>
                       setDeleteTarget({ type: "data", id: "", name: "すべてのデータ" })
                     }
@@ -1471,7 +1567,7 @@ function SettingsPage({
       <AnimatePresence>
         {toast && (
           <motion.div
-            className="toast"
+            className="fixed bottom-[30px] left-1/2 z-100 flex -translate-x-1/2 items-center gap-2 rounded-[13px] border border-line bg-panel px-4 py-[11px] text-[11px] shadow-[0_24px_70px_#4c392718] dark:shadow-[0_28px_80px_#100d0966] [&_svg]:w-[15px] [&_svg]:text-accent"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
@@ -1497,13 +1593,16 @@ function PanelTitle({
   actionText?: string;
 }) {
   return (
-    <div className="panel-title">
+    <div className="mb-5 flex items-end justify-between max-md:items-center">
       <div>
-        <h2>{title}</h2>
-        <p>{text}</p>
+        <h2 className="mb-[5px] text-xl tracking-[-0.025em]">{title}</h2>
+        <p className="text-[11px] text-muted max-md:max-w-[220px]">{text}</p>
       </div>
       {action && (
-        <button className="primary-button" onClick={action}>
+        <button
+          className="inline-flex h-[39px] cursor-pointer items-center justify-center gap-[7px] rounded-xl border-0 bg-accent px-[15px] text-[11px] font-bold text-white shadow-[0_8px_20px_color-mix(in_srgb,var(--accent)_25%,transparent)] hover:-translate-y-px [&_svg]:w-[15px]"
+          onClick={action}
+        >
           <Plus />
           {actionText}
         </button>
@@ -1527,21 +1626,30 @@ function SettingsCard({
   remove: () => void;
 }) {
   return (
-    <motion.article className="settings-card" whileHover={{ y: -3 }}>
-      <span className="card-icon">{icon}</span>
+    <motion.article
+      className="grid min-h-[170px] grid-cols-[40px_1fr] gap-[13px] rounded-[19px] border border-line bg-[color-mix(in_srgb,var(--panel)_82%,transparent)] p-[19px] shadow-[0_8px_30px_#302d3a0a]"
+      whileHover={{ y: -3 }}
+    >
+      <span className="grid size-10 place-items-center rounded-[13px] bg-[color-mix(in_srgb,var(--accent)_11%,var(--panel))] text-accent [&_svg]:w-[18px]">
+        {icon}
+      </span>
       <div>
-        <div className="card-title">
-          <h3>{title}</h3>
-          {badge && <small>{badge}</small>}
+        <div className="flex items-center gap-2">
+          <h3 className="mt-0.5 mb-[5px] text-sm">{title}</h3>
+          {badge && (
+            <small className="rounded-[5px] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] px-1.5 py-0.5 text-[8px] text-accent">
+              {badge}
+            </small>
+          )}
         </div>
-        <p>{text}</p>
+        <p className="line-clamp-2 h-[38px] text-[10px] leading-[1.55] text-muted">{text}</p>
       </div>
-      <div className="card-actions">
+      <div className="col-span-full flex self-end justify-end gap-1 border-t border-line pt-[11px] [&_button]:flex [&_button]:h-[31px] [&_button]:cursor-pointer [&_button]:items-center [&_button]:gap-[5px] [&_button]:rounded-[9px] [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[9px] [&_button]:text-[10px] [&_button]:text-muted [&_button:hover]:bg-panel-2 [&_button:hover]:text-text [&_svg]:w-3.5">
         <button onClick={edit}>
           <MoreHorizontal />
           編集
         </button>
-        <button className="delete" onClick={remove}>
+        <button className="hover:text-[#de6b76]!" onClick={remove}>
           <Trash2 />
         </button>
       </div>
@@ -1571,6 +1679,9 @@ function Editor({
   const [color, setColor] = useState(project?.color || "clay");
   const [enabled, setEnabled] = useState(skill?.enabled !== 0);
   const [saving, setSaving] = useState(false);
+  const labelClass = "grid gap-[7px] text-[10px] font-bold text-muted";
+  const controlClass =
+    "w-full rounded-[11px] border border-line bg-bg px-[11px] py-2.5 text-xs leading-[1.55] text-text outline-none focus:border-accent";
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -1590,10 +1701,11 @@ function Editor({
       title={`${isSkill ? "スキル" : "プロジェクト"}${item ? "を編集" : "を作成"}`}
       close={close}
     >
-      <form className="editor-form" onSubmit={submit}>
-        <label>
+      <form className="grid gap-[15px] p-5" onSubmit={submit}>
+        <label className={labelClass}>
           名前
           <input
+            className={controlClass}
             value={name}
             onChange={(event) => setName(event.target.value)}
             maxLength={80}
@@ -1602,14 +1714,14 @@ function Editor({
           />
         </label>
         {!isSkill && (
-          <fieldset className="project-appearance">
+          <fieldset className="grid gap-[7px] border-0 p-0 [&_legend]:p-0 [&_legend]:text-[10px] [&_legend]:font-bold [&_legend]:text-muted">
             <legend>アイコン</legend>
-            <div>
+            <div className="mb-[5px] flex gap-[7px]">
               {Object.entries(projectIcons).map(([value, Icon]) => (
                 <button
                   key={value}
                   type="button"
-                  className={icon === value ? "selected" : ""}
+                  className={`grid size-[34px] cursor-pointer place-items-center rounded-[10px] border bg-bg [&_svg]:w-4 ${icon === value ? "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_18%,transparent)]" : "border-line"}`}
                   onClick={() => setIcon(value)}
                   aria-label={value}
                 >
@@ -1618,12 +1730,12 @@ function Editor({
               ))}
             </div>
             <legend>色</legend>
-            <div>
+            <div className="mb-[5px] flex gap-[7px]">
               {projectColors.map((value) => (
                 <button
                   key={value}
                   type="button"
-                  className={`color-choice project-${value} ${color === value ? "selected" : ""}`}
+                  className={`size-[34px] cursor-pointer rounded-[10px] border bg-[var(--project-color)] ${projectColorClasses[value]} ${color === value ? "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_18%,transparent)]" : "border-line"}`}
                   onClick={() => setColor(value)}
                   aria-label={value}
                 />
@@ -1632,9 +1744,10 @@ function Editor({
           </fieldset>
         )}
         {isSkill && (
-          <label>
+          <label className={labelClass}>
             説明
             <input
+              className={controlClass}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               maxLength={500}
@@ -1642,9 +1755,10 @@ function Editor({
             />
           </label>
         )}
-        <label>
+        <label className={labelClass}>
           {isSkill ? "スキル指示" : "システムプロンプト"}
           <textarea
+            className={`${controlClass} resize-y max-md:min-h-[180px]`}
             value={instructions}
             onChange={(event) => setInstructions(event.target.value)}
             rows={11}
@@ -1656,20 +1770,28 @@ function Editor({
           />
         </label>
         {isSkill && (
-          <label className="switch">
+          <label className="flex items-center justify-between text-[10px] font-bold text-muted">
             <span>このスキルを有効にする</span>
             <input
+              className="relative h-[22px] w-[38px] cursor-pointer appearance-none rounded-[20px] border-0 bg-panel-2 p-0 after:absolute after:top-[3px] after:left-[3px] after:size-4 after:rounded-full after:bg-muted after:content-[''] after:transition-[left] checked:bg-accent checked:after:left-[19px] checked:after:bg-white"
               type="checkbox"
               checked={enabled}
               onChange={(event) => setEnabled(event.target.checked)}
             />
           </label>
         )}
-        <footer>
-          <button type="button" onClick={close}>
+        <footer className="flex justify-end gap-2 pt-[7px]">
+          <button
+            className="h-[39px] cursor-pointer border-0 bg-transparent text-[11px] text-muted"
+            type="button"
+            onClick={close}
+          >
             キャンセル
           </button>
-          <button className="primary-button" disabled={saving}>
+          <button
+            className="inline-flex h-[39px] cursor-pointer items-center justify-center rounded-xl border-0 bg-accent px-[15px] text-[11px] font-bold text-white shadow-[0_8px_20px_color-mix(in_srgb,var(--accent)_25%,transparent)] disabled:opacity-50"
+            disabled={saving}
+          >
             {saving ? "保存中…" : "保存"}
           </button>
         </footer>
@@ -1695,9 +1817,9 @@ export default function App() {
   if (login) return <Login />;
   if (!data)
     return (
-      <div className="loading-screen">
+      <div className="grid h-svh place-items-center">
         <motion.div
-          className="loading-dot"
+          className="size-2 rounded-full bg-accent"
           animate={{ opacity: [0.25, 1, 0.25] }}
           transition={{ repeat: Infinity, duration: 1.2 }}
         />
