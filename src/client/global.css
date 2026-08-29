@@ -56,20 +56,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-@media (max-width: 767px) {
-  html:has(#chat-shell),
-  body:has(#chat-shell),
-  #root:has(#chat-shell) {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    overscroll-behavior: none;
-  }
-
-  body:has(#chat-shell) {
-    position: fixed;
-    inset: 0;
-  }
+/*
+ * チャット画面だけドキュメントを固定高にし、スクロールは内側の領域に閉じる。
+ * ビューポートの interactive-widget=resizes-content により、キーボード表示時は
+ * レイアウトビューポート自体が縮むので、この 100% チェーンがそのまま追従する。
+ * position: fixed は使わないこと（キーボードのアニメーション中に
+ * コンポジタが fixed 要素をビジュアルビューポートへ貼り付けるため、ヘッダーがちらつく）。
+ */
+html:has(#chat-shell),
+body:has(#chat-shell),
+#root:has(#chat-shell) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 button,
