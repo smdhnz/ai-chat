@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import { ChevronRight, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import { ProjectIcon } from "@/components/project-icon";
+import { iconButtonClass } from "@/lib/ui";
 
 const rowButtonClass =
   "flex h-[41px] min-w-0 flex-1 items-center gap-2.5 rounded-[11px] px-[11px] text-left text-xs text-muted-foreground transition duration-200 hover:text-foreground [&>svg]:size-[15px] [&>svg]:shrink-0";
@@ -31,7 +32,6 @@ function ConversationRow({
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
           <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
-            <MessageSquare />
             <span className="truncate">{item.title}</span>
             {item.unread === 1 && !active && (
               <span
@@ -116,7 +116,16 @@ export function ChatSidebar({
     >
       <div className="size-full">
         <aside className="flex h-full w-[86vw] flex-col bg-sidebar text-sidebar-foreground">
-          <div className="h-[18px] shrink-0" />
+          <div className="shrink-0 px-3.5 pt-[18px] pb-3">
+            <button
+              type="button"
+              className="liquid-glass liquid-glass-control inline-flex h-11 w-full items-center justify-center gap-2 rounded-full text-xs font-semibold [&_svg]:size-4"
+              onClick={() => newChat()}
+            >
+              <Plus />
+              新規チャット
+            </button>
+          </div>
           <nav className="min-h-0 flex-1 overflow-y-auto px-3.5" aria-label="チャット一覧">
             <ul className="flex flex-col">
               {data.projects.map((group) => {
@@ -204,21 +213,13 @@ export function ChatSidebar({
               )}
             </ul>
           </nav>
-          <footer className="px-3.5 pt-2.5 pb-3.5">
+          <footer className="flex justify-end px-3.5 pt-2.5 pb-3.5">
             <Link
               href="/settings/general"
-              className="flex items-center gap-2.5 rounded-[15px] p-[9px] transition duration-200 hover:bg-sidebar-accent"
+              className={`${iconButtonClass} inline-flex items-center justify-center`}
+              aria-label="設定"
             >
-              <span className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-muted font-bold">
-                {data.user.avatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="size-full object-cover" src={data.user.avatar} alt="" />
-                ) : (
-                  data.user.display_name[0]
-                )}
-              </span>
-              <strong className="min-w-0 flex-1 truncate text-xs">{data.user.display_name}</strong>
-              <Settings className="size-4 text-muted-foreground" />
+              <Settings />
             </Link>
           </footer>
         </aside>
