@@ -8,7 +8,7 @@ import { Check, Copy, File, LoaderCircle, Pencil, RotateCcw, Sparkles } from "lu
 import { parseDeviceAuth, type DeviceAuth, type FileItem, type Message } from "@/lib/api";
 import { ease } from "@/lib/ui";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
-import { NativeDialog } from "@/components/native-dialog";
+import { ImageDialog } from "@/components/image-dialog";
 
 export function MessageView({
   message,
@@ -221,26 +221,13 @@ export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; ali
           )}
         </div>
       </div>
-      <NativeDialog
+      <ImageDialog
         open={Boolean(preview)}
-        onClose={() => setPreview(null)}
-        label={preview?.name ?? "拡大表示"}
-        className="fixed inset-0 size-full cursor-zoom-out"
-      >
-        <div
-          className="flex size-full items-center justify-center p-7"
-          onClick={() => setPreview(null)}
-        >
-          {preview && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              className="block h-auto max-h-[calc(100dvh-56px)] w-auto max-w-[calc(100vw-56px)] object-contain"
-              src={previewUrl}
-              alt={preview.name}
-            />
-          )}
-        </div>
-      </NativeDialog>
+        onOpenChange={(open) => !open && setPreview(null)}
+        src={previewUrl}
+        name={preview?.name ?? "image"}
+        downloadUrl={preview?.id ? `/files/${preview.id}?download=1` : previewUrl}
+      />
     </>
   );
 }

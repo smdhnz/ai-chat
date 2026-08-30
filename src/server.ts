@@ -129,7 +129,8 @@ const server = Bun.serve<SocketData>({
       if (skillMatch && request.method === "DELETE")
         return removeOwned(request, "skills", skillMatch[1], user.id);
       const fileMatch = url.pathname.match(/^\/files\/([\w-]+)$/);
-      if (fileMatch && request.method === "GET") return serveUserFile(fileMatch[1], user.id);
+      if (fileMatch && request.method === "GET")
+        return serveUserFile(fileMatch[1], user.id, url.searchParams.has("download"));
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))
         return json({ error: "not found" }, 404);
       return webApp(request);
@@ -896,7 +897,7 @@ async function removeFiles(files: { path: string }[]): Promise<void> {
   await Promise.all(files.map((file) => unlink(storedFilePath(file.path)).catch(() => undefined)));
 }
 
-async function serveUserFile(fileId: string, userId: string): Promise<Response> {
+async function serveUserFile(fileId: string, userId: string, download: boolean): Promise<Response> {
   const file = db
     .query("SELECT name,path,mime FROM files WHERE id=? AND user_id=?")
     .get(fileId, userId) as FileRow | null;
@@ -906,7 +907,7 @@ async function serveUserFile(fileId: string, userId: string): Promise<Response> 
   return new Response(Bun.file(path), {
     headers: {
       "Content-Type": file.mime,
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
       "X-Content-Type-Options": "nosniff",
     },
   });

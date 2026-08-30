@@ -12,9 +12,8 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
-  File,
-  Files,
   FolderKanban,
+  Images,
   LogOut,
   Pencil,
   Plus,
@@ -28,14 +27,16 @@ import {
   api,
   getBootstrap,
   type Bootstrap,
+  type FileItem,
   type Project,
   type Skill,
   type ThinkingLevel,
 } from "@/lib/api";
-import { formatSize, settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
+import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
 import { shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NativeDialog } from "@/components/native-dialog";
+import { ImageDialog } from "@/components/image-dialog";
 import { ProjectIcon } from "@/components/project-icon";
 import { Editor } from "@/app/settings/_components/settings-editor";
 
@@ -378,8 +379,8 @@ function SettingsHome({ data, showTab }: { data: Bootstrap; showTab: (tab: Setti
           onClick={() => showTab("skills")}
         />
         <SettingsLink
-          icon={Files}
-          label="ファイル"
+          icon={Images}
+          label="画像"
           value={`${data.files.length}`}
           onClick={() => showTab("files")}
         />
@@ -491,49 +492,7 @@ function SettingsDetail({
       </DetailLayout>
     );
 
-  if (tab === "files")
-    return (
-      <DetailLayout text="アップロードしたファイルと生成画像です。">
-        {data.files.length ? (
-          <div className="grid grid-cols-2 gap-3">
-            {data.files.map((file) => (
-              <a
-                href={`/files/${file.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-0 overflow-hidden rounded-[14px] bg-card"
-                key={file.id}
-              >
-                <span className="block aspect-[4/3] w-full">
-                  {file.mime.startsWith("image/") ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      className="size-full object-cover"
-                      src={`/files/${file.id}`}
-                      alt={file.name}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="flex size-full items-center justify-center bg-muted [&_svg]:size-8 [&_svg]:text-muted-foreground">
-                      <File />
-                    </span>
-                  )}
-                </span>
-                <span className="block min-w-0 px-3 py-2.5">
-                  <strong className="block truncate text-[11px]">{file.name}</strong>
-                  <span className="mt-1 block truncate text-[9px] text-muted-foreground">
-                    {file.source === "generated" ? "生成画像" : "アップロード"} ·{" "}
-                    {formatSize(file.size)}
-                  </span>
-                </span>
-              </a>
-            ))}
-          </div>
-        ) : (
-          <EmptyText>ファイルはありません。</EmptyText>
-        )}
-      </DetailLayout>
-    );
+  if (tab === "files") return <SettingsImages files={data.files} />;
 
   return (
     <div className="flex flex-col gap-6 px-4 pt-5 pb-[max(28px,env(safe-area-inset-bottom))]">
@@ -622,6 +581,47 @@ function SettingsDetail({
         </button>
       </section>
     </div>
+  );
+}
+
+function SettingsImages({ files }: { files: FileItem[] }) {
+  const [preview, setPreview] = useState<FileItem | null>(null);
+
+  return (
+    <>
+      <DetailLayout text="アップロード・生成した画像です。">
+        {files.length ? (
+          <div className="grid grid-cols-2 gap-3">
+            {files.map((file) => (
+              <button
+                type="button"
+                className="aspect-[4/3] min-w-0 cursor-zoom-in overflow-hidden rounded-[14px] bg-card p-0 shadow-[0_12px_30px_rgba(0,0,0,0.16)]"
+                key={file.id}
+                aria-label={`${file.name}を表示`}
+                onClick={() => setPreview(file)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="size-full object-cover transition-transform duration-300 active:scale-[0.97]"
+                  src={`/files/${file.id}`}
+                  alt=""
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyText>画像はありません。</EmptyText>
+        )}
+      </DetailLayout>
+      <ImageDialog
+        open={Boolean(preview)}
+        onOpenChange={(open) => !open && setPreview(null)}
+        src={preview ? `/files/${preview.id}` : ""}
+        name={preview?.name ?? "image"}
+        downloadUrl={preview ? `/files/${preview.id}?download=1` : ""}
+      />
+    </>
   );
 }
 
