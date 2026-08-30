@@ -116,7 +116,7 @@ export function ChatSidebar({
     >
       <div className="size-full">
         <aside className="flex h-full w-[86vw] flex-col bg-sidebar text-sidebar-foreground">
-          <div className="shrink-0 px-3.5 pt-[18px] pb-3">
+          <div className="shrink-0 px-3.5 pt-[calc(18px+env(safe-area-inset-top))] pb-3">
             <button
               type="button"
               className="liquid-glass liquid-glass-control inline-flex h-11 w-full items-center justify-center gap-2 rounded-full text-xs font-semibold [&_svg]:size-4"

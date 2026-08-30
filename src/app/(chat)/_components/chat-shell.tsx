@@ -435,7 +435,7 @@ export function ChatShell() {
             onClick={() => setMobileSidebar(false)}
           />
         )}
-        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-[18px] pt-2.5">
+        <header className="absolute inset-x-0 top-0 z-10 flex h-[calc(72px+env(safe-area-inset-top))] items-start gap-2 px-[18px] pt-[calc(10px+env(safe-area-inset-top))]">
           <button
             type="button"
             className={`${iconButtonClass} inline-flex items-center justify-center`}
@@ -472,7 +472,7 @@ export function ChatShell() {
         </header>
         <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
           {messages.length > 0 && (
-            <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]">
+            <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[calc(86px+env(safe-area-inset-top))] pb-[96px]">
               {hasOlderMessages && (
                 <button
                   type="button"

@@ -6,7 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "chat - fumiya.dev",
   manifest: "/site.webmanifest",
-  appleWebApp: { title: "Chat" },
+  appleWebApp: { title: "Chat", statusBarStyle: "black-translucent" },
   icons: {
     icon: [
       { url: "/favicon.svg?v=2", type: "image/svg+xml" },
