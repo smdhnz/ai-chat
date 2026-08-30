@@ -6,7 +6,6 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy, File, LoaderCircle, Pencil, RotateCcw, Sparkles } from "lucide-react";
 import { parseDeviceAuth, type DeviceAuth, type FileItem, type Message } from "@/lib/api";
-import { ease } from "@/lib/ui";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
 import { ImageDialog } from "@/components/image-dialog";
 
@@ -32,12 +31,7 @@ export function MessageView({
   const collapsible = isUser && content.length > 1200;
   const [expanded, setExpanded] = useState(false);
   return (
-    <motion.article
-      className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}
-      initial={{ opacity: 0, y: 14, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.38, ease }}
-    >
+    <article className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}>
       <div className={`flex min-w-0 max-w-[87%] flex-col items-start ${isUser ? "items-end" : ""}`}>
         {isUser && message.files?.length > 0 && <FileBlocks files={message.files} alignEnd />}
         {hasBody && (
@@ -97,7 +91,7 @@ export function MessageView({
           </div>
         )}
       </div>
-    </motion.article>
+    </article>
   );
 }
 

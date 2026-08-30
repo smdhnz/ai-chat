@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  AnimatePresence,
   animate,
   motion,
   useMotionValue,
@@ -73,21 +72,6 @@ export function ChatShell() {
     });
     return () => animation.stop();
   }, [mobileSidebar, reduceMotion, sidebarDragging, sidebarX]);
-
-  useEffect(() => {
-    setMessages([]);
-    setHasOlderMessages(false);
-    if (!conversationId) return;
-    let active = true;
-    void api<MessagePage>(`/api/conversations/${conversationId}`).then((page) => {
-      if (!active) return;
-      setMessages(page.messages);
-      setHasOlderMessages(page.hasMore);
-    });
-    return () => {
-      active = false;
-    };
-  }, [conversationId]);
 
   useEffect(() => {
     let active = true;
@@ -169,18 +153,45 @@ export function ChatShell() {
   }, [setData]);
 
   const conversations = data?.conversations;
+  const requestedConversationId = conversationIdFromPath(pathname);
+  const requestedConversation = conversations?.find((item) => item.id === requestedConversationId);
+  const resolvedConversationId = requestedConversation?.id || null;
+  const requestedProjectId = requestedConversation?.project_id || "";
+  const conversationsLoaded = conversations !== undefined;
   useEffect(() => {
-    if (!conversations) return;
-    const id = conversationIdFromPath(pathname);
-    const conversation = conversations.find((item) => item.id === id);
-    if (id && !conversation) {
+    if (!conversationsLoaded) return;
+    if (requestedConversationId && !resolvedConversationId) {
       router.replace(chatUrl("/", temporaryParam));
       return;
     }
-    setConversationId(conversation?.id || null);
-    setProjectId(conversation?.project_id || "");
-    setTemporary(temporaryParam);
-  }, [conversations, pathname, temporaryParam, router]);
+    if (!resolvedConversationId) {
+      setConversationId(null);
+      setProjectId("");
+      setMessages([]);
+      setHasOlderMessages(false);
+      setTemporary(temporaryParam);
+      return;
+    }
+    let active = true;
+    void api<MessagePage>(`/api/conversations/${resolvedConversationId}`).then((page) => {
+      if (!active) return;
+      setMessages(page.messages);
+      setHasOlderMessages(page.hasMore);
+      setConversationId(resolvedConversationId);
+      setProjectId(requestedProjectId);
+      setTemporary(temporaryParam);
+    });
+    return () => {
+      active = false;
+    };
+  }, [
+    conversationsLoaded,
+    requestedConversationId,
+    requestedProjectId,
+    resolvedConversationId,
+    temporaryParam,
+    router,
+  ]);
 
   const refreshChat = useCallback(
     async (id: string) => {
@@ -203,13 +214,9 @@ export function ChatShell() {
   const editing = editingMessageId !== null;
 
   function selectConversation(item: Conversation) {
-    const isTemporary = item.temporary === 1;
     setEditingMessageId(null);
     setPrompt("");
-    setConversationId(item.id);
-    setProjectId(item.project_id || "");
-    setTemporary(isTemporary);
-    router.push(chatUrl(`/chat/${item.id}`, isTemporary));
+    router.push(chatUrl(`/chat/${item.id}`, item.temporary === 1));
     setMobileSidebar(false);
   }
   function newChat(targetProjectId = "", isTemporary = temporary) {
@@ -484,7 +491,13 @@ export function ChatShell() {
             />
           )}
           {messages.length > 0 && (
-            <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]">
+            <motion.div
+              key={conversationId}
+              className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]"
+              initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.2 }}
+            >
               {hasOlderMessages && (
                 <button
                   type="button"
@@ -495,24 +508,22 @@ export function ChatShell() {
                   {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
                 </button>
               )}
-              <AnimatePresence initial={false}>
-                {messages.map((message) => (
-                  <MessageView
-                    key={message.id}
-                    message={message}
-                    disabled={generating}
-                    draft={editingMessageId === message.id ? prompt : undefined}
-                    regenerate={() => void regenerate(message.id)}
-                    edit={() => {
-                      setEditingMessageId(message.id);
-                      setPrompt(message.content);
-                      setFiles([]);
-                    }}
-                  />
-                ))}
-              </AnimatePresence>
+              {messages.map((message) => (
+                <MessageView
+                  key={message.id}
+                  message={message}
+                  disabled={generating}
+                  draft={editingMessageId === message.id ? prompt : undefined}
+                  regenerate={() => void regenerate(message.id)}
+                  edit={() => {
+                    setEditingMessageId(message.id);
+                    setPrompt(message.content);
+                    setFiles([]);
+                  }}
+                />
+              ))}
               {generating && <Thinking />}
-            </div>
+            </motion.div>
           )}
         </div>
         <Composer
