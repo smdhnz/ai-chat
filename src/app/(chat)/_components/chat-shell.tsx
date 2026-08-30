@@ -39,6 +39,7 @@ export function ChatShell() {
   const searchParams = useSearchParams();
   const temporaryParam = searchParams.get("temporary") === "1";
   const [data, setData] = useBootstrap();
+  const shellReady = data !== null;
   const [conversationId, setConversationId] = useState<string | null>(() =>
     conversationIdFromPath(pathname),
   );
@@ -62,7 +63,66 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
+  const shellRef = useRef<HTMLDivElement>(null);
   openConversationRef.current = conversationId;
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    const viewport = window.visualViewport;
+    if (!shell || !viewport) return;
+
+    let keyboardOpen = false;
+    let frame = 0;
+    const isEditable = (element: Element | null) =>
+      (element instanceof HTMLTextAreaElement && !element.readOnly) ||
+      (element instanceof HTMLInputElement &&
+        !element.readOnly &&
+        !["button", "checkbox", "file", "hidden", "radio", "range", "reset", "submit"].includes(
+          element.type,
+        )) ||
+      (element instanceof HTMLElement && element.isContentEditable);
+    const reset = () => {
+      keyboardOpen = false;
+      shell.style.removeProperty("height");
+      shell.style.removeProperty("top");
+      shell.style.removeProperty("--composer-bottom-padding");
+    };
+    const update = () => {
+      if (viewport.scale !== 1) {
+        reset();
+        return;
+      }
+      const focused = isEditable(document.activeElement);
+      const reduced = viewport.height < document.documentElement.clientHeight - 1;
+      keyboardOpen = reduced && (focused || keyboardOpen);
+      if (!focused && !keyboardOpen) {
+        reset();
+        return;
+      }
+      shell.style.height = `${viewport.height}px`;
+      shell.style.top = `${viewport.offsetTop}px`;
+      if (keyboardOpen) shell.style.setProperty("--composer-bottom-padding", "15px");
+      else shell.style.removeProperty("--composer-bottom-padding");
+    };
+    const updateAfterFocus = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    };
+
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    document.addEventListener("focusin", updateAfterFocus);
+    document.addEventListener("focusout", updateAfterFocus);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      document.removeEventListener("focusin", updateAfterFocus);
+      document.removeEventListener("focusout", updateAfterFocus);
+      reset();
+    };
+  }, [shellReady]);
 
   useEffect(() => {
     if (sidebarDragging) return;
@@ -387,7 +447,10 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
+    <div
+      ref={shellRef}
+      className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar"
+    >
       <ChatSidebar
         open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
