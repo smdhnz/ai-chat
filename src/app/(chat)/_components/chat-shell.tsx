@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  type PanInfo,
+} from "motion/react";
 import { Menu, MessageCircleDashed, SquarePen } from "lucide-react";
 import {
   api,
@@ -15,6 +22,7 @@ import {
 } from "@/lib/api";
 import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
+import { shouldCompleteSwipe } from "@/lib/swipe";
 import { chatUrl, conversationIdFromPath } from "@/app/(chat)/_libs/chat";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -39,6 +47,9 @@ export function ChatShell() {
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
+  const [sidebarDragging, setSidebarDragging] = useState(false);
+  const sidebarX = useMotionValue(0);
+  const sidebarGestureStart = useRef(0);
   const reduceMotion = useReducedMotion();
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -49,6 +60,15 @@ export function ChatShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   openConversationRef.current = conversationId;
+
+  useEffect(() => {
+    if (sidebarDragging) return;
+    const animation = animate(sidebarX, mobileSidebar ? window.innerWidth * 0.86 : 0, {
+      duration: reduceMotion ? 0 : 0.38,
+      ease: [0.32, 0.72, 0, 1],
+    });
+    return () => animation.stop();
+  }, [mobileSidebar, reduceMotion, sidebarDragging, sidebarX]);
 
   useEffect(() => {
     setMessages([]);
@@ -315,6 +335,19 @@ export function ChatShell() {
       appendError("停止エラー", error);
     }
   }
+  function startSidebarSwipe() {
+    sidebarGestureStart.current = sidebarX.get();
+    setSidebarDragging(true);
+  }
+  function moveSidebarSwipe(info: PanInfo) {
+    const width = window.innerWidth * 0.86;
+    sidebarX.set(Math.max(0, Math.min(width, sidebarGestureStart.current + info.offset.x)));
+  }
+  function endSidebarSwipe(info: PanInfo) {
+    const width = window.innerWidth * 0.86;
+    setMobileSidebar(shouldCompleteSwipe(sidebarX.get(), width / 2, info.velocity.x));
+    setSidebarDragging(false);
+  }
   async function regenerate(messageId: string) {
     if (!conversationId) return;
     setEditingMessageId(null);
@@ -340,7 +373,7 @@ export function ChatShell() {
   return (
     <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
       <ChatSidebar
-        open={mobileSidebar}
+        open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
         data={data}
         conversationId={conversationId}
@@ -352,6 +385,16 @@ export function ChatShell() {
         }}
         openSettings={() => setSettingsOpen(true)}
       />
+
+      {!mobileSidebar && !sidebarDragging && (
+        <motion.div
+          className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
+          aria-hidden="true"
+          onPanStart={startSidebarSwipe}
+          onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
+          onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
+        />
+      )}
 
       <SettingsShell
         open={settingsOpen}
@@ -372,16 +415,19 @@ export function ChatShell() {
 
       <motion.main
         initial={false}
+        style={{ x: sidebarX }}
         animate={{
-          x: mobileSidebar ? "86vw" : "0vw",
           borderTopLeftRadius: mobileSidebar ? 30 : 0,
           borderBottomLeftRadius: mobileSidebar ? 30 : 0,
           boxShadow: mobileSidebar ? "-12px 0 32px rgba(0, 0, 0, 0.4)" : "0 0 0 rgba(0, 0, 0, 0)",
         }}
         transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
-        className="relative z-10 flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background"
+        onPanStart={startSidebarSwipe}
+        onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
+        onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
+        className="relative z-10 flex min-h-0 w-full shrink-0 touch-pan-y flex-col overflow-hidden bg-background"
       >
-        {mobileSidebar && (
+        {(mobileSidebar || sidebarDragging) && (
           <button
             type="button"
             className="absolute inset-0 z-20 bg-black/15"

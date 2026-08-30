@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useDragControls,
+  useReducedMotion,
+  type PanInfo,
+} from "motion/react";
 import {
   Bot,
   ChevronLeft,
@@ -27,6 +33,7 @@ import {
   type ThinkingLevel,
 } from "@/lib/api";
 import { formatSize, settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
+import { shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NativeDialog } from "@/components/native-dialog";
 import { ProjectIcon } from "@/components/project-icon";
@@ -54,6 +61,7 @@ export function SettingsShell({
   setData: (data: Bootstrap) => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const dragControls = useDragControls();
   const [tab, setTab] = useState<SettingsTab | null>(null);
   const [direction, setDirection] = useState(1);
   const [closing, setClosing] = useState(false);
@@ -188,13 +196,26 @@ export function SettingsShell({
             initial={{ y: "100%" }}
             animate={{ y: visible ? 0 : "100%" }}
             transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
+            drag="y"
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 1 }}
+            onDragEnd={(_, info: PanInfo) => {
+              if (shouldCompleteSwipe(info.offset.y, window.innerHeight * 0.18, info.velocity.y))
+                close();
+            }}
             onAnimationComplete={() => {
               if (!closing) return;
               onOpenChange(false);
             }}
             className="flex h-[96svh] max-h-[96svh] w-full flex-col overflow-hidden rounded-t-[28px] border-t border-border bg-background shadow-[0_-20px_60px_rgba(0,0,0,0.35)]"
           >
-            <div className="flex h-5 shrink-0 items-center justify-center" aria-hidden="true">
+            <div
+              className="flex h-5 shrink-0 touch-none cursor-grab items-center justify-center active:cursor-grabbing"
+              aria-hidden="true"
+              onPointerDown={(event) => dragControls.start(event)}
+            >
               <span className="h-1 w-9 rounded-full bg-muted-foreground/35" />
             </div>
             <div className="relative min-h-0 flex-1 overflow-hidden">
