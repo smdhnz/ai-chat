@@ -8,6 +8,7 @@ import {
   motion,
   useMotionValue,
   useReducedMotion,
+  useTransform,
   type PanInfo,
 } from "motion/react";
 import { Menu, MessageCircleDashed, SquarePen } from "lucide-react";
@@ -49,6 +50,7 @@ export function ChatShell() {
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [sidebarDragging, setSidebarDragging] = useState(false);
   const sidebarX = useMotionValue(0);
+  const sidebarRadius = useTransform(sidebarX, [0, 30], [0, 30]);
   const sidebarGestureStart = useRef(0);
   const reduceMotion = useReducedMotion();
   const [prompt, setPrompt] = useState("");
@@ -371,7 +373,7 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
+    <div className="relative flex h-[calc(100dvh+env(safe-area-inset-top))] min-h-0 overflow-hidden overscroll-none bg-sidebar">
       <ChatSidebar
         open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
@@ -415,10 +417,12 @@ export function ChatShell() {
 
       <motion.main
         initial={false}
-        style={{ x: sidebarX }}
+        style={{
+          x: sidebarX,
+          borderTopLeftRadius: sidebarRadius,
+          borderBottomLeftRadius: sidebarRadius,
+        }}
         animate={{
-          borderTopLeftRadius: mobileSidebar ? 30 : 0,
-          borderBottomLeftRadius: mobileSidebar ? 30 : 0,
           boxShadow: mobileSidebar ? "-12px 0 32px rgba(0, 0, 0, 0.4)" : "0 0 0 rgba(0, 0, 0, 0)",
         }}
         transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
@@ -430,7 +434,7 @@ export function ChatShell() {
         {(mobileSidebar || sidebarDragging) && (
           <button
             type="button"
-            className="absolute inset-0 z-20 bg-black/15"
+            className="absolute inset-0 z-20"
             aria-label="サイドバーを閉じる"
             onClick={() => setMobileSidebar(false)}
           />
