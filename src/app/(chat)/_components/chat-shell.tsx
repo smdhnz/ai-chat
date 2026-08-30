@@ -22,6 +22,7 @@ import { ProjectIcon } from "@/components/project-icon";
 import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
 import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
+import { SettingsShell } from "@/app/settings/_components/settings-shell";
 
 export function ChatShell() {
   const router = useRouter();
@@ -45,6 +46,7 @@ export function ChatShell() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   openConversationRef.current = conversationId;
 
@@ -343,6 +345,14 @@ export function ChatShell() {
           setDeleteTarget(item);
           setDeleteOpen(true);
         }}
+        openSettings={() => setSettingsOpen(true)}
+      />
+
+      <SettingsShell
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        data={data}
+        setData={setData}
       />
 
       <ConfirmDialog

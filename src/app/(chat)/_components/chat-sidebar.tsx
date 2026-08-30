@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { ChevronRight, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
@@ -66,6 +65,7 @@ export function ChatSidebar({
   newChat,
   selectConversation,
   askDeleteConversation,
+  openSettings,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -74,6 +74,7 @@ export function ChatSidebar({
   newChat: (projectId?: string) => void;
   selectConversation: (item: Conversation) => void;
   askDeleteConversation: (item: Conversation) => void;
+  openSettings: () => void;
 }) {
   const [conversationLimit, setConversationLimit] = useState(10);
   const [projectLimits, setProjectLimits] = useState<Record<string, number>>({});
@@ -214,13 +215,17 @@ export function ChatSidebar({
             </ul>
           </nav>
           <footer className="flex justify-start pt-2.5 pb-10 pl-10">
-            <Link
-              href="/settings/general"
+            <button
+              type="button"
               className={`${iconButtonClass} inline-flex items-center justify-center`}
-              aria-label="設定"
+              aria-label="設定を開く"
+              onClick={() => {
+                onOpenChange(false);
+                openSettings();
+              }}
             >
               <Settings />
-            </Link>
+            </button>
           </footer>
         </aside>
       </div>

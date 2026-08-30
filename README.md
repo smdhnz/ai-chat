@@ -12,7 +12,7 @@ ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`
 - Codex Images APIによる画像生成・画像編集
 - 会話履歴、プロジェクト別システムプロンプト、ユーザー追加スキル
 - ユーザー別ファイル保存・Web閲覧
-- `/login`、`/`、`/settings` の3ページ
+- `/login`、`/` の2ページ（設定はチャット内のボトムシート）
 
 UIコンポーネントは `src/components/ui` のshadcn/uiに統一しています。配色はshadcnのトークン（`--background`、`--card`、`--primary` など）へ既存パレットを割り当てているため、見た目は従来のままです。
 
