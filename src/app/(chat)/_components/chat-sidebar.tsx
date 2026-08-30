@@ -233,7 +233,7 @@ export function ChatSidebar({
           size="sm"
           className="gap-2.5 rounded-[15px] p-[9px] transition duration-200 hover:bg-sidebar-accent"
         >
-          <Link href="/settings/projects">
+          <Link href="/settings/general">
             <ItemMedia>
               <Avatar className="size-[34px] rounded-[11px]">
                 {data.user.avatar && <AvatarImage src={data.user.avatar} alt="" />}

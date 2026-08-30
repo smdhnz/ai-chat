@@ -35,7 +35,7 @@ export function Composer(props: {
   return (
     <footer className="z-5 mx-auto w-[min(850px,calc(100%-32px))] shrink-0 pb-[max(10px,env(safe-area-inset-bottom))] transition-[width] max-md:w-[calc(100%-64px)] max-md:pb-[max(7px,env(safe-area-inset-bottom))] max-md:focus-within:w-[calc(100%-18px)]">
       <form
-        className={`overflow-hidden rounded-[22px] border bg-glass shadow-[0_15px_50px_#28253318] backdrop-blur-[22px] max-md:rounded-[18px] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-border"}`}
+        className={`overflow-hidden rounded-[22px] border bg-background shadow-[0_15px_50px_#28253318] max-md:rounded-[18px] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-border"}`}
         onSubmit={props.send}
       >
         {props.temporary && (

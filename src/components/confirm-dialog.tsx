@@ -103,7 +103,7 @@ export function ConfirmDialog({
             <DrawerDescription className="m-0 text-[13px] leading-[1.7]">{text}</DrawerDescription>
             {errorAlert}
           </div>
-          <DrawerFooter className="flex-row justify-end gap-2 px-[22px] pt-[22px] pb-[max(22px,env(safe-area-inset-bottom))]">
+          <DrawerFooter className="flex-row justify-end gap-2 px-[22px] pt-[22px] pb-[max(28px,env(safe-area-inset-bottom))]">
             <Button
               variant="outline"
               className={cancelButtonClass}

@@ -89,7 +89,7 @@ const server = Bun.serve<SocketData>({
         if (server.upgrade(request, { data: { userId: user.id } })) return;
         return json({ error: "websocket upgrade required" }, 426);
       }
-      if (url.pathname === "/settings") return redirect("/settings/projects");
+      if (url.pathname === "/settings") return redirect("/settings/general");
       if (url.pathname === "/settings/account") return redirect("/settings/general");
       if (/^\/chat\/[\w-]+$/.test(url.pathname))
         return ownedConversation(url.pathname.slice(6), user.id) ? webApp(request) : redirect("/");

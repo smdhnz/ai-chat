@@ -149,9 +149,8 @@ export function SettingsShell() {
   if (!data) return <LoadingScreen />;
 
   return (
-    <div className="relative min-h-svh">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0,#c15f3c12,transparent_38%)]" />
-      <main className="relative z-1 mx-auto w-[min(1060px,calc(100%-40px))] pt-9 pb-20 max-md:w-[calc(100%-26px)] max-md:pt-5">
+    <div className="min-h-svh">
+      <main className="mx-auto w-[min(1060px,calc(100%-40px))] pt-9 pb-20 max-md:w-[calc(100%-26px)] max-md:pt-5">
         <header className="mb-[30px] flex items-center">
           <Button
             asChild
@@ -166,7 +165,7 @@ export function SettingsShell() {
           </Button>
         </header>
         <Tabs value={tab} className="gap-0">
-          <div className="mb-[38px] w-max rounded-[15px] border border-border bg-[color-mix(in_srgb,var(--card)_65%,transparent)] p-1.5 backdrop-blur-[18px] max-md:mb-7 max-md:w-full max-md:overflow-x-auto">
+          <div className="mb-[38px] w-max rounded-[15px] border border-border bg-card p-1.5 max-md:mb-7 max-md:w-full max-md:overflow-x-auto">
             <TabsList className="h-auto w-max gap-1 bg-transparent p-0 max-md:w-full max-md:justify-start">
               {settingsTabs.map((item) => (
                 <TabsTrigger

@@ -232,14 +232,17 @@ export function Editor({
   if (mobile)
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className={`${drawerPanelClass} max-h-[88svh]`}>
+        <DrawerContent className={`${drawerPanelClass} h-[96svh] max-h-[96svh]`}>
           <DrawerHeader className={dialogHeaderClass}>
             <DrawerTitle className={dialogTitleClass}>{title}</DrawerTitle>
             <DrawerDescription className="sr-only">{title}</DrawerDescription>
             {closeButton}
           </DrawerHeader>
           <Separator />
-          <form className="flex min-h-0 flex-col gap-[15px] overflow-auto p-5" onSubmit={submit}>
+          <form
+            className="flex min-h-0 flex-col gap-[15px] overflow-auto p-5 pb-7"
+            onSubmit={submit}
+          >
             <FieldGroup className="gap-[15px]">{fields}</FieldGroup>
             <DrawerFooter className="flex-row justify-end gap-2 p-0 pt-[7px] pb-[max(0px,env(safe-area-inset-bottom))]">
               {footerButtons}

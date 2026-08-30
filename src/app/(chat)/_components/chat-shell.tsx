@@ -392,35 +392,38 @@ export function ChatShell() {
         }}
       />
 
-      <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-[radial-gradient(circle_at_50%_0,#c15f3c08,transparent_34%)]">
-        <header className="z-10 flex h-16 shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--border)_62%,transparent)] bg-[color-mix(in_srgb,var(--background)_80%,transparent)] px-[22px] backdrop-blur-[18px] max-md:h-[58px] max-md:px-2.5">
+      <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-background">
+        <header className="z-10 flex h-16 shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--border)_62%,transparent)] bg-background px-[22px] max-md:h-[58px] max-md:px-2.5">
           <SidebarTrigger className={iconButtonClass} aria-label="サイドバーを開閉">
             <Menu />
           </SidebarTrigger>
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            className={`${iconButtonClass} hidden max-md:inline-flex`}
-            onClick={() => newChat()}
-            aria-label="新しいチャット"
-          >
-            <Plus />
-          </Button>
           {project && (
             <div className="flex h-10 min-w-0 max-w-[280px] items-center gap-2 px-2 text-[13px] font-semibold">
               <ProjectIcon project={project} className="size-[26px]" />
               <span className="truncate">{project.name}</span>
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            className={`${iconButtonClass} ml-auto ${temporary ? "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-primary" : ""}`}
-            onClick={toggleTemporary}
-            aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
-          >
-            <TimerReset />
-          </Button>
+          {conversationId ? (
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className={`${iconButtonClass} ml-auto hidden max-md:inline-flex`}
+              onClick={() => newChat()}
+              aria-label="新しいチャット"
+            >
+              <Plus />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className={`${iconButtonClass} ml-auto ${temporary ? "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-primary" : ""}`}
+              onClick={toggleTemporary}
+              aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
+            >
+              <TimerReset />
+            </Button>
+          )}
         </header>
         <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
           {messages.length > 0 && (

@@ -245,7 +245,7 @@ export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; ali
         <DialogContent
           showCloseButton={false}
           overlayClassName="bg-transparent"
-          className="top-0 left-0 flex size-full max-w-none translate-x-0 translate-y-0 sm:max-w-none cursor-zoom-out items-center justify-center rounded-none border-0 bg-[#090a0dcc] p-7 shadow-none backdrop-blur-[7px] [&_img]:block [&_img]:h-auto [&_img]:max-h-[calc(100dvh-56px)] [&_img]:w-auto [&_img]:max-w-[calc(100vw-56px)] [&_img]:object-contain"
+          className="top-0 left-0 flex size-full max-w-none translate-x-0 translate-y-0 sm:max-w-none cursor-zoom-out items-center justify-center rounded-none border-0 bg-transparent p-7 shadow-none [&_img]:block [&_img]:h-auto [&_img]:max-h-[calc(100dvh-56px)] [&_img]:w-auto [&_img]:max-w-[calc(100vw-56px)] [&_img]:object-contain"
           onClick={() => setPreview(null)}
         >
           <DialogTitle className="sr-only">{preview?.name ?? "拡大表示"}</DialogTitle>

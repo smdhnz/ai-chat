@@ -1,4 +1,3 @@
-import { SettingsShell } from "@/app/settings/_components/settings-shell";
 import { settingsTabs } from "@/app/settings/_libs/settings";
 
 export function generateStaticParams() {
@@ -6,5 +5,5 @@ export function generateStaticParams() {
 }
 
 export default function Page() {
-  return <SettingsShell />;
+  return null;
 }
