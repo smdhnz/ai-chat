@@ -373,7 +373,7 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-[calc(100dvh+env(safe-area-inset-top))] min-h-0 overflow-hidden overscroll-none bg-sidebar">
+    <div className="relative flex h-[calc(100dvh+env(safe-area-inset-bottom))] min-h-0 overflow-hidden overscroll-none bg-sidebar">
       <ChatSidebar
         open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
