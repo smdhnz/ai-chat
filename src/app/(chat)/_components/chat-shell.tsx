@@ -50,7 +50,7 @@ export function ChatShell() {
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [sidebarDragging, setSidebarDragging] = useState(false);
   const sidebarX = useMotionValue(0);
-  const sidebarPanelX = useTransform(sidebarX, (x) => `calc(${x}px - 86vw)`);
+  const sidebarRadius = useTransform(sidebarX, [0, 30], [0, 30]);
   const sidebarGestureStart = useRef(0);
   const sidebarSwipeActive = useRef(false);
   const reduceMotion = useReducedMotion();
@@ -379,28 +379,30 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-background">
-      <motion.div
-        style={{ x: sidebarPanelX }}
-        className="absolute inset-y-0 left-0 z-30 w-[86vw] touch-pan-y"
-        onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
-        onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
-        onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
-      >
-        <ChatSidebar
-          open={mobileSidebar || sidebarDragging}
-          onOpenChange={setMobileSidebar}
-          data={data}
-          conversationId={conversationId}
-          newChat={newChat}
-          selectConversation={selectConversation}
-          askDeleteConversation={(item) => {
-            setDeleteTarget(item);
-            setDeleteOpen(true);
-          }}
-          openSettings={() => setSettingsOpen(true)}
+    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
+      <ChatSidebar
+        open={mobileSidebar || sidebarDragging}
+        onOpenChange={setMobileSidebar}
+        data={data}
+        conversationId={conversationId}
+        newChat={newChat}
+        selectConversation={selectConversation}
+        askDeleteConversation={(item) => {
+          setDeleteTarget(item);
+          setDeleteOpen(true);
+        }}
+        openSettings={() => setSettingsOpen(true)}
+      />
+
+      {!mobileSidebar && (
+        <motion.div
+          className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
+          aria-hidden="true"
+          onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
+          onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
+          onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
         />
-      </motion.div>
+      )}
 
       <SettingsShell
         open={settingsOpen}
@@ -420,6 +422,7 @@ export function ChatShell() {
       />
 
       <motion.main
+        style={{ x: sidebarX, borderBottomLeftRadius: sidebarRadius }}
         onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
         onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
         onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}

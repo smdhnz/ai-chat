@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { canStartSwipe, shouldCompleteSwipe } from "../src/lib/swipe";
 
 describe("スワイプ判定", () => {
-  test("閉じているときは左端1/5だけ開始できる", () => {
-    expect(canStartSwipe(false, 20, 100)).toBe(true);
-    expect(canStartSwipe(false, 21, 100)).toBe(false);
+  test("閉じているときは左端1/4だけ開始できる", () => {
+    expect(canStartSwipe(false, 25, 100)).toBe(true);
+    expect(canStartSwipe(false, 26, 100)).toBe(false);
     expect(canStartSwipe(true, 100, 100)).toBe(true);
   });
 
