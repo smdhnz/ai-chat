@@ -327,21 +327,25 @@ async function sendMessage(request: Request, user: User): Promise<Response> {
   const conversationId = String(form.get("conversationId") || "");
   const content = clean(String(form.get("content") || ""), 20_000);
   const uploadEntries = form.getAll("files");
-  if (!content && !uploadEntries.some((entry) => entry instanceof File && entry.size))
-    return json({ error: "message is empty" }, 400);
+  const uploads = uploadEntries.filter(
+    (entry): entry is File => entry instanceof File && entry.size > 0,
+  );
+  if (!content && !uploads.length) return json({ error: "message is empty" }, 400);
+  if (uploads.some((file) => !/^image\/(png|jpeg|webp|gif)$/i.test(file.type)))
+    return json({ error: "添付できるのは画像のみです" }, 400);
   const conversation = ownedConversation(conversationId, user.id) as {
     generation_status: string;
   } | null;
   if (!conversation) return json({ error: "conversation not found" }, 404);
   if (conversation.generation_status === "running") return json({ error: "すでに生成中です" }, 409);
 
-  const uploads = await saveUploads(uploadEntries, user.id);
+  const savedUploads = await saveUploads(uploads, user.id);
   const timestamp = now();
   const message = {
     id: id(),
     role: "user" as const,
     content,
-    files: publicFiles(uploads),
+    files: publicFiles(savedUploads),
     created_at: timestamp,
   };
   db.query(
@@ -351,8 +355,8 @@ async function sendMessage(request: Request, user: User): Promise<Response> {
     conversationId,
     message.role,
     content,
-    JSON.stringify(uploads.map((file) => file.id)),
-    await attachmentText(uploads),
+    JSON.stringify(savedUploads.map((file) => file.id)),
+    await attachmentText(savedUploads),
     timestamp,
   );
   startGeneration(conversationId, user);

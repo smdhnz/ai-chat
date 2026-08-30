@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence } from "motion/react";
-import { Menu, Plus, TimerReset } from "lucide-react";
+import { Menu, MessageCircleDashed, SquarePen } from "lucide-react";
 import {
   api,
   getBootstrap,
@@ -384,7 +384,7 @@ export function ChatShell() {
       />
 
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <header className="z-10 flex h-[58px] shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--border)_62%,transparent)] bg-background px-2.5">
+        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-2.5 pt-2.5 before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(to_bottom,rgba(0,0,0,0.78),rgba(0,0,0,0.32)_68%,transparent)] before:[mask-image:linear-gradient(to_bottom,#000_68%,transparent)]">
           <button
             type="button"
             className={`${iconButtonClass} inline-flex items-center justify-center`}
@@ -406,7 +406,7 @@ export function ChatShell() {
               onClick={() => newChat()}
               aria-label="新しいチャット"
             >
-              <Plus />
+              <SquarePen />
             </button>
           ) : (
             <button
@@ -415,13 +415,13 @@ export function ChatShell() {
               onClick={toggleTemporary}
               aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
             >
-              <TimerReset />
+              <MessageCircleDashed />
             </button>
           )}
         </header>
         <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
           {messages.length > 0 && (
-            <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[27px] pb-10">
+            <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]">
               {hasOlderMessages && (
                 <button
                   type="button"

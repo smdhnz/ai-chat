@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, type FormEvent } from "react";
-import { ArrowUp, File, Paperclip, Pencil, Square, TimerReset, X } from "lucide-react";
+import { ArrowUp, File, Image, Pencil, Square, TimerReset, X } from "lucide-react";
+
+const isSupportedImage = (file: File) => /^image\/(png|jpeg|webp|gif)$/i.test(file.type);
 
 export function Composer(props: {
   prompt: string;
@@ -24,12 +26,12 @@ export function Composer(props: {
     element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
   }, [props.prompt]);
   const sendButtonClass =
-    "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-[11px] bg-primary text-primary-foreground shadow-[0_7px_18px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition duration-200 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
+    "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
 
   return (
-    <footer className="z-5 mx-auto w-[calc(100%-64px)] shrink-0 pb-[max(7px,env(safe-area-inset-bottom))] transition-[width] focus-within:w-[calc(100%-18px)]">
+    <footer className="group absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[max(7px,env(safe-area-inset-bottom))] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(to_top,rgba(0,0,0,0.82),rgba(0,0,0,0.3)_72%,transparent)] before:[mask-image:linear-gradient(to_top,#000_72%,transparent)]">
       <form
-        className={`overflow-hidden rounded-[18px] border bg-background shadow-[0_15px_50px_#1a1a1e1f] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-border"}`}
+        className={`relative mx-auto w-[calc(100%-64px)] overflow-hidden rounded-[25px] border bg-[color-mix(in_srgb,var(--background)_44%,transparent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-1px_0_rgba(255,255,255,0.04),0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-[24px] transition-[width] group-focus-within:w-[calc(100%-18px)] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-white/15"}`}
         onSubmit={props.send}
       >
         {props.temporary && (
@@ -82,9 +84,7 @@ export function Composer(props: {
             onChange={(event) => props.setPrompt(event.target.value)}
             onPaste={(event) => {
               if (props.editing) return;
-              const images = Array.from(event.clipboardData.files).filter((file) =>
-                file.type.startsWith("image/"),
-              );
+              const images = Array.from(event.clipboardData.files).filter(isSupportedImage);
               if (images.length) {
                 event.preventDefault();
                 props.setFiles([...props.files, ...images]);
@@ -97,20 +97,24 @@ export function Composer(props: {
             <input
               ref={input}
               type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
               multiple
               hidden
               onChange={(event) =>
-                props.setFiles([...props.files, ...Array.from(event.target.files || [])])
+                props.setFiles([
+                  ...props.files,
+                  ...Array.from(event.target.files || []).filter(isSupportedImage),
+                ])
               }
             />
             {!props.editing && (
               <button
                 type="button"
-                className="order-1 mr-0 mb-[7px] ml-2 inline-flex h-[34px] items-center justify-center rounded-[10px] px-[9px] text-muted-foreground transition duration-200 [&_svg]:size-4"
+                className="order-1 mr-0 mb-[7px] ml-2 inline-flex size-[34px] items-center justify-center rounded-full border border-white/10 bg-white/[0.07] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition duration-200 active:scale-95 [&_svg]:size-4"
                 onClick={() => input.current?.click()}
-                aria-label="ファイルを添付"
+                aria-label="画像を添付"
               >
-                <Paperclip />
+                <Image />
               </button>
             )}
             {props.generating ? (
