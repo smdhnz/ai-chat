@@ -1,9 +1,35 @@
 "use client";
 
-import { useEffect, useRef, type FormEvent } from "react";
-import { ArrowUp, File, Image, Pencil, Square, TimerReset, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowUp, Image, Pencil, Square, TimerReset, X } from "lucide-react";
 
 const isSupportedImage = (file: File) => /^image\/(png|jpeg|webp|gif)$/i.test(file.type);
+
+function ImagePreview({ file, remove }: { file: File; remove: () => void }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    const nextUrl = URL.createObjectURL(file);
+    setUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [file]);
+
+  return (
+    <div className="relative size-16 shrink-0 overflow-hidden rounded-[12px] border border-border bg-muted">
+      {url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="size-full object-cover" src={url} alt={file.name} />
+      )}
+      <button
+        className="absolute top-1 right-1 inline-flex size-5 items-center justify-center rounded-full bg-black/65 text-white [&_svg]:size-3"
+        type="button"
+        aria-label={`${file.name}を削除`}
+        onClick={remove}
+      >
+        <X />
+      </button>
+    </div>
+  );
+}
 
 export function Composer(props: {
   prompt: string;
@@ -25,6 +51,9 @@ export function Composer(props: {
     element.style.height = "auto";
     element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
   }, [props.prompt]);
+  useEffect(() => {
+    if (props.editing) textarea.current?.focus();
+  }, [props.editing]);
   const sendButtonClass =
     "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
 
@@ -57,21 +86,11 @@ export function Composer(props: {
           <div className="overflow-x-auto overscroll-x-contain px-2.5 pt-2.5">
             <div className="flex w-max gap-[7px]">
               {props.files.map((file, index) => (
-                <span
-                  key={`${file.name}-${index}`}
-                  className="flex h-[30px] max-w-[220px] items-center gap-1.5 rounded-[9px] bg-muted pr-[7px] pl-[9px] text-[10px] text-foreground"
-                >
-                  <File className="size-[13px] shrink-0" />
-                  <span className="truncate">{file.name}</span>
-                  <button
-                    className="inline-flex items-center justify-center p-0.5 [&_svg]:size-3"
-                    type="button"
-                    aria-label={`${file.name}を削除`}
-                    onClick={() => props.setFiles(props.files.filter((_, i) => i !== index))}
-                  >
-                    <X />
-                  </button>
-                </span>
+                <ImagePreview
+                  key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                  file={file}
+                  remove={() => props.setFiles(props.files.filter((_, i) => i !== index))}
+                />
               ))}
             </div>
           </div>
@@ -100,12 +119,13 @@ export function Composer(props: {
               accept="image/png,image/jpeg,image/webp,image/gif"
               multiple
               hidden
-              onChange={(event) =>
+              onChange={(event) => {
                 props.setFiles([
                   ...props.files,
                   ...Array.from(event.target.files || []).filter(isSupportedImage),
-                ])
-              }
+                ]);
+                event.currentTarget.value = "";
+              }}
             />
             {!props.editing && (
               <button

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import * as ContextMenu from "@radix-ui/react-context-menu";
 import { ChevronRight, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import { ProjectIcon } from "@/components/project-icon";
@@ -28,31 +27,24 @@ function ConversationRow({
     <li
       className={`flex items-center rounded-[11px] hover:bg-sidebar-accent ${nested ? "pl-5" : ""} ${active ? "bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-foreground" : ""}`}
     >
-      <ContextMenu.Root>
-        <ContextMenu.Trigger asChild>
-          <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
-            <span className="truncate">{item.title}</span>
-            {item.unread === 1 && !active && (
-              <span
-                role="status"
-                aria-label="新しい応答"
-                className="size-[7px] shrink-0 rounded-full bg-primary"
-              />
-            )}
-          </button>
-        </ContextMenu.Trigger>
-        <ContextMenu.Portal>
-          <ContextMenu.Content className="z-50 min-w-[150px] rounded-[13px] border border-border bg-popover p-1 text-foreground shadow-lg">
-            <ContextMenu.Item
-              className="flex cursor-default items-center gap-2 rounded-[9px] px-2 py-2 text-xs text-destructive outline-none data-[highlighted]:bg-muted [&_svg]:size-4"
-              onSelect={remove}
-            >
-              <Trash2 />
-              チャットを削除
-            </ContextMenu.Item>
-          </ContextMenu.Content>
-        </ContextMenu.Portal>
-      </ContextMenu.Root>
+      <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
+        <span className="truncate">{item.title}</span>
+        {item.unread === 1 && !active && (
+          <span
+            role="status"
+            aria-label="新しい応答"
+            className="size-[7px] shrink-0 rounded-full bg-primary"
+          />
+        )}
+      </button>
+      <button
+        type="button"
+        className="mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-destructive [&_svg]:size-3.5"
+        aria-label={`${item.title}を削除`}
+        onClick={remove}
+      >
+        <Trash2 />
+      </button>
     </li>
   );
 }

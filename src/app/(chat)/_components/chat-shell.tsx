@@ -490,6 +490,7 @@ export function ChatShell() {
                     key={message.id}
                     message={message}
                     disabled={generating}
+                    draft={editingMessageId === message.id ? prompt : undefined}
                     regenerate={() => void regenerate(message.id)}
                     edit={() => {
                       setEditingMessageId(message.id);
