@@ -213,7 +213,7 @@ export function ChatSidebar({
               )}
             </ul>
           </nav>
-          <footer className="flex justify-end px-3.5 pt-2.5 pb-3.5">
+          <footer className="flex justify-start pt-2.5 pb-10 pl-10">
             <Link
               href="/settings/general"
               className={`${iconButtonClass} inline-flex items-center justify-center`}
