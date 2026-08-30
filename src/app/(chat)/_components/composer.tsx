@@ -31,7 +31,7 @@ export function Composer(props: {
   return (
     <footer className="group absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[max(7px,env(safe-area-inset-bottom))]">
       <form
-        className={`relative mx-auto w-[calc(100%-64px)] overflow-hidden rounded-[25px] border bg-[color-mix(in_srgb,var(--background)_44%,transparent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-1px_0_rgba(255,255,255,0.04),0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-[24px] transition-[width] group-focus-within:w-[calc(100%-18px)] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-white/15"}`}
+        className={`relative mx-auto w-[calc(100%-64px)] overflow-hidden rounded-[25px] border bg-[linear-gradient(155deg,color-mix(in_srgb,var(--background)_82%,white_8%),color-mix(in_srgb,var(--background)_94%,white_3%))] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.04),0_18px_50px_rgba(0,0,0,0.28)] transition-[width] group-focus-within:w-[calc(100%-18px)] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-white/20"}`}
         onSubmit={props.send}
       >
         {props.temporary && (
@@ -111,7 +111,7 @@ export function Composer(props: {
             {!props.editing && (
               <button
                 type="button"
-                className="order-1 mr-0 mb-[7px] ml-2 inline-flex size-[34px] items-center justify-center rounded-full border border-white/10 bg-white/[0.07] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl transition duration-200 active:scale-95 [&_svg]:size-4"
+                className="order-1 mr-0 mb-[7px] ml-2 inline-flex size-[34px] items-center justify-center rounded-full border border-white/20 bg-[linear-gradient(145deg,rgba(255,255,255,0.16),rgba(255,255,255,0.05))] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.28),inset_0_-1px_0_rgba(255,255,255,0.04)] transition duration-200 active:scale-95 active:bg-white/[0.1] [&_svg]:size-4"
                 onClick={() => input.current?.click()}
                 aria-label="画像を添付"
               >

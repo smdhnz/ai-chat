@@ -3,7 +3,7 @@ import { BookOpen, Briefcase, Code2, Folder, Palette, Rocket } from "lucide-reac
 export const ease = [0.22, 1, 0.36, 1] as const;
 
 export const iconButtonClass =
-  "size-10 rounded-full border border-white/15 bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_8px_24px_rgba(0,0,0,0.24)] backdrop-blur-xl transition duration-200 ease-out active:scale-95 [&_svg:not([class*='size-'])]:size-5";
+  "size-10 rounded-full border border-white/20 bg-[linear-gradient(145deg,rgba(255,255,255,0.18),rgba(255,255,255,0.06))] shadow-[inset_0_1px_0_rgba(255,255,255,0.32),inset_0_-1px_0_rgba(255,255,255,0.05),0_8px_24px_rgba(0,0,0,0.24)] transition duration-200 ease-out active:scale-95 active:bg-white/[0.12] [&_svg:not([class*='size-'])]:size-5";
 
 export const projectColorClasses = {
   clay: "[--project-color:#5865f2]",

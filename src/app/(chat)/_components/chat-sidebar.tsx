@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ChevronRight, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation, Project } from "@/lib/api";
 import { ProjectIcon } from "@/components/project-icon";
-import { NativeDialog } from "@/components/native-dialog";
 
 const rowButtonClass =
   "flex h-[41px] min-w-0 flex-1 items-center gap-2.5 rounded-[11px] px-[11px] text-left text-xs text-muted-foreground transition duration-200 hover:text-foreground [&>svg]:size-[15px] [&>svg]:shrink-0";
@@ -86,6 +85,13 @@ export function ChatSidebar({
     }
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: KeyboardEvent) => event.key === "Escape" && onOpenChange(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open, onOpenChange]);
+
   function setProjectOpen(id: string, projectOpen: boolean) {
     setOpenProjects((current) => {
       const next = new Set(current);
@@ -99,17 +105,13 @@ export function ChatSidebar({
   const conversations = data.conversations.filter((item) => !item.temporary && !item.project_id);
 
   return (
-    <NativeDialog
-      open={open}
-      onClose={() => onOpenChange(false)}
-      label="チャット一覧"
-      className="fixed inset-0 size-full"
+    <div
+      aria-hidden={!open}
+      inert={!open ? true : undefined}
+      className={`absolute inset-0 transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
-      <div
-        className="size-full bg-black/20"
-        onClick={(event) => event.target === event.currentTarget && onOpenChange(false)}
-      >
-        <aside className="flex h-full w-[min(310px,86vw)] flex-col bg-sidebar text-sidebar-foreground shadow-lg">
+      <div className="size-full">
+        <aside className="flex h-full w-[86vw] flex-col bg-sidebar text-sidebar-foreground">
           <div className="h-[18px] shrink-0" />
           <nav className="min-h-0 flex-1 overflow-y-auto px-3.5" aria-label="チャット一覧">
             <ul className="flex flex-col">
@@ -225,6 +227,6 @@ export function ChatSidebar({
           </footer>
         </aside>
       </div>
-    </NativeDialog>
+    </div>
   );
 }

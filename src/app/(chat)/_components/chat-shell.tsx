@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Menu, MessageCircleDashed, SquarePen } from "lucide-react";
 import {
   api,
@@ -42,6 +42,7 @@ export function ChatShell() {
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
+  const reduceMotion = useReducedMotion();
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
@@ -349,7 +350,7 @@ export function ChatShell() {
   }
 
   return (
-    <div className="flex h-dvh min-h-0 overflow-hidden overscroll-none">
+    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
       <ChatSidebar
         open={mobileSidebar}
         onOpenChange={setMobileSidebar}
@@ -383,7 +384,25 @@ export function ChatShell() {
         }}
       />
 
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <motion.main
+        initial={false}
+        animate={{
+          x: mobileSidebar ? "86vw" : "0vw",
+          borderTopLeftRadius: mobileSidebar ? 30 : 0,
+          borderBottomLeftRadius: mobileSidebar ? 30 : 0,
+          boxShadow: mobileSidebar ? "-12px 0 32px rgba(0, 0, 0, 0.4)" : "0 0 0 rgba(0, 0, 0, 0)",
+        }}
+        transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
+        className="relative z-10 flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background"
+      >
+        {mobileSidebar && (
+          <button
+            type="button"
+            className="absolute inset-0 z-20 bg-black/15"
+            aria-label="サイドバーを閉じる"
+            onClick={() => setMobileSidebar(false)}
+          />
+        )}
         <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-2.5 pt-2.5">
           <button
             type="button"
@@ -466,7 +485,7 @@ export function ChatShell() {
           stop={stop}
           send={send}
         />
-      </main>
+      </motion.main>
     </div>
   );
 }
