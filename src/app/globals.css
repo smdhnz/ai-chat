@@ -75,6 +75,13 @@
   --sidebar-ring: #5865f2;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--background);
