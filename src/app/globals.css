@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
@@ -131,25 +129,6 @@ button {
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 3px;
-  }
-}
-
-@media (min-width: 768px) {
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
-  }
-
-  *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
-    background-clip: padding-box;
   }
 }
 

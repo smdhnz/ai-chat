@@ -19,45 +19,13 @@ import { LoadingScreen } from "@/components/loading-screen";
 import { ProjectIcon } from "@/components/project-icon";
 import { Editor } from "@/app/settings/_components/settings-editor";
 import { ThemeToggle } from "@/app/settings/_components/theme-toggle";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldTitle,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
 
-const settingFieldClass = "min-h-[70px] items-center gap-5 py-[15px]";
+const settingFieldClass = "flex min-h-[70px] items-center justify-between gap-5 py-[15px]";
 const settingLabelClass = "text-[10px] font-bold text-foreground";
 const settingControlClass =
-  "h-[38px] w-[min(320px,55%)] rounded-[11px] border-border bg-background px-[11px] text-foreground shadow-none focus-visible:border-ring focus-visible:ring-0 max-md:w-[55%]";
+  "h-[38px] w-[55%] rounded-[11px] border border-border bg-background px-[11px] text-foreground shadow-none focus-visible:border-ring focus-visible:ring-0";
 
 export function SettingsShell() {
   const pathname = usePathname();
@@ -150,304 +118,238 @@ export function SettingsShell() {
 
   return (
     <div className="min-h-svh">
-      <main className="mx-auto w-[min(1060px,calc(100%-40px))] pt-9 pb-20 max-md:w-[calc(100%-26px)] max-md:pt-5">
+      <main className="mx-auto w-[calc(100%-26px)] pt-5 pb-20">
         <header className="mb-[30px] flex items-center">
-          <Button
-            asChild
-            variant="outline"
-            size="icon-lg"
-            className="size-10 rounded-[13px] border-border bg-card text-muted-foreground transition duration-200 hover:text-foreground [&_svg:not([class*='size-'])]:size-[18px]"
+          <Link
+            href="/"
+            className="inline-flex size-10 items-center justify-center rounded-[13px] border border-border bg-card text-muted-foreground transition duration-200 hover:text-foreground [&_svg]:size-[18px]"
             aria-label="チャットに戻る"
           >
-            <Link href="/">
-              <ArrowLeft />
-            </Link>
-          </Button>
+            <ArrowLeft />
+          </Link>
         </header>
-        <Tabs value={tab} className="gap-0">
-          <div className="mb-[38px] w-max rounded-[15px] border border-border bg-card p-1.5 max-md:mb-7 max-md:w-full max-md:overflow-x-auto">
-            <TabsList className="h-auto w-max gap-1 bg-transparent p-0 max-md:w-full max-md:justify-start">
-              {settingsTabs.map((item) => (
-                <TabsTrigger
-                  key={item}
-                  value={item}
-                  asChild
-                  className="h-[35px] rounded-[10px] border-0 px-[17px] text-[11px] font-semibold text-muted-foreground transition duration-200 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-[0_4px_14px_#27243112] max-md:flex-1 max-md:justify-center max-md:px-[13px]"
-                >
-                  <Link href={`/settings/${item}`}>{settingsTabLabels[item]}</Link>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
-          <TabsContent value={tab}>
-            <AnimatePresence mode="wait">
-              <motion.section
-                key={tab}
-                className="min-h-[420px]"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.25 }}
+        <div>
+          <nav
+            className="mb-7 flex w-full overflow-x-auto rounded-[15px] border border-border bg-card p-1.5"
+            aria-label="設定"
+          >
+            {settingsTabs.map((item) => (
+              <Link
+                key={item}
+                href={`/settings/${item}`}
+                aria-current={item === tab ? "page" : undefined}
+                className={`inline-flex h-[35px] flex-1 items-center justify-center rounded-[10px] px-[13px] text-[11px] font-semibold transition duration-200 ${item === tab ? "bg-card text-foreground shadow-[0_4px_14px_#27243112]" : "text-muted-foreground"}`}
               >
-                {tab === "projects" && (
-                  <>
-                    <PanelTitle
-                      title="プロジェクト"
-                      text="会話ごとのシステムプロンプトを設定します。"
-                      action={() => openEditor({ type: "project" })}
-                      actionText="作成"
-                    />
-                    {data.projects.length > 0 && (
-                      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-                        {data.projects.map((item) => (
-                          <SettingsCard
-                            key={item.id}
-                            icon={<ProjectIcon project={item} />}
-                            title={item.name}
-                            text={item.system_prompt || "カスタム指示なし"}
-                            edit={() => openEditor({ type: "project", item })}
-                            remove={() =>
-                              askDelete({ type: "projects", id: item.id, name: item.name })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-                {tab === "skills" && (
-                  <>
-                    <PanelTitle
-                      title="スキル"
-                      text="有効なスキルはすべての会話と画像プロンプトに適用されます。"
-                      action={() => openEditor({ type: "skill" })}
-                      actionText="追加"
-                    />
-                    {data.skills.length > 0 && (
-                      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-                        {data.skills.map((item) => (
-                          <SettingsCard
-                            key={item.id}
-                            icon={<Sparkles />}
-                            title={item.name}
-                            text={item.description || item.instructions}
-                            badge={item.enabled ? "有効" : "無効"}
-                            edit={() => openEditor({ type: "skill", item })}
-                            remove={() =>
-                              askDelete({ type: "skills", id: item.id, name: item.name })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-                {tab === "files" && (
-                  <>
-                    <PanelTitle title="ファイル" text="アップロードしたファイルと生成画像です。" />
-                    {data.files.length > 0 && (
-                      <div className="grid grid-cols-4 gap-3 max-md:grid-cols-2">
-                        {data.files.map((file) => (
-                          <Item
-                            asChild
-                            variant="outline"
-                            className="min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-[17px] border-border bg-card p-0 shadow-none hover:bg-card"
-                            key={file.id}
-                          >
-                            <a href={`/files/${file.id}`} target="_blank">
-                              <ItemMedia className="w-full self-stretch">
-                                <AspectRatio ratio={4 / 3}>
-                                  {file.mime.startsWith("image/") ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      className="size-full object-cover"
-                                      src={`/files/${file.id}`}
-                                      alt={file.name}
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <span className="flex size-full items-center justify-center bg-muted [&_svg]:w-[35px] [&_svg]:text-muted-foreground">
-                                      <File />
-                                    </span>
-                                  )}
-                                </AspectRatio>
-                              </ItemMedia>
-                              <ItemContent className="gap-0 px-[11px] py-2.5">
-                                <ItemTitle className="block w-full truncate text-[10px] font-bold">
-                                  {file.name}
-                                </ItemTitle>
-                                <ItemDescription className="mt-[3px] line-clamp-1 text-[8px]">
-                                  {file.source === "generated" ? "生成画像" : "アップロード"} ·{" "}
-                                  {formatSize(file.size)}
-                                </ItemDescription>
-                              </ItemContent>
-                            </a>
-                          </Item>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-                {tab === "general" && (
-                  <>
-                    <PanelTitle title="一般" text="回答とアカウントの設定です。" />
-                    <FieldGroup className="gap-0">
-                      <Field orientation="horizontal" className={settingFieldClass}>
-                        <FieldTitle className={settingLabelClass}>テーマ</FieldTitle>
-                        <ThemeToggle />
-                      </Field>
-                      <Separator />
-                      <Field orientation="horizontal" className={settingFieldClass}>
-                        <FieldLabel className={settingLabelClass} htmlFor="response-language">
-                          回答言語
-                        </FieldLabel>
-                        <Input
-                          className={settingControlClass}
-                          id="response-language"
-                          type="text"
-                          value={language}
-                          onChange={(event) => {
-                            setLanguage(event.target.value);
-                            autoSaveSettings(event.target.value, ctrlEnterSend, model, thinking);
-                          }}
-                          maxLength={80}
-                          placeholder="Japanese"
+                {settingsTabLabels[item]}
+              </Link>
+            ))}
+          </nav>
+          <AnimatePresence mode="wait">
+            <motion.section
+              key={tab}
+              className="min-h-[420px]"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25 }}
+            >
+              {tab === "projects" && (
+                <>
+                  <PanelTitle
+                    title="プロジェクト"
+                    text="会話ごとのシステムプロンプトを設定します。"
+                    action={() => openEditor({ type: "project" })}
+                    actionText="作成"
+                  />
+                  {data.projects.length > 0 && (
+                    <div className="grid grid-cols-1 gap-3">
+                      {data.projects.map((item) => (
+                        <SettingsCard
+                          key={item.id}
+                          icon={<ProjectIcon project={item} />}
+                          title={item.name}
+                          text={item.system_prompt || "カスタム指示なし"}
+                          edit={() => openEditor({ type: "project", item })}
+                          remove={() =>
+                            askDelete({ type: "projects", id: item.id, name: item.name })
+                          }
                         />
-                      </Field>
-                      <Separator />
-                      <Field orientation="horizontal" className={settingFieldClass}>
-                        <FieldLabel className={settingLabelClass} htmlFor="response-model">
-                          モデル
-                        </FieldLabel>
-                        <Select
-                          value={model}
-                          onValueChange={(value) => {
-                            setModel(value);
-                            autoSaveSettings(language, ctrlEnterSend, value, thinking);
-                          }}
-                        >
-                          <SelectTrigger
-                            id="response-model"
-                            className={settingControlClass}
-                            aria-label="モデル"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {data.models.map((item) => (
-                              <SelectItem key={item.id} value={item.id}>
-                                {item.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Separator />
-                      <Field orientation="horizontal" className={settingFieldClass}>
-                        <FieldLabel className={settingLabelClass} htmlFor="response-thinking">
-                          Thinking
-                        </FieldLabel>
-                        <Select
-                          value={thinking}
-                          onValueChange={(value) => {
-                            setThinking(value as ThinkingLevel);
-                            autoSaveSettings(
-                              language,
-                              ctrlEnterSend,
-                              model,
-                              value as ThinkingLevel,
-                            );
-                          }}
-                        >
-                          <SelectTrigger
-                            id="response-thinking"
-                            className={settingControlClass}
-                            aria-label="Thinking"
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="high">High</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="low">Low</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Separator />
-                      <Field
-                        orientation="horizontal"
-                        className={`${settingFieldClass} items-center!`}
-                      >
-                        <FieldContent className="gap-0.5">
-                          <FieldLabel
-                            className={`${settingLabelClass} gap-1`}
-                            htmlFor="ctrl-enter-send"
-                          >
-                            <KbdGroup>
-                              <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
-                            </KbdGroup>
-                            で送信
-                          </FieldLabel>
-                          <FieldDescription className="text-[8px]">
-                            PCのみ。スマートフォンではEnterで改行します。
-                          </FieldDescription>
-                        </FieldContent>
-                        <Switch
-                          id="ctrl-enter-send"
-                          size="lg"
-                          checked={ctrlEnterSend}
-                          onCheckedChange={(checked) => {
-                            setCtrlEnterSend(checked);
-                            autoSaveSettings(language, checked, model, thinking);
-                          }}
-                        />
-                      </Field>
-                    </FieldGroup>
-                    <Separator />
-                    <div className="flex items-center gap-[15px] py-[18px] max-md:flex-wrap max-md:items-start">
-                      <Avatar className="size-[54px] rounded-[17px]">
-                        {data.user.avatar && <AvatarImage src={data.user.avatar} alt="" />}
-                        <AvatarFallback className="rounded-[17px] bg-muted font-bold">
-                          {data.user.display_name[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <h2 className="mb-1 text-base">{data.user.display_name}</h2>
-                        <p className="text-[11px] text-muted-foreground">@{data.user.username}</p>
-                      </div>
-                      <form className="max-md:w-full" method="post" action="/logout">
-                        <Button
-                          variant="outline"
-                          className="h-[38px] gap-[7px] rounded-[11px] border-[color-mix(in_srgb,#de6b76_28%,var(--border))] bg-transparent px-3 text-[10px] text-destructive hover:text-destructive max-md:w-full max-md:justify-center [&_svg:not([class*='size-'])]:size-3.5"
-                        >
-                          <LogOut />
-                          ログアウト
-                        </Button>
-                      </form>
+                      ))}
                     </div>
-                    <Separator />
-                    <section className="flex items-center gap-2 py-[18px] max-md:flex-col max-md:items-stretch">
-                      <div className="flex-1">
-                        <h2 className="mb-[3px] text-[13px]">データ削除</h2>
-                        <p className="text-[9px] text-muted-foreground">
-                          この操作は取り消せません。
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        className="min-h-9 gap-1.5 rounded-[10px] border-[color-mix(in_srgb,#de6b76_30%,var(--border))] bg-transparent px-2.5 text-[9px] text-destructive hover:text-destructive max-md:justify-center [&_svg:not([class*='size-'])]:size-[13px]"
-                        onClick={() => askDelete({ type: "data", id: "", name: "すべてのデータ" })}
+                  )}
+                </>
+              )}
+              {tab === "skills" && (
+                <>
+                  <PanelTitle
+                    title="スキル"
+                    text="有効なスキルはすべての会話と画像プロンプトに適用されます。"
+                    action={() => openEditor({ type: "skill" })}
+                    actionText="追加"
+                  />
+                  {data.skills.length > 0 && (
+                    <div className="grid grid-cols-1 gap-3">
+                      {data.skills.map((item) => (
+                        <SettingsCard
+                          key={item.id}
+                          icon={<Sparkles />}
+                          title={item.name}
+                          text={item.description || item.instructions}
+                          badge={item.enabled ? "有効" : "無効"}
+                          edit={() => openEditor({ type: "skill", item })}
+                          remove={() => askDelete({ type: "skills", id: item.id, name: item.name })}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {tab === "files" && (
+                <>
+                  <PanelTitle title="ファイル" text="アップロードしたファイルと生成画像です。" />
+                  {data.files.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {data.files.map((file) => (
+                        <a
+                          href={`/files/${file.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 overflow-hidden rounded-[17px] border border-border bg-card"
+                          key={file.id}
+                        >
+                          <span className="block aspect-[4/3] w-full">
+                            {file.mime.startsWith("image/") ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                className="size-full object-cover"
+                                src={`/files/${file.id}`}
+                                alt={file.name}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span className="flex size-full items-center justify-center bg-muted [&_svg]:w-[35px] [&_svg]:text-muted-foreground">
+                                <File />
+                              </span>
+                            )}
+                          </span>
+                          <span className="block min-w-0 px-[11px] py-2.5">
+                            <strong className="block w-full truncate text-[10px]">
+                              {file.name}
+                            </strong>
+                            <span className="mt-[3px] block truncate text-[8px] text-muted-foreground">
+                              {file.source === "generated" ? "生成画像" : "アップロード"} ·{" "}
+                              {formatSize(file.size)}
+                            </span>
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {tab === "general" && (
+                <>
+                  <PanelTitle title="一般" text="回答とアカウントの設定です。" />
+                  <div>
+                    <div className={settingFieldClass}>
+                      <span className={settingLabelClass}>テーマ</span>
+                      <ThemeToggle />
+                    </div>
+                    <div className="border-t border-border" />
+                    <label className={settingFieldClass} htmlFor="response-language">
+                      <span className={settingLabelClass}>回答言語</span>
+                      <input
+                        className={settingControlClass}
+                        id="response-language"
+                        type="text"
+                        value={language}
+                        onChange={(event) => {
+                          setLanguage(event.target.value);
+                          autoSaveSettings(event.target.value, ctrlEnterSend, model, thinking);
+                        }}
+                        maxLength={80}
+                        placeholder="Japanese"
+                      />
+                    </label>
+                    <div className="border-t border-border" />
+                    <label className={settingFieldClass} htmlFor="response-model">
+                      <span className={settingLabelClass}>モデル</span>
+                      <select
+                        id="response-model"
+                        className={settingControlClass}
+                        value={model}
+                        onChange={(event) => {
+                          setModel(event.target.value);
+                          autoSaveSettings(language, ctrlEnterSend, event.target.value, thinking);
+                        }}
                       >
-                        <Trash2 />
-                        データを削除
-                      </Button>
-                    </section>
-                  </>
-                )}
-              </motion.section>
-            </AnimatePresence>
-          </TabsContent>
-        </Tabs>
+                        {data.models.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="border-t border-border" />
+                    <label className={settingFieldClass} htmlFor="response-thinking">
+                      <span className={settingLabelClass}>Thinking</span>
+                      <select
+                        id="response-thinking"
+                        className={settingControlClass}
+                        value={thinking}
+                        onChange={(event) => {
+                          const value = event.target.value as ThinkingLevel;
+                          setThinking(value);
+                          autoSaveSettings(language, ctrlEnterSend, model, value);
+                        }}
+                      >
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="border-t border-border" />
+                  <div className="flex flex-wrap items-start gap-[15px] py-[18px]">
+                    <span className="flex size-[54px] shrink-0 items-center justify-center overflow-hidden rounded-[17px] bg-muted font-bold">
+                      {data.user.avatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img className="size-full object-cover" src={data.user.avatar} alt="" />
+                      ) : (
+                        data.user.display_name[0]
+                      )}
+                    </span>
+                    <div className="flex-1">
+                      <h2 className="mb-1 text-base">{data.user.display_name}</h2>
+                      <p className="text-[11px] text-muted-foreground">@{data.user.username}</p>
+                    </div>
+                    <form className="w-full" method="post" action="/logout">
+                      <button className="inline-flex h-[38px] w-full items-center justify-center gap-[7px] rounded-[11px] border border-[color-mix(in_srgb,#de6b76_28%,var(--border))] bg-transparent px-3 text-[10px] text-destructive [&_svg]:size-3.5">
+                        <LogOut />
+                        ログアウト
+                      </button>
+                    </form>
+                  </div>
+                  <div className="border-t border-border" />
+                  <section className="flex flex-col items-stretch gap-2 py-[18px]">
+                    <div className="flex-1">
+                      <h2 className="mb-[3px] text-[13px]">データ削除</h2>
+                      <p className="text-[9px] text-muted-foreground">この操作は取り消せません。</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[10px] border border-[color-mix(in_srgb,#de6b76_30%,var(--border))] bg-transparent px-2.5 text-[9px] text-destructive [&_svg]:size-[13px]"
+                      onClick={() => askDelete({ type: "data", id: "", name: "すべてのデータ" })}
+                    >
+                      <Trash2 />
+                      データを削除
+                    </button>
+                  </section>
+                </>
+              )}
+            </motion.section>
+          </AnimatePresence>
+        </div>
       </main>
 
       <ConfirmDialog
@@ -500,19 +402,20 @@ export function PanelTitle({
   actionText?: string;
 }) {
   return (
-    <div className="mb-5 flex items-end justify-between max-md:items-center">
+    <div className="mb-5 flex items-center justify-between">
       <div>
         <h2 className="mb-[5px] text-xl tracking-[-0.025em]">{title}</h2>
-        <p className="text-[11px] text-muted-foreground max-md:max-w-[220px]">{text}</p>
+        <p className="max-w-[220px] text-[11px] text-muted-foreground">{text}</p>
       </div>
       {action && (
-        <Button
-          className="h-[39px] gap-[7px] rounded-xl px-[15px] text-[11px] font-bold shadow-[0_8px_20px_color-mix(in_srgb,var(--primary)_25%,transparent)] hover:-translate-y-px [&_svg:not([class*='size-'])]:size-[15px]"
+        <button
+          type="button"
+          className="inline-flex h-[39px] items-center gap-[7px] rounded-xl bg-primary px-[15px] text-[11px] font-bold text-primary-foreground shadow-[0_8px_20px_color-mix(in_srgb,var(--primary)_25%,transparent)] [&_svg]:size-[15px]"
           onClick={action}
         >
           <Plus />
           {actionText}
-        </Button>
+        </button>
       )}
     </div>
   );
@@ -534,44 +437,39 @@ export function SettingsCard({
   remove: () => void;
 }) {
   return (
-    <Item
-      variant="outline"
-      className="h-full min-h-[120px] flex-nowrap items-start gap-3 rounded-[17px] border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-[15px] shadow-[0_8px_30px_#302d3a0a]"
-    >
-      <ItemMedia className="size-9 rounded-xl bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-primary [&_svg]:w-4">
+    <article className="flex h-full min-h-[120px] items-start gap-3 rounded-[17px] border border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-[15px] shadow-[0_8px_30px_#302d3a0a]">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-primary [&_svg]:w-4">
         {icon}
-      </ItemMedia>
-      <ItemContent className="min-w-0 gap-0">
-        <ItemTitle className="mb-1 text-[13px] font-semibold">
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="mb-1 flex items-center gap-2 text-[13px] font-semibold">
           <span className="truncate">{title}</span>
           {badge && (
-            <Badge className="rounded-[5px] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-1.5 py-0.5 text-[8px] font-normal text-primary">
+            <span className="rounded-[5px] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-1.5 py-0.5 text-[8px] font-normal text-primary">
               {badge}
-            </Badge>
+            </span>
           )}
-        </ItemTitle>
-        <ItemDescription className="line-clamp-2 text-[9px] leading-[1.5]">{text}</ItemDescription>
-      </ItemContent>
-      <ItemActions className="gap-0.5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="rounded-lg text-muted-foreground"
+        </h3>
+        <p className="line-clamp-2 text-[9px] leading-[1.5] text-muted-foreground">{text}</p>
+      </div>
+      <div className="flex gap-0.5">
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground [&_svg]:size-4"
           aria-label={`${title}を編集`}
           onClick={edit}
         >
           <Pencil />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="rounded-lg text-destructive hover:text-destructive"
+        </button>
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-destructive [&_svg]:size-4"
           aria-label={`${title}を削除`}
           onClick={remove}
         >
           <Trash2 />
-        </Button>
-      </ItemActions>
-    </Item>
+        </button>
+      </div>
+    </article>
   );
 }

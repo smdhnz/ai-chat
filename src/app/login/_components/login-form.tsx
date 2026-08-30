@@ -2,8 +2,6 @@
 
 import { motion } from "motion/react";
 import { AlertCircle } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { ease } from "@/lib/ui";
 
 export function LoginForm({ error }: { error?: string }) {
@@ -16,21 +14,24 @@ export function LoginForm({ error }: { error?: string }) {
         transition={{ duration: 0.45, ease }}
       >
         <h1 className="mb-9 text-[32px] font-semibold tracking-[-0.04em]">Chat</h1>
-        <Button
-          asChild
-          className="h-[50px] w-full rounded-xl text-sm font-semibold transition-colors duration-200 hover:bg-primary-hover"
+        <a
+          className="inline-flex h-[50px] w-full items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary-hover"
+          href="/api/auth/discord"
         >
-          <a href="/api/auth/discord">Discordでログイン</a>
-        </Button>
+          Discordでログイン
+        </a>
         {error && (
-          <Alert variant="destructive" className="mt-3.5 rounded-[13px] text-left">
-            <AlertCircle />
-            <AlertDescription className="text-[13px]">
+          <div
+            role="alert"
+            className="mt-3.5 flex gap-2 rounded-[13px] border border-destructive/50 p-3 text-left text-destructive"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <p className="text-[13px]">
               {error === "forbidden"
                 ? "このアカウントは利用できません。"
                 : "ログインに失敗しました。"}
-            </AlertDescription>
-          </Alert>
+            </p>
+          </div>
         )}
       </motion.section>
     </main>

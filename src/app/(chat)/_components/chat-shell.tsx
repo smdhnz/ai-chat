@@ -17,12 +17,9 @@ import {
 import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
 import { chatUrl, conversationIdFromPath } from "@/app/(chat)/_libs/chat";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ProjectIcon } from "@/components/project-icon";
-import { Button } from "@/components/ui/button";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
 import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
@@ -35,7 +32,6 @@ export function ChatShell() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const temporaryParam = searchParams.get("temporary") === "1";
-  const mobile = useIsMobile();
   const [data, setData] = useBootstrap();
   const [conversationId, setConversationId] = useState<string | null>(() =>
     conversationIdFromPath(pathname),
@@ -45,7 +41,6 @@ export function ChatShell() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
-  const [desktopSidebar, setDesktopSidebar] = useState(true);
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -354,14 +349,10 @@ export function ChatShell() {
   }
 
   return (
-    <SidebarProvider
-      className="h-dvh min-h-0 overflow-hidden overscroll-none"
-      open={desktopSidebar}
-      onOpenChange={setDesktopSidebar}
-      openMobile={mobileSidebar}
-      onOpenMobileChange={setMobileSidebar}
-    >
+    <div className="flex h-dvh min-h-0 overflow-hidden overscroll-none">
       <ChatSidebar
+        open={mobileSidebar}
+        onOpenChange={setMobileSidebar}
         data={data}
         conversationId={conversationId}
         newChat={newChat}
@@ -392,11 +383,16 @@ export function ChatShell() {
         }}
       />
 
-      <SidebarInset className="relative min-h-0 min-w-0 overflow-hidden bg-background">
-        <header className="z-10 flex h-16 shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--border)_62%,transparent)] bg-background px-[22px] max-md:h-[58px] max-md:px-2.5">
-          <SidebarTrigger className={iconButtonClass} aria-label="サイドバーを開閉">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <header className="z-10 flex h-[58px] shrink-0 items-center gap-2 border-b border-[color-mix(in_srgb,var(--border)_62%,transparent)] bg-background px-2.5">
+          <button
+            type="button"
+            className={`${iconButtonClass} inline-flex items-center justify-center`}
+            aria-label="サイドバーを開閉"
+            onClick={() => setMobileSidebar(true)}
+          >
             <Menu />
-          </SidebarTrigger>
+          </button>
           {project && (
             <div className="flex h-10 min-w-0 max-w-[280px] items-center gap-2 px-2 text-[13px] font-semibold">
               <ProjectIcon project={project} className="size-[26px]" />
@@ -404,39 +400,37 @@ export function ChatShell() {
             </div>
           )}
           {conversationId ? (
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              className={`${iconButtonClass} ml-auto hidden max-md:inline-flex`}
+            <button
+              type="button"
+              className={`${iconButtonClass} ml-auto inline-flex items-center justify-center`}
               onClick={() => newChat()}
               aria-label="新しいチャット"
             >
               <Plus />
-            </Button>
+            </button>
           ) : (
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              className={`${iconButtonClass} ml-auto ${temporary ? "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-primary" : ""}`}
+            <button
+              type="button"
+              className={`${iconButtonClass} ml-auto inline-flex items-center justify-center ${temporary ? "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-primary" : ""}`}
               onClick={toggleTemporary}
               aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
             >
               <TimerReset />
-            </Button>
+            </button>
           )}
         </header>
         <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
           {messages.length > 0 && (
-            <div className="mx-auto w-[min(820px,calc(100%-32px))] shrink-0 pt-11 pb-10 max-md:pt-[27px]">
+            <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[27px] pb-10">
               {hasOlderMessages && (
-                <Button
-                  variant="outline"
-                  className="mx-auto mb-8 flex h-auto rounded-[10px] bg-card px-3.5 py-2 text-[11px] font-normal text-muted-foreground"
+                <button
+                  type="button"
+                  className="mx-auto mb-8 flex h-auto rounded-[10px] border border-border bg-card px-3.5 py-2 text-[11px] text-muted-foreground disabled:opacity-50"
                   disabled={loadingOlderMessages}
                   onClick={() => void loadOlderMessages()}
                 >
                   {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
-                </Button>
+                </button>
               )}
               <AnimatePresence initial={false}>
                 {messages.map((message) => (
@@ -463,8 +457,6 @@ export function ChatShell() {
           files={files}
           setFiles={setFiles}
           temporary={temporary}
-          mobile={mobile}
-          ctrlEnterSend={data.user.ctrl_enter_send === 1}
           generating={generating}
           editing={editing}
           cancelEditing={() => {
@@ -474,7 +466,7 @@ export function ChatShell() {
           stop={stop}
           send={send}
         />
-      </SidebarInset>
-    </SidebarProvider>
+      </main>
+    </div>
   );
 }
