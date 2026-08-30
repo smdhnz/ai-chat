@@ -23,7 +23,7 @@ import {
 } from "@/lib/api";
 import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
-import { shouldCompleteSwipe } from "@/lib/swipe";
+import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
 import { chatUrl, conversationIdFromPath } from "@/app/(chat)/_libs/chat";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
@@ -52,6 +52,7 @@ export function ChatShell() {
   const sidebarX = useMotionValue(0);
   const sidebarPanelX = useTransform(sidebarX, (x) => `calc(${x}px - 86vw)`);
   const sidebarGestureStart = useRef(0);
+  const sidebarSwipeActive = useRef(false);
   const reduceMotion = useReducedMotion();
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -337,15 +338,20 @@ export function ChatShell() {
       appendError("停止エラー", error);
     }
   }
-  function startSidebarSwipe() {
+  function startSidebarSwipe(info: PanInfo) {
+    sidebarSwipeActive.current = canStartSwipe(mobileSidebar, info.point.x, window.innerWidth);
+    if (!sidebarSwipeActive.current) return;
     sidebarGestureStart.current = sidebarX.get();
     setSidebarDragging(true);
   }
   function moveSidebarSwipe(info: PanInfo) {
+    if (!sidebarSwipeActive.current) return;
     const width = window.innerWidth * 0.86;
     sidebarX.set(Math.max(0, Math.min(width, sidebarGestureStart.current + info.offset.x)));
   }
   function endSidebarSwipe(info: PanInfo) {
+    if (!sidebarSwipeActive.current) return;
+    sidebarSwipeActive.current = false;
     const width = window.innerWidth * 0.86;
     setMobileSidebar(shouldCompleteSwipe(sidebarX.get(), width / 2, info.velocity.x));
     setSidebarDragging(false);
@@ -377,7 +383,7 @@ export function ChatShell() {
       <motion.div
         style={{ x: sidebarPanelX }}
         className="absolute inset-y-0 left-0 z-30 w-[86vw] touch-pan-y"
-        onPanStart={startSidebarSwipe}
+        onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
         onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
         onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
       >
@@ -395,16 +401,6 @@ export function ChatShell() {
           openSettings={() => setSettingsOpen(true)}
         />
       </motion.div>
-
-      {!mobileSidebar && (
-        <motion.div
-          className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
-          aria-hidden="true"
-          onPanStart={startSidebarSwipe}
-          onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
-          onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
-        />
-      )}
 
       <SettingsShell
         open={settingsOpen}
@@ -424,7 +420,7 @@ export function ChatShell() {
       />
 
       <motion.main
-        onPanStart={startSidebarSwipe}
+        onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
         onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
         onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
         className="relative z-10 flex min-h-0 w-full shrink-0 touch-pan-y flex-col overflow-hidden bg-background"
