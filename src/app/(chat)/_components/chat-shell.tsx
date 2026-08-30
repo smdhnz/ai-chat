@@ -7,6 +7,7 @@ import {
   animate,
   motion,
   useMotionValue,
+  useMotionValueEvent,
   useReducedMotion,
   useTransform,
   type PanInfo,
@@ -71,6 +72,18 @@ export function ChatShell() {
     });
     return () => animation.stop();
   }, [mobileSidebar, reduceMotion, sidebarDragging, sidebarX]);
+
+  useMotionValueEvent(sidebarX, "change", (x) => {
+    const edge = x + Math.min(x, 30);
+    document.body.style.background = `linear-gradient(to right, var(--sidebar) ${edge}px, var(--background) ${edge}px)`;
+  });
+
+  useEffect(
+    () => () => {
+      document.body.style.removeProperty("background");
+    },
+    [],
+  );
 
   useEffect(() => {
     setMessages([]);
@@ -373,7 +386,7 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-screen min-h-0 overflow-hidden overscroll-none bg-sidebar">
+    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
       <ChatSidebar
         open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
