@@ -1,7 +1,7 @@
 const flingVelocity = 600;
 
 export function canStartSwipe(open: boolean, position: number, width: number) {
-  return open || position <= width / 2;
+  return open || position <= width / 5;
 }
 
 export function shouldCompleteSwipe(position: number, threshold: number, velocity: number) {
