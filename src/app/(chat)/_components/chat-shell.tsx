@@ -386,7 +386,7 @@ export function ChatShell() {
         openSettings={() => setSettingsOpen(true)}
       />
 
-      {!mobileSidebar && !sidebarDragging && (
+      {!mobileSidebar && (
         <motion.div
           className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
           aria-hidden="true"

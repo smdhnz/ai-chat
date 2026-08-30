@@ -61,7 +61,8 @@ export function SettingsShell({
   setData: (data: Bootstrap) => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const dragControls = useDragControls();
+  const sheetDragControls = useDragControls();
+  const backDragControls = useDragControls();
   const [tab, setTab] = useState<SettingsTab | null>(null);
   const [direction, setDirection] = useState(1);
   const [closing, setClosing] = useState(false);
@@ -197,10 +198,14 @@ export function SettingsShell({
             animate={{ y: visible ? 0 : "100%" }}
             transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
             drag="y"
-            dragControls={dragControls}
+            dragControls={sheetDragControls}
             dragListener={false}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 1 }}
+            onPointerDownCapture={(event) => {
+              const top = event.currentTarget.getBoundingClientRect().top;
+              if (event.clientY - top <= 78) sheetDragControls.start(event);
+            }}
             onDragEnd={(_, info: PanInfo) => {
               if (shouldCompleteSwipe(info.offset.y, window.innerHeight * 0.18, info.velocity.y))
                 close();
@@ -214,7 +219,6 @@ export function SettingsShell({
             <div
               className="flex h-5 shrink-0 touch-none cursor-grab items-center justify-center active:cursor-grabbing"
               aria-hidden="true"
-              onPointerDown={(event) => dragControls.start(event)}
             >
               <span className="h-1 w-9 rounded-full bg-muted-foreground/35" />
             </div>
@@ -226,8 +230,26 @@ export function SettingsShell({
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: direction > 0 ? "-28%" : "100%", opacity: 0.7 }}
                   transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.32, 0.72, 0, 1] }}
-                  className="absolute inset-0 flex flex-col bg-background"
+                  drag={tab ? "x" : false}
+                  dragControls={backDragControls}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={{ left: 0, right: 1 }}
+                  onDragEnd={(_, info: PanInfo) => {
+                    if (
+                      tab &&
+                      shouldCompleteSwipe(info.offset.x, window.innerWidth * 0.2, info.velocity.x)
+                    )
+                      back();
+                  }}
+                  className="absolute inset-0 flex touch-pan-y flex-col bg-background"
                 >
+                  {tab && (
+                    <div
+                      className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
+                      aria-hidden="true"
+                      onPointerDown={(event) => backDragControls.start(event)}
+                    />
+                  )}
                   <header className={pageHeaderClass}>
                     {tab && (
                       <button
