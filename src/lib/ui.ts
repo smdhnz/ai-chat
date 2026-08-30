@@ -3,7 +3,7 @@ import { BookOpen, Briefcase, Code2, Folder, Palette, Rocket } from "lucide-reac
 export const ease = [0.22, 1, 0.36, 1] as const;
 
 export const iconButtonClass =
-  "liquid-glass liquid-glass-control size-10 rounded-full [&_svg:not([class*='size-'])]:size-5";
+  "liquid-glass liquid-glass-control size-11 rounded-full [&_svg:not([class*='size-'])]:size-5";
 
 export const projectColorClasses = {
   clay: "[--project-color:#5865f2]",

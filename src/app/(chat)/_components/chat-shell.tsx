@@ -403,7 +403,7 @@ export function ChatShell() {
             onClick={() => setMobileSidebar(false)}
           />
         )}
-        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-2.5 pt-2.5">
+        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-[18px] pt-2.5">
           <button
             type="button"
             className={`${iconButtonClass} inline-flex items-center justify-center`}
