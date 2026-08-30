@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useDeferredValue, useRef, useState, type ComponentProps } from "react";
+import { memo, useDeferredValue, useEffect, useRef, useState, type ComponentProps } from "react";
 import { motion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,12 +15,16 @@ export function MessageView({
   draft,
   regenerate,
   edit,
+  prioritizeImages,
+  finishStreaming,
 }: {
   message: Message;
   disabled: boolean;
   draft?: string;
   regenerate: () => void;
   edit: () => void;
+  prioritizeImages: boolean;
+  finishStreaming?: () => void;
 }) {
   const deferredDraft = useDeferredValue(draft);
   const sourceContent = draft === undefined ? message.content : (deferredDraft ?? draft);
@@ -30,10 +34,13 @@ export function MessageView({
   const isUser = message.role === "user";
   const collapsible = isUser && content.length > 1200;
   const [expanded, setExpanded] = useState(false);
+  const streaming = message.id.startsWith("stream-");
   return (
     <article className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}>
       <div className={`flex min-w-0 max-w-[87%] flex-col items-start ${isUser ? "items-end" : ""}`}>
-        {isUser && message.files?.length > 0 && <FileBlocks files={message.files} alignEnd />}
+        {isUser && message.files?.length > 0 && (
+          <FileBlocks files={message.files} alignEnd prioritizeImages={prioritizeImages} />
+        )}
         {hasBody && (
           <>
             <div
@@ -52,7 +59,11 @@ export function MessageView({
                   ))}
                 </div>
               )}
-              <MarkdownContent content={content} />
+              {streaming ? (
+                <StreamingContent content={content} finish={finishStreaming} />
+              ) : (
+                <MarkdownContent content={content} />
+              )}
               {auth && <AuthCard auth={auth} />}
             </div>
             {collapsible && (
@@ -67,7 +78,9 @@ export function MessageView({
             )}
           </>
         )}
-        {!isUser && message.files?.length > 0 && <FileBlocks files={message.files} />}
+        {!isUser && message.files?.length > 0 && (
+          <FileBlocks files={message.files} prioritizeImages={prioritizeImages} />
+        )}
         {isUser && (
           <div className="mt-1 flex w-full justify-end gap-0.5">
             <button
@@ -143,6 +156,52 @@ const markdownComponents: Components = {
   td: (props) => <td className={cellClass} {...withoutMarkdownNode(props)} />,
 };
 
+function StreamingContent({ content, finish }: { content: string; finish?: () => void }) {
+  const target = useRef("");
+  const displayed = useRef("");
+  const nextId = useRef(0);
+  const [chunks, setChunks] = useState<{ id: number; text: string }[]>([]);
+
+  useEffect(() => {
+    if (!content.startsWith(target.current)) {
+      displayed.current = "";
+      setChunks([]);
+    }
+    target.current = content;
+  }, [content]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const remaining = target.current.slice(displayed.current.length);
+      if (!remaining) return;
+      const text = remaining.slice(0, 1);
+      displayed.current += text;
+      const chunk = { id: nextId.current++, text };
+      setChunks((value) => [...value, chunk]);
+    }, 30);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (finish && displayed.current === target.current) finish();
+  }, [chunks, finish]);
+
+  return (
+    <div className="whitespace-pre-wrap">
+      {chunks.map((chunk) => (
+        <motion.span
+          key={chunk.id}
+          initial={{ opacity: 0.5 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          {chunk.text}
+        </motion.span>
+      ))}
+    </div>
+  );
+}
+
 const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
@@ -180,7 +239,46 @@ export function AuthCard({ auth }: { auth: DeviceAuth }) {
   );
 }
 
-export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; alignEnd?: boolean }) {
+function ChatImage({
+  file,
+  priority,
+  open,
+}: {
+  file: FileItem;
+  priority: boolean;
+  open: () => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <button
+      className={`shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border p-0 shadow-[0_24px_70px_#1a1a1e1f] dark:shadow-[0_28px_80px_#00000066] ${loaded ? "bg-transparent" : "min-h-24 min-w-32 animate-pulse bg-muted"}`}
+      onClick={open}
+      aria-label={`${file.name}を拡大表示`}
+      aria-busy={!loaded}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className={`block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
+        src={file.preview || `/files/${file.id}`}
+        alt={file.name}
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "low"}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+      />
+    </button>
+  );
+}
+
+export function FileBlocks({
+  files,
+  alignEnd = false,
+  prioritizeImages,
+}: {
+  files: FileItem[];
+  alignEnd?: boolean;
+  prioritizeImages: boolean;
+}) {
   const [preview, setPreview] = useState<FileItem | null>(null);
   const previewUrl = preview?.preview || (preview?.id ? `/files/${preview.id}` : "");
   return (
@@ -188,18 +286,15 @@ export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; ali
       <div
         className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
       >
-        <div className="flex w-max flex-nowrap gap-[9px] pb-[5px]">
+        <div className="flex w-max flex-nowrap gap-[9px]">
           {files.map((file) =>
             file.mime.startsWith("image/") && (file.id || file.preview) ? (
-              <button
+              <ChatImage
                 key={file.id || file.name}
-                className="shrink-0 cursor-zoom-in rounded-[14px] border-0 bg-transparent p-0 [&_img]:block [&_img]:h-auto [&_img]:max-h-[170px] [&_img]:max-w-[260px] [&_img]:rounded-[14px] [&_img]:border [&_img]:border-border [&_img]:object-cover [&_img]:shadow-[0_24px_70px_#1a1a1e1f] dark:[&_img]:shadow-[0_28px_80px_#00000066]"
-                onClick={() => setPreview(file)}
-                aria-label={`${file.name}を拡大表示`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={file.preview || `/files/${file.id}`} alt={file.name} />
-              </button>
+                file={file}
+                priority={prioritizeImages}
+                open={() => setPreview(file)}
+              />
             ) : (
               <a
                 key={file.id || file.name}

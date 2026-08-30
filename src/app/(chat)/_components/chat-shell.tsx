@@ -46,6 +46,7 @@ export function ChatShell() {
   const [projectId, setProjectId] = useState("");
   const [temporary, setTemporary] = useState(temporaryParam);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [pendingStreamPage, setPendingStreamPage] = useState<MessagePage | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
@@ -147,6 +148,7 @@ export function ChatShell() {
     let active = true;
     let socket: WebSocket | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    const streamingConversations = new Set<string>();
     const connect = () => {
       socket = new WebSocket(socketUrl());
       socket.onmessage = ({ data: message }) => {
@@ -174,6 +176,7 @@ export function ChatShell() {
           return;
         }
         if (event.type === "done") {
+          const waitForStream = streamingConversations.delete(event.conversationId);
           const current =
             openConversationRef.current === event.conversationId
               ? api<MessagePage>(`/api/conversations/${event.conversationId}`)
@@ -183,14 +186,18 @@ export function ChatShell() {
               if (!active) return;
               setData(fresh);
               if (page && openConversationRef.current === event.conversationId) {
-                setMessages(page.messages);
-                setHasOlderMessages(page.hasMore);
+                if (waitForStream) setPendingStreamPage(page);
+                else {
+                  setMessages(page.messages);
+                  setHasOlderMessages(page.hasMore);
+                }
               }
             })
             .catch(() => undefined);
           return;
         }
         if (openConversationRef.current !== event.conversationId || !event.content) return;
+        streamingConversations.add(event.conversationId);
         const streamId = `stream-${event.conversationId}`;
         setMessages((value) => {
           const streamed: Message = {
@@ -243,6 +250,7 @@ export function ChatShell() {
       return;
     }
     let active = true;
+    setPendingStreamPage(null);
     void api<MessagePage>(`/api/conversations/${resolvedConversationId}`).then((page) => {
       if (!active) return;
       setMessages(page.messages);
@@ -270,6 +278,7 @@ export function ChatShell() {
         api<MessagePage>(`/api/conversations/${id}`),
       ]);
       setData(fresh);
+      setPendingStreamPage(null);
       setMessages(page.messages);
       setHasOlderMessages(page.hasMore);
     },
@@ -280,8 +289,17 @@ export function ChatShell() {
 
   const project = data.projects.find((item) => item.id === projectId);
   const activeConversation = data.conversations.find((item) => item.id === conversationId);
-  const generating = sending || activeConversation?.generation_status === "running";
+  const generating =
+    sending || activeConversation?.generation_status === "running" || pendingStreamPage !== null;
   const editing = editingMessageId !== null;
+  const streaming = messages.some(
+    (message) => message.id === `stream-${conversationId}` && Boolean(message.content),
+  );
+  const newestImageMessageId = messages.reduceRight<string | undefined>(
+    (id, message) =>
+      id ?? (message.files.some((file) => file.mime.startsWith("image/")) ? message.id : undefined),
+    undefined,
+  );
 
   function selectConversation(item: Conversation) {
     setEditingMessageId(null);
@@ -597,9 +615,19 @@ export function ChatShell() {
                       setPrompt(message.content);
                       setFiles([]);
                     }}
+                    prioritizeImages={message.id === newestImageMessageId}
+                    finishStreaming={
+                      message.id === `stream-${conversationId}` && pendingStreamPage
+                        ? () => {
+                            setMessages(pendingStreamPage.messages);
+                            setHasOlderMessages(pendingStreamPage.hasMore);
+                            setPendingStreamPage(null);
+                          }
+                        : undefined
+                    }
                   />
                 ))}
-                {generating && <Thinking />}
+                {generating && !streaming && <Thinking />}
               </motion.div>
             </div>
           )}
