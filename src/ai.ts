@@ -25,7 +25,7 @@ const zeroUsage = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
+export const TURN_PLAN_MODEL = "gpt-5.6-luna";
 export const DEFAULT_THINKING_LEVEL = "low";
 export type ThinkingLevel = "low" | "medium" | "high";
 export type AiSettings = { model: string; thinking: ThinkingLevel };
@@ -86,16 +86,9 @@ export function beginCodexReauthentication(): Promise<DeviceAuthInfo> {
   return activeLogin;
 }
 
-export function getCodexModels(): { id: string; name: string }[] {
-  return models
-    .getModels("openai-codex")
-    .map(({ id, name }) => ({ id, name }))
-    .sort((a, b) => b.name.localeCompare(a.name));
-}
-
-export function resolveAiSettings(model: string, thinking: string): AiSettings {
+export function resolveAiSettings(thinking: string): AiSettings {
   return {
-    model: models.getModel("openai-codex", model) ? model : DEFAULT_CODEX_MODEL,
+    model: getModel(config.codexModel).id,
     thinking: ["low", "medium", "high"].includes(thinking)
       ? (thinking as ThinkingLevel)
       : DEFAULT_THINKING_LEVEL,
@@ -315,8 +308,6 @@ const models = createModels({ credentials: new JsonCredentialStore(authPath) });
 models.setProvider(openaiCodexProvider());
 function getModel(modelId: string) {
   const model = models.getModel("openai-codex", modelId);
-  if (model) return model;
-  const fallback = models.getModel("openai-codex", DEFAULT_CODEX_MODEL);
-  if (!fallback) throw new Error(`Unknown OpenAI Codex model: ${modelId}`);
-  return fallback;
+  if (!model) throw new Error(`Unknown OpenAI Codex model: ${modelId}`);
+  return model;
 }

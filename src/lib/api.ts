@@ -55,7 +55,6 @@ export function parseDeviceAuth(content: string): DeviceAuth | undefined {
   return { verificationUri: match[1], userCode: match[2], expiresInSeconds: 0 };
 }
 
-export type CodexModel = { id: string; name: string };
 export type ThinkingLevel = "low" | "medium" | "high";
 export type Bootstrap = {
   user: {
@@ -65,10 +64,8 @@ export type Bootstrap = {
     avatar: string | null;
     language: string;
     ctrl_enter_send: number;
-    model: string;
     thinking_level: ThinkingLevel;
   };
-  models: CodexModel[];
   projects: Project[];
   skills: Skill[];
   conversations: Conversation[];

@@ -6,10 +6,10 @@ import {
   chat,
   compactHistory,
   generateImage,
-  getCodexModels,
   isAuthenticationError,
   needsCompaction,
   resolveAiSettings,
+  TURN_PLAN_MODEL,
   type HistoryEntry,
   type ThinkingLevel,
 } from "./ai";
@@ -157,7 +157,6 @@ type User = {
   avatar: string | null;
   language: string;
   ctrl_enter_send: number;
-  model: string;
   thinking_level: ThinkingLevel;
 };
 type ProjectRow = {
@@ -201,10 +200,9 @@ function bootstrap(user: User): Response {
       "SELECT id,name,system_prompt,icon,color,created_at,updated_at FROM projects WHERE user_id=? ORDER BY updated_at DESC",
     )
     .all(user.id) as ProjectRow[];
-  const settings = resolveAiSettings(user.model, user.thinking_level);
+  const settings = resolveAiSettings(user.thinking_level);
   return json({
-    user: { ...user, model: settings.model, thinking_level: settings.thinking },
-    models: getCodexModels(),
+    user: { ...user, thinking_level: settings.thinking },
     projects,
     conversations: db
       .query(
@@ -412,7 +410,8 @@ async function generateReply(
     )
     .get(conversationId, user.id) as ConversationRow | null;
   if (!conversation || conversation.generation_status !== "running") return;
-  const aiSettings = resolveAiSettings(user.model, user.thinking_level);
+  const aiSettings = resolveAiSettings(user.thinking_level);
+  const turnPlanSettings = { ...aiSettings, model: TURN_PLAN_MODEL };
   const allHistory = db
     .query(
       "SELECT id,role,content,file_ids,attachment_context,created_at FROM messages WHERE conversation_id=? ORDER BY created_at,id",
@@ -436,8 +435,8 @@ async function generateReply(
     user.language,
     imageInputPaths.length > 0,
     availableSkills,
-    aiSettings,
-    cacheSessionId(conversationId, aiSettings.model, "plan"),
+    turnPlanSettings,
+    cacheSessionId(conversationId, turnPlanSettings.model, "plan"),
     signal,
   );
   const selectedSkills = availableSkills.filter((skill) => plan.skills.includes(skill.name));
@@ -693,24 +692,19 @@ async function saveSettings(request: Request, userId: string): Promise<Response>
   const body = (await request.json()) as {
     language?: string;
     ctrlEnterSend?: boolean;
-    model?: string;
     thinking?: string;
   };
   const language = clean(body.language, 80) || "Japanese";
   const ctrlEnterSend = body.ctrlEnterSend === true ? 1 : 0;
-  const model = clean(body.model, 80);
   const thinking = clean(body.thinking, 20);
-  if (!getCodexModels().some((item) => item.id === model))
-    return json({ error: "invalid model" }, 400);
   if (!["low", "medium", "high"].includes(thinking))
     return json({ error: "invalid thinking level" }, 400);
   db.query(
-    "UPDATE users SET language=?,ctrl_enter_send=?,model=?,thinking_level=?,updated_at=? WHERE id=?",
-  ).run(language, ctrlEnterSend, model, thinking, now(), userId);
+    "UPDATE users SET language=?,ctrl_enter_send=?,thinking_level=?,updated_at=? WHERE id=?",
+  ).run(language, ctrlEnterSend, thinking, now(), userId);
   return json({
     language,
     ctrl_enter_send: ctrlEnterSend,
-    model,
     thinking_level: thinking,
   });
 }
@@ -1149,7 +1143,7 @@ function sessionUser(request: Request): User | null {
   if (!token) return null;
   return db
     .query(
-      `SELECT u.id,u.username,u.display_name,u.avatar,u.language,u.ctrl_enter_send,u.model,u.thinking_level FROM sessions s JOIN users u ON u.id=s.user_id
+      `SELECT u.id,u.username,u.display_name,u.avatar,u.language,u.ctrl_enter_send,u.thinking_level FROM sessions s JOIN users u ON u.id=s.user_id
     WHERE s.token_hash=? AND s.expires_at>?`,
     )
     .get(hash(token), now()) as User | null;

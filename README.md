@@ -7,7 +7,7 @@ ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`
 - Next.js 16 (App Router) / React 19 / shadcn/ui / Tailwind CSS 4 / Motion
 - Bun HTTP API / SQLite
 - Discord OAuth2、DiscordユーザーID許可リスト
-- Codexサブスク認証による会話（一般設定でモデルとThinkingを選択、既定は`gpt-5.6-sol` / `low`）
+- Codexサブスク認証による会話（モデルは`CODEX_MODEL`で固定、Thinkingは一般設定で選択）
 - ユーザーの依頼内容に応じた自律Web検索（Exa MCP、APIキー不要）
 - Codex Images APIによる画像生成・画像編集
 - 会話履歴、プロジェクト別システムプロンプト、ユーザー追加スキル
@@ -30,7 +30,7 @@ UIコンポーネントは `src/components/ui` のshadcn/uiに統一していま
 
    ```bash
    cp .env.example .env
-   # DISCORD_CLIENT_ID、DISCORD_CLIENT_SECRET、ALLOWED_DISCORD_USER_IDSを設定
+   # DISCORD_CLIENT_ID、DISCORD_CLIENT_SECRET、ALLOWED_DISCORD_USER_IDS、CODEX_MODELを設定
    ```
 
 3. 起動します。

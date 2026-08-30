@@ -21,6 +21,7 @@ export const config = {
   ),
   cookieSecure: env("COOKIE_SECURE", "1") !== "0",
   dataDir: resolve(env("DATA_DIR", "data")),
+  codexModel: env("CODEX_MODEL", "gpt-5.6-sol"),
   aiTimeoutMs: Number(env("AI_TIMEOUT_MS", "600000")),
   maxUploadBytes: Number(env("MAX_UPLOAD_BYTES", String(20 * 1024 * 1024))),
 };

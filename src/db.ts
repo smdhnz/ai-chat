@@ -10,7 +10,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, username TEXT NOT NULL, display_name TEXT NOT NULL,
   avatar TEXT, language TEXT NOT NULL DEFAULT 'Japanese', ctrl_enter_send INTEGER NOT NULL DEFAULT 0,
-  model TEXT NOT NULL DEFAULT 'gpt-5.6-sol', thinking_level TEXT NOT NULL DEFAULT 'low',
+  thinking_level TEXT NOT NULL DEFAULT 'low',
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
@@ -65,8 +65,6 @@ if (!userColumns.has("language"))
   db.exec("ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese'");
 if (!userColumns.has("ctrl_enter_send"))
   db.exec("ALTER TABLE users ADD COLUMN ctrl_enter_send INTEGER NOT NULL DEFAULT 0");
-if (!userColumns.has("model"))
-  db.exec("ALTER TABLE users ADD COLUMN model TEXT NOT NULL DEFAULT 'gpt-5.6-sol'");
 if (!userColumns.has("thinking_level"))
   db.exec("ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low'");
 const projectColumns = columns("projects");

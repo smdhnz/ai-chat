@@ -69,7 +69,6 @@ export function SettingsShell({
   const [closing, setClosing] = useState(false);
   const [language, setLanguage] = useState("");
   const [ctrlEnterSend, setCtrlEnterSend] = useState(false);
-  const [model, setModel] = useState("");
   const [thinking, setThinking] = useState<ThinkingLevel>("low");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -83,7 +82,6 @@ export function SettingsShell({
     loaded.current = true;
     setLanguage(data.user.language);
     setCtrlEnterSend(data.user.ctrl_enter_send === 1);
-    setModel(data.user.model);
     setThinking(data.user.thinking_level);
   }, [data]);
 
@@ -97,7 +95,6 @@ export function SettingsShell({
   function autoSaveSettings(
     nextLanguage: string,
     nextCtrlEnterSend: boolean,
-    nextModel: string,
     nextThinking: ThinkingLevel,
   ) {
     const revision = ++settingsSaveRevision.current;
@@ -106,14 +103,12 @@ export function SettingsShell({
       void api<{
         language: string;
         ctrl_enter_send: number;
-        model: string;
         thinking_level: ThinkingLevel;
       }>("/api/settings", {
         method: "PUT",
         body: JSON.stringify({
           language: nextLanguage,
           ctrlEnterSend: nextCtrlEnterSend,
-          model: nextModel,
           thinking: nextThinking,
         }),
       })
@@ -121,7 +116,6 @@ export function SettingsShell({
           if (revision !== settingsSaveRevision.current) return;
           setLanguage(saved.language);
           setCtrlEnterSend(saved.ctrl_enter_send === 1);
-          setModel(saved.model);
           setThinking(saved.thinking_level);
           toast.success("自動保存しました");
         })
@@ -291,19 +285,14 @@ export function SettingsShell({
                         tab={tab}
                         data={data}
                         language={language}
-                        model={model}
                         thinking={thinking}
                         saveLanguage={(value) => {
                           setLanguage(value);
-                          autoSaveSettings(value, ctrlEnterSend, model, thinking);
-                        }}
-                        saveModel={(value) => {
-                          setModel(value);
-                          autoSaveSettings(language, ctrlEnterSend, value, thinking);
+                          autoSaveSettings(value, ctrlEnterSend, thinking);
                         }}
                         saveThinking={(value) => {
                           setThinking(value);
-                          autoSaveSettings(language, ctrlEnterSend, model, value);
+                          autoSaveSettings(language, ctrlEnterSend, value);
                         }}
                         edit={showEditor}
                         askDelete={(next) => {
@@ -420,10 +409,8 @@ function SettingsDetail({
   tab,
   data,
   language,
-  model,
   thinking,
   saveLanguage,
-  saveModel,
   saveThinking,
   edit,
   askDelete,
@@ -431,10 +418,8 @@ function SettingsDetail({
   tab: SettingsTab;
   data: Bootstrap;
   language: string;
-  model: string;
   thinking: ThinkingLevel;
   saveLanguage: (value: string) => void;
-  saveModel: (value: string) => void;
   saveThinking: (value: ThinkingLevel) => void;
   edit: (editor: EditorState) => void;
   askDelete: (target: DeleteTarget) => void;
@@ -510,22 +495,6 @@ function SettingsDetail({
               maxLength={80}
               placeholder="Japanese"
             />
-          </label>
-          <div className="ml-4 border-t border-border" />
-          <label className={settingFieldClass} htmlFor="response-model">
-            <span className={settingLabelClass}>モデル</span>
-            <select
-              id="response-model"
-              className={settingControlClass}
-              value={model}
-              onChange={(event) => saveModel(event.target.value)}
-            >
-              {data.models.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
           </label>
           <div className="ml-4 border-t border-border" />
           <label className={settingFieldClass} htmlFor="response-thinking">
