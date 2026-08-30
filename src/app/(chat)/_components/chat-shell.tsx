@@ -50,7 +50,7 @@ export function ChatShell() {
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const [sidebarDragging, setSidebarDragging] = useState(false);
   const sidebarX = useMotionValue(0);
-  const sidebarRadius = useTransform(sidebarX, [0, 30], [0, 30]);
+  const sidebarPanelX = useTransform(sidebarX, (x) => `calc(${x}px - 86vw)`);
   const sidebarGestureStart = useRef(0);
   const reduceMotion = useReducedMotion();
   const [prompt, setPrompt] = useState("");
@@ -373,20 +373,28 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
-      <ChatSidebar
-        open={mobileSidebar || sidebarDragging}
-        onOpenChange={setMobileSidebar}
-        data={data}
-        conversationId={conversationId}
-        newChat={newChat}
-        selectConversation={selectConversation}
-        askDeleteConversation={(item) => {
-          setDeleteTarget(item);
-          setDeleteOpen(true);
-        }}
-        openSettings={() => setSettingsOpen(true)}
-      />
+    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-background">
+      <motion.div
+        style={{ x: sidebarPanelX }}
+        className="absolute inset-y-0 left-0 z-30 w-[86vw] touch-pan-y"
+        onPanStart={startSidebarSwipe}
+        onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
+        onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
+      >
+        <ChatSidebar
+          open={mobileSidebar || sidebarDragging}
+          onOpenChange={setMobileSidebar}
+          data={data}
+          conversationId={conversationId}
+          newChat={newChat}
+          selectConversation={selectConversation}
+          askDeleteConversation={(item) => {
+            setDeleteTarget(item);
+            setDeleteOpen(true);
+          }}
+          openSettings={() => setSettingsOpen(true)}
+        />
+      </motion.div>
 
       {!mobileSidebar && (
         <motion.div
@@ -416,15 +424,6 @@ export function ChatShell() {
       />
 
       <motion.main
-        initial={false}
-        style={{
-          x: sidebarX,
-          borderBottomLeftRadius: sidebarRadius,
-        }}
-        animate={{
-          boxShadow: mobileSidebar ? "-12px 0 32px rgba(0, 0, 0, 0.4)" : "0 0 0 rgba(0, 0, 0, 0)",
-        }}
-        transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
         onPanStart={startSidebarSwipe}
         onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
         onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}

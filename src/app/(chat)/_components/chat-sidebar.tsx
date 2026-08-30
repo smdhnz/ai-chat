@@ -115,7 +115,7 @@ export function ChatSidebar({
       className={`absolute inset-0 transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
       <div className="size-full">
-        <aside className="flex h-full w-[86vw] flex-col bg-sidebar text-sidebar-foreground">
+        <aside className="flex h-full w-[86vw] flex-col overflow-hidden rounded-r-[30px] bg-sidebar text-sidebar-foreground shadow-[12px_0_32px_rgba(0,0,0,0.4)]">
           <div className="shrink-0 px-3.5 pt-[18px] pb-3">
             <button
               type="button"
