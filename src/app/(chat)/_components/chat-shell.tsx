@@ -135,7 +135,12 @@ export function ChatShell() {
     return () => {
       active = false;
       clearTimeout(retry);
-      socket?.close();
+      const closingSocket = socket;
+      if (closingSocket?.readyState === WebSocket.CONNECTING) {
+        closingSocket.onopen = () => closingSocket.close();
+      } else {
+        closingSocket?.close();
+      }
     };
   }, [setData]);
 
