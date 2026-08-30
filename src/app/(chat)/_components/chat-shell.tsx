@@ -216,7 +216,7 @@ export function ChatShell() {
   function selectConversation(item: Conversation) {
     setEditingMessageId(null);
     setPrompt("");
-    router.push(chatUrl(`/chat/${item.id}`, item.temporary === 1));
+    router.replace(chatUrl(`/chat/${item.id}`, item.temporary === 1));
     setMobileSidebar(false);
   }
   function newChat(targetProjectId = "", isTemporary = temporary) {
@@ -225,7 +225,7 @@ export function ChatShell() {
     setConversationId(null);
     setProjectId(targetProjectId);
     setMessages([]);
-    router.push(chatUrl("/", isTemporary));
+    router.replace(chatUrl("/", isTemporary));
     setMobileSidebar(false);
   }
   function toggleTemporary() {
