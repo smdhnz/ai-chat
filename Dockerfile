@@ -3,7 +3,7 @@ FROM oven/bun:1-alpine AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
-COPY tsconfig.json next.config.mjs postcss.config.mjs components.json ./
+COPY tsconfig.json next.config.mjs postcss.config.mjs ./
 COPY src ./src
 COPY public ./public
 RUN bun run build
