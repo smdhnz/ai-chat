@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type MouseEventHandler, useEffect, useState } from "react";
 import { Download, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { NativeDialog } from "@/components/native-dialog";
@@ -22,6 +22,26 @@ export function ImageDialog({
   const [closing, setClosing] = useState(false);
   const [presented, setPresented] = useState(false);
   const visible = open && presented && !closing;
+
+  const shareImage: MouseEventHandler<HTMLAnchorElement> = async (event) => {
+    if (!navigator.share || !navigator.canShare) return;
+
+    event.preventDefault();
+    try {
+      const response = await fetch(src);
+      if (!response.ok) throw new Error(`画像を取得できませんでした: ${response.status}`);
+      const blob = await response.blob();
+      const file = new File([blob], name, { type: blob.type });
+      if (!navigator.canShare({ files: [file] })) {
+        location.assign(downloadUrl);
+        return;
+      }
+      await navigator.share({ files: [file] });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      location.assign(downloadUrl);
+    }
+  };
 
   useEffect(() => {
     if (!open) {
@@ -69,7 +89,8 @@ export function ImageDialog({
             href={downloadUrl}
             download={name}
             className="liquid-glass liquid-glass-control inline-flex h-11 items-center gap-2 rounded-full px-4 text-[13px] font-semibold [&_svg]:size-[18px]"
-            aria-label="画像をダウンロード"
+            aria-label="画像を保存"
+            onClick={shareImage}
           >
             <Download />
             保存
