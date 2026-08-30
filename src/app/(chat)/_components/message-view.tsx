@@ -2,18 +2,10 @@
 
 import { useRef, useState, type ComponentProps } from "react";
 import { motion } from "motion/react";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  Check,
-  Copy,
-  File,
-  LoaderCircle,
-  MoreHorizontal,
-  Pencil,
-  RotateCcw,
-  Sparkles,
-} from "lucide-react";
+import { Check, Copy, File, LoaderCircle, Pencil, RotateCcw, Sparkles } from "lucide-react";
 import { parseDeviceAuth, type DeviceAuth, type FileItem, type Message } from "@/lib/api";
 import { ease } from "@/lib/ui";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
@@ -37,80 +29,78 @@ export function MessageView({
   const collapsible = isUser && content.length > 1200;
   const [expanded, setExpanded] = useState(false);
   return (
-    <motion.article
-      className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}
-      initial={{ opacity: 0, y: 14, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.38, ease }}
-    >
-      <div className={`flex min-w-0 max-w-[87%] flex-col items-start ${isUser ? "items-end" : ""}`}>
-        {isUser && message.files?.length > 0 && <FileBlocks files={message.files} alignEnd />}
-        {hasBody && (
-          <>
-            <div
-              className={`min-w-0 max-w-full text-sm leading-[1.78] [&_a]:text-primary [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-muted [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:pl-5 ${isUser ? "rounded-[20px] bg-[color-mix(in_srgb,var(--primary)_9%,var(--card))] px-4 py-[11px] shadow-[0_6px_20px_#1a1a1e1f]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
-            >
-              {message.skills && message.skills.length > 0 && (
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] text-primary [&_svg]:w-[13px]">
-                  <Sparkles />
-                  {message.skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="rounded-md bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-[7px] py-[3px] text-[10px] text-primary"
-                    >
-                      {skill}
-                    </span>
-                  ))}
+    <ContextMenu.Root>
+      <ContextMenu.Trigger asChild disabled={!isUser || disabled}>
+        <motion.article
+          className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}
+          initial={{ opacity: 0, y: 14, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.38, ease }}
+        >
+          <div
+            className={`flex min-w-0 max-w-[87%] flex-col items-start ${isUser ? "items-end" : ""}`}
+          >
+            {isUser && message.files?.length > 0 && <FileBlocks files={message.files} alignEnd />}
+            {hasBody && (
+              <>
+                <div
+                  className={`min-w-0 max-w-full text-sm leading-[1.78] [&_a]:text-primary [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-muted [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:pl-5 ${isUser ? "rounded-[20px] bg-[color-mix(in_srgb,var(--primary)_9%,var(--card))] px-4 py-[11px] shadow-[0_6px_20px_#1a1a1e1f]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
+                >
+                  {message.skills && message.skills.length > 0 && (
+                    <div className="mb-2 flex items-center gap-1.5 text-[10px] text-primary [&_svg]:w-[13px]">
+                      <Sparkles />
+                      {message.skills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-md bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-[7px] py-[3px] text-[10px] text-primary"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {content}
+                  </ReactMarkdown>
+                  {auth && <AuthCard auth={auth} />}
                 </div>
-              )}
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {content}
-              </ReactMarkdown>
-              {auth && <AuthCard auth={auth} />}
-            </div>
-            {collapsible && (
-              <button
-                type="button"
-                className="mt-[5px] h-auto px-[7px] py-1 text-[10px] text-muted-foreground"
-                aria-expanded={expanded}
-                onClick={() => setExpanded((value) => !value)}
-              >
-                {expanded ? "一部表示に戻す" : "全文を表示"}
-              </button>
+                {collapsible && (
+                  <button
+                    type="button"
+                    className="mt-[5px] h-auto px-[7px] py-1 text-[10px] text-muted-foreground"
+                    aria-expanded={expanded}
+                    onClick={() => setExpanded((value) => !value)}
+                  >
+                    {expanded ? "一部表示に戻す" : "全文を表示"}
+                  </button>
+                )}
+              </>
             )}
-          </>
-        )}
-        {!isUser && message.files?.length > 0 && <FileBlocks files={message.files} />}
-        {isUser && (
-          <details className="relative mt-[3px] self-end">
-            <summary
-              className={`inline-flex size-7 cursor-pointer list-none items-center justify-center rounded-lg text-muted-foreground [&_svg]:size-3.5 ${disabled ? "pointer-events-none opacity-50" : ""}`}
-              aria-label="このメッセージの操作"
+            {!isUser && message.files?.length > 0 && <FileBlocks files={message.files} />}
+          </div>
+        </motion.article>
+      </ContextMenu.Trigger>
+      {isUser && (
+        <ContextMenu.Portal>
+          <ContextMenu.Content className="z-50 min-w-[210px] rounded-[13px] border border-border bg-popover p-1 text-foreground shadow-lg">
+            <ContextMenu.Item
+              className="flex cursor-default items-center gap-2 rounded-[9px] px-2 py-2 text-xs outline-none data-[highlighted]:bg-muted [&_svg]:size-4"
+              onSelect={regenerate}
             >
-              <MoreHorizontal />
-            </summary>
-            <div className="absolute top-full right-0 z-10 flex min-w-[190px] flex-col rounded-[13px] border border-border bg-popover p-1 shadow-lg">
-              <button
-                type="button"
-                className="flex items-center gap-2 rounded-[9px] px-2 py-1.5 text-left text-xs [&_svg]:size-4"
-                onClick={regenerate}
-              >
-                <RotateCcw />
-                このメッセージから再生成
-              </button>
-              <button
-                type="button"
-                className="flex items-center gap-2 rounded-[9px] px-2 py-1.5 text-left text-xs [&_svg]:size-4"
-                onClick={edit}
-              >
-                <Pencil />
-                編集して再生成
-              </button>
-            </div>
-          </details>
-        )}
-      </div>
-    </motion.article>
+              <RotateCcw />
+              このメッセージから再生成
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              className="flex cursor-default items-center gap-2 rounded-[9px] px-2 py-2 text-xs outline-none data-[highlighted]:bg-muted [&_svg]:size-4"
+              onSelect={edit}
+            >
+              <Pencil />
+              編集して再生成
+            </ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      )}
+    </ContextMenu.Root>
   );
 }
 

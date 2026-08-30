@@ -24,7 +24,7 @@
 
 ## UI
 
-- UIはネイティブHTML要素・React・Tailwind CSSで実装し、UIコンポーネントライブラリは追加しない。
+- UIはネイティブHTML要素・React・Tailwind CSSを基本として実装する。
 - スマートフォン向け表示のみを実装し、PC向けレスポンシブ分岐は追加しない。
 - ネイティブの `title` 属性ではなく、画面内テキストまたは `aria-label` で操作を説明する。
 - `window.confirm`・`alert`・`prompt`は使用しない。

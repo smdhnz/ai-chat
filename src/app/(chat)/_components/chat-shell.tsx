@@ -12,7 +12,6 @@ import {
   type Conversation,
   type Message,
   type MessagePage,
-  type Project,
 } from "@/lib/api";
 import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
@@ -23,9 +22,6 @@ import { ProjectIcon } from "@/components/project-icon";
 import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
 import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
-
-type DeleteTarget =
-  { type: "conversation"; item: Conversation } | { type: "project"; item: Project };
 
 export function ChatShell() {
   const router = useRouter();
@@ -47,7 +43,7 @@ export function ChatShell() {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   openConversationRef.current = conversationId;
@@ -213,21 +209,6 @@ export function ChatShell() {
     );
     if (conversationIdFromPath(pathname) === item.id) newChat();
   }
-  async function removeProject(item: Project) {
-    await api(`/api/projects/${item.id}`, { method: "DELETE" });
-    setData((value) =>
-      value
-        ? {
-            ...value,
-            projects: value.projects.filter((project) => project.id !== item.id),
-            conversations: value.conversations.filter(
-              (conversation) => conversation.project_id !== item.id,
-            ),
-          }
-        : value,
-    );
-    if (projectId === item.id) newChat();
-  }
   function appendError(prefix: string, error: unknown) {
     setMessages((value) => [
       ...value,
@@ -359,11 +340,7 @@ export function ChatShell() {
         newChat={newChat}
         selectConversation={selectConversation}
         askDeleteConversation={(item) => {
-          setDeleteTarget({ type: "conversation", item });
-          setDeleteOpen(true);
-        }}
-        askDeleteProject={(item) => {
-          setDeleteTarget({ type: "project", item });
+          setDeleteTarget(item);
           setDeleteOpen(true);
         }}
       />
@@ -371,16 +348,10 @@ export function ChatShell() {
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title={deleteTarget?.type === "project" ? "プロジェクトを削除" : "チャットを削除"}
-        text={
-          deleteTarget?.type === "project"
-            ? `「${deleteTarget.item.name}」と中のチャット・ファイルを削除します。`
-            : `「${deleteTarget?.item.title ?? ""}」と添付ファイルを削除します。`
-        }
+        title="チャットを削除"
+        text={`「${deleteTarget?.title ?? ""}」と添付ファイルを削除します。`}
         onConfirm={async () => {
-          if (!deleteTarget) return;
-          if (deleteTarget.type === "project") await removeProject(deleteTarget.item);
-          else await removeConversation(deleteTarget.item);
+          if (deleteTarget) await removeConversation(deleteTarget);
         }}
       />
 

@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import { ChevronRight, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
-import type { Bootstrap, Conversation, Project } from "@/lib/api";
+import type { Bootstrap, Conversation } from "@/lib/api";
 import { ProjectIcon } from "@/components/project-icon";
 
 const rowButtonClass =
   "flex h-[41px] min-w-0 flex-1 items-center gap-2.5 rounded-[11px] px-[11px] text-left text-xs text-muted-foreground transition duration-200 hover:text-foreground [&>svg]:size-[15px] [&>svg]:shrink-0";
-const rowActionClass =
-  "inline-flex h-[41px] w-[30px] shrink-0 items-center justify-center rounded-[11px] text-muted-foreground hover:text-foreground [&_svg]:size-[15px]";
 const openProjectsKey = "ai-chat:open-projects:v1";
 
 function ConversationRow({
@@ -29,25 +28,32 @@ function ConversationRow({
     <li
       className={`flex items-center rounded-[11px] hover:bg-sidebar-accent ${nested ? "pl-5" : ""} ${active ? "bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-foreground" : ""}`}
     >
-      <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
-        <MessageSquare />
-        <span className="truncate">{item.title}</span>
-        {item.unread === 1 && !active && (
-          <span
-            role="status"
-            aria-label="新しい応答"
-            className="size-[7px] shrink-0 rounded-full bg-primary"
-          />
-        )}
-      </button>
-      <button
-        type="button"
-        className={rowActionClass}
-        aria-label={`${item.title}を削除`}
-        onClick={remove}
-      >
-        <Trash2 />
-      </button>
+      <ContextMenu.Root>
+        <ContextMenu.Trigger asChild>
+          <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
+            <MessageSquare />
+            <span className="truncate">{item.title}</span>
+            {item.unread === 1 && !active && (
+              <span
+                role="status"
+                aria-label="新しい応答"
+                className="size-[7px] shrink-0 rounded-full bg-primary"
+              />
+            )}
+          </button>
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal>
+          <ContextMenu.Content className="z-50 min-w-[150px] rounded-[13px] border border-border bg-popover p-1 text-foreground shadow-lg">
+            <ContextMenu.Item
+              className="flex cursor-default items-center gap-2 rounded-[9px] px-2 py-2 text-xs text-destructive outline-none data-[highlighted]:bg-muted [&_svg]:size-4"
+              onSelect={remove}
+            >
+              <Trash2 />
+              チャットを削除
+            </ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu.Root>
     </li>
   );
 }
@@ -60,7 +66,6 @@ export function ChatSidebar({
   newChat,
   selectConversation,
   askDeleteConversation,
-  askDeleteProject,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -69,7 +74,6 @@ export function ChatSidebar({
   newChat: (projectId?: string) => void;
   selectConversation: (item: Conversation) => void;
   askDeleteConversation: (item: Conversation) => void;
-  askDeleteProject: (item: Project) => void;
 }) {
   const [conversationLimit, setConversationLimit] = useState(10);
   const [projectLimits, setProjectLimits] = useState<Record<string, number>>({});
@@ -143,14 +147,6 @@ export function ChatSidebar({
                         onClick={() => newChat(group.id)}
                       >
                         <Plus />
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-[11px] text-muted-foreground [&_svg]:size-3.5"
-                        aria-label={`${group.name}を削除`}
-                        onClick={() => askDeleteProject(group)}
-                      >
-                        <Trash2 />
                       </button>
                     </div>
                     {projectOpen && (
