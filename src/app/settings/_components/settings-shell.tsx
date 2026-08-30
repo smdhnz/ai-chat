@@ -224,12 +224,12 @@ export function SettingsShell({
               <span className="h-1 w-9 rounded-full bg-muted-foreground/35" />
             </div>
             <div className="relative min-h-0 flex-1 overflow-hidden">
-              <AnimatePresence initial={false} mode="popLayout">
+              <AnimatePresence initial={false}>
                 <motion.div
                   key={viewKey}
-                  initial={{ x: direction > 0 ? "100%" : "-28%", opacity: 0.7 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: direction > 0 ? "-28%" : "100%", opacity: 0.7 }}
+                  initial={{ x: direction > 0 ? "100%" : "-28%" }}
+                  animate={{ x: 0 }}
+                  exit={{ x: direction > 0 ? "-28%" : "100%" }}
                   transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.32, 0.72, 0, 1] }}
                   drag={tab ? "x" : false}
                   dragControls={backDragControls}

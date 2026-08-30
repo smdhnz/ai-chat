@@ -406,6 +406,7 @@ export function ChatShell() {
         <motion.div
           className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
           aria-hidden="true"
+          onTouchStart={(event) => event.preventDefault()}
           onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
           onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
           onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
