@@ -3,16 +3,16 @@
   "short_name": "Chat",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f1ea",
+  "background_color": "#1a1a1e",
   "icons": [
     {
-      "src": "/icon-192.png?v=2",
+      "src": "/icon-192.png?v=4",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png?v=2",
+      "src": "/icon-512.png?v=4",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

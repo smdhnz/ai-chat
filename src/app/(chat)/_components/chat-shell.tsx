@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AnimatePresence,
@@ -472,6 +473,16 @@ export function ChatShell() {
           )}
         </header>
         <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
+          {!conversationId && (
+            <Image
+              src="/favicon.svg?v=3"
+              width={96}
+              height={96}
+              alt=""
+              className="m-auto size-24"
+              unoptimized
+            />
+          )}
           {messages.length > 0 && (
             <div className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]">
               {hasOlderMessages && (
