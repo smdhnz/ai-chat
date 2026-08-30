@@ -169,9 +169,17 @@ export function SettingsShell({
 
   return (
     <>
-      <NativeDialog open={open} onClose={close} label="設定" className="fixed inset-0 size-full">
-        <div
-          className="flex size-full items-end bg-black/45"
+      <NativeDialog
+        open={open}
+        onClose={close}
+        label="設定"
+        className="fixed inset-0 size-full overflow-hidden"
+      >
+        <motion.div
+          initial={false}
+          animate={{ backgroundColor: closing ? "rgb(0 0 0 / 0)" : "rgb(0 0 0 / 0.45)" }}
+          transition={{ duration: reduceMotion ? 0 : 0.2 }}
+          className="flex size-full items-end"
           onClick={(event) => event.target === event.currentTarget && close()}
         >
           <motion.section
@@ -265,7 +273,7 @@ export function SettingsShell({
               </AnimatePresence>
             </div>
           </motion.section>
-        </div>
+        </motion.div>
       </NativeDialog>
 
       <ConfirmDialog

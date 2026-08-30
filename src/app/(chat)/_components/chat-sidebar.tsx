@@ -219,10 +219,7 @@ export function ChatSidebar({
               type="button"
               className={`${iconButtonClass} inline-flex items-center justify-center`}
               aria-label="設定を開く"
-              onClick={() => {
-                onOpenChange(false);
-                openSettings();
-              }}
+              onClick={openSettings}
             >
               <Settings />
             </button>
