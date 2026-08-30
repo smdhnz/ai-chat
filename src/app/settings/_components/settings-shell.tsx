@@ -18,7 +18,6 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ProjectIcon } from "@/components/project-icon";
 import { Editor } from "@/app/settings/_components/settings-editor";
-import { ThemeToggle } from "@/app/settings/_components/theme-toggle";
 
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
 
@@ -138,7 +137,7 @@ export function SettingsShell() {
                 key={item}
                 href={`/settings/${item}`}
                 aria-current={item === tab ? "page" : undefined}
-                className={`inline-flex h-[35px] flex-1 items-center justify-center rounded-[10px] px-[13px] text-[11px] font-semibold transition duration-200 ${item === tab ? "bg-card text-foreground shadow-[0_4px_14px_#27243112]" : "text-muted-foreground"}`}
+                className={`inline-flex h-[35px] flex-1 items-center justify-center rounded-[10px] px-[13px] text-[11px] font-semibold transition duration-200 ${item === tab ? "bg-card text-foreground shadow-[0_4px_14px_#1a1a1e1f]" : "text-muted-foreground"}`}
               >
                 {settingsTabLabels[item]}
               </Link>
@@ -251,11 +250,6 @@ export function SettingsShell() {
                 <>
                   <PanelTitle title="一般" text="回答とアカウントの設定です。" />
                   <div>
-                    <div className={settingFieldClass}>
-                      <span className={settingLabelClass}>テーマ</span>
-                      <ThemeToggle />
-                    </div>
-                    <div className="border-t border-border" />
                     <label className={settingFieldClass} htmlFor="response-language">
                       <span className={settingLabelClass}>回答言語</span>
                       <input
@@ -324,7 +318,7 @@ export function SettingsShell() {
                       <p className="text-[11px] text-muted-foreground">@{data.user.username}</p>
                     </div>
                     <form className="w-full" method="post" action="/logout">
-                      <button className="inline-flex h-[38px] w-full items-center justify-center gap-[7px] rounded-[11px] border border-[color-mix(in_srgb,#de6b76_28%,var(--border))] bg-transparent px-3 text-[10px] text-destructive [&_svg]:size-3.5">
+                      <button className="inline-flex h-[38px] w-full items-center justify-center gap-[7px] rounded-[11px] border border-[color-mix(in_srgb,var(--destructive)_28%,var(--border))] bg-transparent px-3 text-[10px] text-destructive [&_svg]:size-3.5">
                         <LogOut />
                         ログアウト
                       </button>
@@ -338,7 +332,7 @@ export function SettingsShell() {
                     </div>
                     <button
                       type="button"
-                      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[10px] border border-[color-mix(in_srgb,#de6b76_30%,var(--border))] bg-transparent px-2.5 text-[9px] text-destructive [&_svg]:size-[13px]"
+                      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-[10px] border border-[color-mix(in_srgb,var(--destructive)_30%,var(--border))] bg-transparent px-2.5 text-[9px] text-destructive [&_svg]:size-[13px]"
                       onClick={() => askDelete({ type: "data", id: "", name: "すべてのデータ" })}
                     >
                       <Trash2 />
@@ -437,7 +431,7 @@ export function SettingsCard({
   remove: () => void;
 }) {
   return (
-    <article className="flex h-full min-h-[120px] items-start gap-3 rounded-[17px] border border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-[15px] shadow-[0_8px_30px_#302d3a0a]">
+    <article className="flex h-full min-h-[120px] items-start gap-3 rounded-[17px] border border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] p-[15px] shadow-[0_8px_30px_#1a1a1e14]">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-primary [&_svg]:w-4">
         {icon}
       </span>

@@ -86,7 +86,7 @@ export function ConfirmDialog({
             </button>
             <button
               type="button"
-              className={`${buttonClass} gap-1.5 border-[color-mix(in_srgb,#de6b76_35%,var(--border))] bg-[color-mix(in_srgb,#de6b76_10%,transparent)] text-destructive hover:bg-[color-mix(in_srgb,#de6b76_16%,transparent)] [&_svg]:size-3.5`}
+              className={`${buttonClass} gap-1.5 border-[color-mix(in_srgb,var(--destructive)_35%,var(--border))] bg-[color-mix(in_srgb,var(--destructive)_10%,transparent)] text-destructive hover:bg-[color-mix(in_srgb,var(--destructive)_16%,transparent)] [&_svg]:size-3.5`}
               disabled={deleting}
               onClick={() => void confirm()}
             >

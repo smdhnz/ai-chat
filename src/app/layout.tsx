@@ -1,6 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
-import { ThemeProvider } from "@/app/_components/theme-provider";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -23,24 +21,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja" suppressHydrationWarning>
+    <html lang="ja" className="dark">
       <body>
-        <ThemeProvider nonce={nonce}>
-          {children}
-          <Toaster
-            position="bottom-center"
-            toastOptions={{
-              classNames: {
-                toast:
-                  "rounded-[13px] border-border bg-card px-4 py-[11px] text-[11px] shadow-[0_24px_70px_#4c392718] dark:shadow-[0_28px_80px_#100d0966]",
-                icon: "text-primary",
-              },
-            }}
-          />
-        </ThemeProvider>
+        {children}
+        <Toaster
+          position="bottom-center"
+          toastOptions={{
+            classNames: {
+              toast:
+                "rounded-[13px] border-border bg-card px-4 py-[11px] text-[11px] shadow-[0_24px_70px_#1a1a1e1f] dark:shadow-[0_28px_80px_#00000066]",
+              icon: "text-primary",
+            },
+          }}
+        />
       </body>
     </html>
   );

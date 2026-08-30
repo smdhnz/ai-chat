@@ -29,7 +29,7 @@ export function Composer(props: {
   return (
     <footer className="z-5 mx-auto w-[calc(100%-64px)] shrink-0 pb-[max(7px,env(safe-area-inset-bottom))] transition-[width] focus-within:w-[calc(100%-18px)]">
       <form
-        className={`overflow-hidden rounded-[18px] border bg-background shadow-[0_15px_50px_#28253318] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-border"}`}
+        className={`overflow-hidden rounded-[18px] border bg-background shadow-[0_15px_50px_#1a1a1e1f] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-border"}`}
         onSubmit={props.send}
       >
         {props.temporary && (

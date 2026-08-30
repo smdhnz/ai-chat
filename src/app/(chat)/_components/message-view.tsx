@@ -48,7 +48,7 @@ export function MessageView({
         {hasBody && (
           <>
             <div
-              className={`min-w-0 max-w-full text-[13px] leading-[1.78] [&_a]:text-primary [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-muted [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:pl-5 ${isUser ? "rounded-[20px_20px_6px_20px] border border-[color-mix(in_srgb,var(--primary)_16%,var(--border))] bg-[color-mix(in_srgb,var(--primary)_9%,var(--card))] px-4 py-[11px] shadow-[0_6px_20px_#5b403010]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
+              className={`min-w-0 max-w-full text-[13px] leading-[1.78] [&_a]:text-primary [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-muted [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:pl-5 ${isUser ? "rounded-[20px_20px_6px_20px] border border-[color-mix(in_srgb,var(--primary)_16%,var(--border))] bg-[color-mix(in_srgb,var(--primary)_9%,var(--card))] px-4 py-[11px] shadow-[0_6px_20px_#1a1a1e1f]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
             >
               {message.skills && message.skills.length > 0 && (
                 <div className="mb-2 flex items-center gap-1.5 text-[10px] text-primary [&_svg]:w-[13px]">
@@ -165,9 +165,9 @@ const markdownComponents: Components = {
 export function AuthCard({ auth }: { auth: DeviceAuth }) {
   const copy = useCopy();
   return (
-    <div className="mt-[15px] flex flex-col gap-2.5 rounded-[17px] border border-[color-mix(in_srgb,#e4a356_38%,var(--border))] bg-[color-mix(in_srgb,#e4a356_8%,var(--card))] p-[17px]">
+    <div className="mt-[15px] flex flex-col gap-2.5 rounded-[17px] border border-[color-mix(in_srgb,var(--warning)_38%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,var(--card))] p-[17px]">
       <div className="flex items-center gap-[9px]">
-        <LoaderCircle className="size-4 animate-spin text-[#e4a356]" aria-label="認証待ち" />
+        <LoaderCircle className="size-4 animate-spin text-warning" aria-label="認証待ち" />
         <strong>Codexの再認証が必要です</strong>
       </div>
       <a
@@ -204,7 +204,7 @@ export function FileBlocks({ files, alignEnd = false }: { files: FileItem[]; ali
             file.mime.startsWith("image/") && (file.id || file.preview) ? (
               <button
                 key={file.id || file.name}
-                className="shrink-0 cursor-zoom-in rounded-[14px] border-0 bg-transparent p-0 [&_img]:block [&_img]:h-auto [&_img]:max-h-[170px] [&_img]:max-w-[260px] [&_img]:rounded-[14px] [&_img]:border [&_img]:border-border [&_img]:object-cover [&_img]:shadow-[0_24px_70px_#4c392718] dark:[&_img]:shadow-[0_28px_80px_#100d0966]"
+                className="shrink-0 cursor-zoom-in rounded-[14px] border-0 bg-transparent p-0 [&_img]:block [&_img]:h-auto [&_img]:max-h-[170px] [&_img]:max-w-[260px] [&_img]:rounded-[14px] [&_img]:border [&_img]:border-border [&_img]:object-cover [&_img]:shadow-[0_24px_70px_#1a1a1e1f] dark:[&_img]:shadow-[0_28px_80px_#00000066]"
                 onClick={() => setPreview(file)}
                 aria-label={`${file.name}を拡大表示`}
               >

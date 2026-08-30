@@ -6,12 +6,12 @@ export const iconButtonClass =
   "size-10 rounded-[13px] transition duration-200 ease-out [&_svg:not([class*='size-'])]:size-5";
 
 export const projectColorClasses = {
-  clay: "[--project-color:#c15f3c]",
-  blue: "[--project-color:#4d78c8]",
-  green: "[--project-color:#4b8b62]",
-  purple: "[--project-color:#8064b3]",
-  gold: "[--project-color:#b8862f]",
-  rose: "[--project-color:#b85d79]",
+  clay: "[--project-color:#5865f2]",
+  blue: "[--project-color:#3498db]",
+  green: "[--project-color:#23a55a]",
+  purple: "[--project-color:#9b59b6]",
+  gold: "[--project-color:#f0b232]",
+  rose: "[--project-color:#eb459e]",
 } as const;
 
 export const projectIcons = {
