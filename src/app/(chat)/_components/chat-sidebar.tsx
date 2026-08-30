@@ -111,7 +111,6 @@ export function ChatSidebar({
 
   return (
     <div
-      aria-hidden={!open}
       inert={!open ? true : undefined}
       className={`absolute inset-0 transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
