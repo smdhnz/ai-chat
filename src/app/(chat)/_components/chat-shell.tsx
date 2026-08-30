@@ -384,7 +384,7 @@ export function ChatShell() {
       />
 
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-2.5 pt-2.5 before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(to_bottom,rgba(0,0,0,0.78),rgba(0,0,0,0.32)_68%,transparent)] before:[mask-image:linear-gradient(to_bottom,#000_68%,transparent)]">
+        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-2.5 pt-2.5">
           <button
             type="button"
             className={`${iconButtonClass} inline-flex items-center justify-center`}

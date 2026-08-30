@@ -29,7 +29,7 @@ export function Composer(props: {
     "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
 
   return (
-    <footer className="group absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[max(7px,env(safe-area-inset-bottom))] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(to_top,rgba(0,0,0,0.82),rgba(0,0,0,0.3)_72%,transparent)] before:[mask-image:linear-gradient(to_top,#000_72%,transparent)]">
+    <footer className="group absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[max(7px,env(safe-area-inset-bottom))]">
       <form
         className={`relative mx-auto w-[calc(100%-64px)] overflow-hidden rounded-[25px] border bg-[color-mix(in_srgb,var(--background)_44%,transparent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-1px_0_rgba(255,255,255,0.04),0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-[24px] transition-[width] group-focus-within:w-[calc(100%-18px)] ${props.temporary ? "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,var(--border))]" : "border-white/15"}`}
         onSubmit={props.send}
@@ -79,6 +79,7 @@ export function Composer(props: {
         <div className="flex items-end">
           <textarea
             ref={textarea}
+            autoFocus
             className="order-2 block max-h-[180px] min-h-12 w-auto min-w-0 flex-1 resize-none rounded-none border-0 bg-transparent px-2 pt-[11px] pb-2 text-base leading-[1.6] outline-none placeholder:text-muted-foreground"
             value={props.prompt}
             onChange={(event) => props.setPrompt(event.target.value)}
