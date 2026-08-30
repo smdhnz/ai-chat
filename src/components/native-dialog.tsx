@@ -10,6 +10,7 @@ export function NativeDialog({
   className,
   children,
   closeOnBackdrop = true,
+  focusDialog = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -17,20 +18,25 @@ export function NativeDialog({
   className?: string;
   children: ReactNode;
   closeOnBackdrop?: boolean;
+  focusDialog?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
   useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      if (focusDialog) dialog.focus();
+    }
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [focusDialog, open]);
 
   return (
     <dialog
       ref={ref}
       aria-label={label}
+      tabIndex={focusDialog ? -1 : undefined}
       className={cn(
         "m-0 max-h-none max-w-none bg-transparent p-0 text-foreground backdrop:bg-transparent",
         className,

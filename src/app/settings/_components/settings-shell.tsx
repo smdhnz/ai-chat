@@ -78,10 +78,8 @@ export function SettingsShell({
   }, [data]);
 
   useEffect(() => {
-    if (open) {
-      setClosing(false);
-      return;
-    }
+    setClosing(false);
+    if (open) return;
     setTab(null);
     setEditor(null);
   }, [open]);
@@ -166,6 +164,7 @@ export function SettingsShell({
     : tab
       ? settingsTabLabels[tab]
       : "設定";
+  const visible = open && !closing;
 
   return (
     <>
@@ -174,17 +173,20 @@ export function SettingsShell({
         onClose={close}
         label="設定"
         className="fixed inset-0 size-full overflow-hidden"
+        focusDialog
       >
         <motion.div
           initial={false}
-          animate={{ backgroundColor: closing ? "rgb(0 0 0 / 0)" : "rgb(0 0 0 / 0.45)" }}
+          animate={{
+            backgroundColor: visible ? "rgb(0 0 0 / 0.45)" : "rgb(0 0 0 / 0)",
+          }}
           transition={{ duration: reduceMotion ? 0 : 0.2 }}
           className="flex size-full items-end"
           onClick={(event) => event.target === event.currentTarget && close()}
         >
           <motion.section
             initial={{ y: "100%" }}
-            animate={{ y: closing ? "100%" : 0 }}
+            animate={{ y: visible ? 0 : "100%" }}
             transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.32, 0.72, 0, 1] }}
             onAnimationComplete={() => {
               if (!closing) return;
