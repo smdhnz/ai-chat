@@ -37,7 +37,7 @@ export function MessageView({
   const streaming = message.id.startsWith("stream-");
   return (
     <article className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}>
-      <div className={`flex min-w-0 max-w-[87%] flex-col items-start ${isUser ? "items-end" : ""}`}>
+      <div className={`flex min-w-0 max-w-[87%] flex-col ${isUser ? "items-end" : "items-start"}`}>
         {isUser && message.files?.length > 0 && (
           <FileBlocks files={message.files} alignEnd prioritizeImages={prioritizeImages} />
         )}
