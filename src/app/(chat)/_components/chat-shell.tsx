@@ -64,6 +64,7 @@ export function ChatShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   const shellRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
   openConversationRef.current = conversationId;
 
   useEffect(() => {
@@ -73,6 +74,7 @@ export function ChatShell() {
 
     let keyboardOpen = false;
     let frame = 0;
+    let historyAnimation: Animation | undefined;
     const isEditable = (element: Element | null) =>
       (element instanceof HTMLTextAreaElement && !element.readOnly) ||
       (element instanceof HTMLInputElement &&
@@ -84,7 +86,6 @@ export function ChatShell() {
     const reset = () => {
       keyboardOpen = false;
       shell.style.removeProperty("height");
-      shell.style.removeProperty("top");
       shell.style.removeProperty("--composer-bottom-padding");
     };
     const update = () => {
@@ -92,17 +93,27 @@ export function ChatShell() {
         reset();
         return;
       }
+      const messageList = messageListRef.current;
+      const previousTop = messageList?.getBoundingClientRect().top;
+      historyAnimation?.cancel();
+
       const focused = isEditable(document.activeElement);
       const reduced = viewport.height < document.documentElement.clientHeight - 1;
       keyboardOpen = reduced && (focused || keyboardOpen);
-      if (!focused && !keyboardOpen) {
-        reset();
-        return;
+      if (!focused && !keyboardOpen) reset();
+      else {
+        shell.style.height = `${viewport.height}px`;
+        if (keyboardOpen) shell.style.setProperty("--composer-bottom-padding", "15px");
+        else shell.style.removeProperty("--composer-bottom-padding");
       }
-      shell.style.height = `${viewport.height}px`;
-      shell.style.top = `${viewport.offsetTop}px`;
-      if (keyboardOpen) shell.style.setProperty("--composer-bottom-padding", "15px");
-      else shell.style.removeProperty("--composer-bottom-padding");
+
+      if (reduceMotion || !messageList || previousTop === undefined) return;
+      const distance = previousTop - messageList.getBoundingClientRect().top;
+      if (Math.abs(distance) < 1) return;
+      historyAnimation = messageList.animate(
+        [{ transform: `translateY(${distance}px)` }, { transform: "translateY(0)" }],
+        { duration: 260, easing: "cubic-bezier(0.32, 0.72, 0, 1)" },
+      );
     };
     const updateAfterFocus = () => {
       cancelAnimationFrame(frame);
@@ -111,18 +122,17 @@ export function ChatShell() {
 
     update();
     viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
     document.addEventListener("focusin", updateAfterFocus);
     document.addEventListener("focusout", updateAfterFocus);
     return () => {
       cancelAnimationFrame(frame);
+      historyAnimation?.cancel();
       viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
       document.removeEventListener("focusin", updateAfterFocus);
       document.removeEventListener("focusout", updateAfterFocus);
       reset();
     };
-  }, [shellReady]);
+  }, [reduceMotion, shellReady]);
 
   useEffect(() => {
     if (sidebarDragging) return;
@@ -555,39 +565,43 @@ export function ChatShell() {
             />
           )}
           {messages.length > 0 && (
-            <motion.div
-              key={conversationId}
+            <div
+              ref={messageListRef}
               className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]"
-              initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: reduceMotion ? 0 : 0.2 }}
             >
-              {hasOlderMessages && (
-                <button
-                  type="button"
-                  className="mx-auto mb-8 flex h-auto rounded-[10px] border border-border bg-card px-3.5 py-2 text-[11px] text-muted-foreground disabled:opacity-50"
-                  disabled={loadingOlderMessages}
-                  onClick={() => void loadOlderMessages()}
-                >
-                  {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
-                </button>
-              )}
-              {messages.map((message) => (
-                <MessageView
-                  key={message.id}
-                  message={message}
-                  disabled={generating}
-                  draft={editingMessageId === message.id ? prompt : undefined}
-                  regenerate={() => void regenerate(message.id)}
-                  edit={() => {
-                    setEditingMessageId(message.id);
-                    setPrompt(message.content);
-                    setFiles([]);
-                  }}
-                />
-              ))}
-              {generating && <Thinking />}
-            </motion.div>
+              <motion.div
+                key={conversationId}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2 }}
+              >
+                {hasOlderMessages && (
+                  <button
+                    type="button"
+                    className="mx-auto mb-8 flex h-auto rounded-[10px] border border-border bg-card px-3.5 py-2 text-[11px] text-muted-foreground disabled:opacity-50"
+                    disabled={loadingOlderMessages}
+                    onClick={() => void loadOlderMessages()}
+                  >
+                    {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
+                  </button>
+                )}
+                {messages.map((message) => (
+                  <MessageView
+                    key={message.id}
+                    message={message}
+                    disabled={generating}
+                    draft={editingMessageId === message.id ? prompt : undefined}
+                    regenerate={() => void regenerate(message.id)}
+                    edit={() => {
+                      setEditingMessageId(message.id);
+                      setPrompt(message.content);
+                      setFiles([]);
+                    }}
+                  />
+                ))}
+                {generating && <Thinking />}
+              </motion.div>
+            </div>
           )}
         </div>
         <Composer

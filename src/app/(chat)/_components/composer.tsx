@@ -5,6 +5,15 @@ import { ArrowUp, Image, Pencil, Square, TimerReset, X } from "lucide-react";
 
 const isSupportedImage = (file: File) => /^image\/(png|jpeg|webp|gif)$/i.test(file.type);
 
+function focusWithoutViewportScroll(element: HTMLTextAreaElement) {
+  const transform = element.style.transform;
+  element.style.transform = "translateY(-2000px)";
+  element.focus({ preventScroll: true });
+  requestAnimationFrame(() => {
+    element.style.transform = transform;
+  });
+}
+
 function ImagePreview({ file, remove }: { file: File; remove: () => void }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -52,7 +61,7 @@ export function Composer(props: {
     element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
   }, [props.prompt]);
   useEffect(() => {
-    if (props.editing) textarea.current?.focus();
+    if (props.editing && textarea.current) focusWithoutViewportScroll(textarea.current);
   }, [props.editing]);
   const sendButtonClass =
     "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
@@ -100,6 +109,11 @@ export function Composer(props: {
             ref={textarea}
             className="order-2 block max-h-[180px] min-h-12 w-auto min-w-0 flex-1 resize-none rounded-none border-0 bg-transparent px-2 pt-[11px] pb-2 text-base leading-[1.6] outline-none placeholder:text-muted-foreground"
             value={props.prompt}
+            onTouchEnd={(event) => {
+              if (document.activeElement === event.currentTarget) return;
+              event.preventDefault();
+              focusWithoutViewportScroll(event.currentTarget);
+            }}
             onChange={(event) => props.setPrompt(event.target.value)}
             onPaste={(event) => {
               if (props.editing) return;
