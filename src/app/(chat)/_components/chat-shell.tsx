@@ -446,7 +446,7 @@ export function ChatShell() {
             <Menu />
           </button>
           {project && (
-            <div className="flex h-10 min-w-0 max-w-[280px] items-center gap-2 px-2 text-[13px] font-semibold">
+            <div className="absolute left-1/2 flex h-10 min-w-0 max-w-[calc(100%-132px)] -translate-x-1/2 items-center gap-2 px-2 text-[13px] font-semibold">
               <ProjectIcon project={project} className="size-[26px]" />
               <span className="truncate">{project.name}</span>
             </div>
