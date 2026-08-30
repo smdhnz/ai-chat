@@ -64,7 +64,7 @@ export function Composer(props: {
     if (props.editing && textarea.current) focusWithoutViewportScroll(textarea.current);
   }, [props.editing]);
   const sendButtonClass =
-    "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,var(--primary)_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
+    "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,#9f7ab8_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
 
   return (
     <footer className="absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[var(--composer-bottom-padding,max(15px,env(safe-area-inset-bottom)))]">
@@ -83,7 +83,7 @@ export function Composer(props: {
             <Pencil />
             選択したメッセージを編集中
             <button
-              className="ml-auto h-auto p-0 text-[10px] font-normal text-muted-foreground"
+              className="ml-auto h-auto p-0 text-[10px] font-normal text-primary"
               type="button"
               onClick={props.cancelEditing}
             >

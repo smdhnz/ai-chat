@@ -395,7 +395,7 @@ function SettingsLink({
       className="flex min-h-[54px] w-full items-center gap-3 border-b border-border px-3.5 text-left last:border-b-0"
       onClick={onClick}
     >
-      <span className="flex size-8 items-center justify-center rounded-[8px] bg-primary text-primary-foreground [&_svg]:size-[17px]">
+      <span className="flex size-8 items-center justify-center rounded-[8px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] text-primary-foreground [&_svg]:size-[17px]">
         <Icon />
       </span>
       <span className="flex-1 text-[14px]">{label}</span>
@@ -612,7 +612,7 @@ function DetailLayout({
         {onAction && (
           <button
             type="button"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-primary px-3 text-[11px] font-bold text-primary-foreground [&_svg]:size-4"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-3 text-[11px] font-bold text-primary-foreground [&_svg]:size-4"
             onClick={onAction}
           >
             <Plus />
@@ -646,7 +646,7 @@ function SettingsCard({
 }) {
   return (
     <article className="flex min-h-[78px] items-center gap-3 border-b border-border p-3.5 last:border-b-0">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[color-mix(in_srgb,var(--primary)_14%,var(--card))] text-primary [&_svg]:size-4">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] text-primary-foreground [&_svg]:size-4">
         {icon}
       </span>
       <button type="button" className="min-w-0 flex-1 text-left" onClick={edit}>

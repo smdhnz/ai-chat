@@ -6,7 +6,7 @@ export const iconButtonClass =
   "liquid-glass liquid-glass-control size-11 rounded-full [&_svg:not([class*='size-'])]:size-5";
 
 export const projectColorClasses = {
-  clay: "[--project-color:#5865f2]",
+  clay: "[--project-color:#b48bbf]",
   blue: "[--project-color:#3498db]",
   green: "[--project-color:#23a55a]",
   purple: "[--project-color:#9b59b6]",

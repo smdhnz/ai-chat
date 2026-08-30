@@ -153,7 +153,7 @@ export function Editor({
           キャンセル
         </button>
         <button
-          className="inline-flex h-[39px] items-center gap-1.5 rounded-xl bg-primary px-[15px] text-[11px] font-bold text-primary-foreground shadow-[0_8px_20px_color-mix(in_srgb,var(--primary)_25%,transparent)] disabled:opacity-50"
+          className="inline-flex h-[39px] items-center gap-1.5 rounded-xl bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-[15px] text-[11px] font-bold text-primary-foreground shadow-[0_8px_20px_color-mix(in_srgb,#9f7ab8_25%,transparent)] disabled:opacity-50"
           disabled={saving}
         >
           {saving && <LoaderCircle className="size-4 animate-spin" />}

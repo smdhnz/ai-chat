@@ -286,7 +286,7 @@ export function FileBlocks({
       <div
         className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
       >
-        <div className="flex w-max flex-nowrap gap-[9px]">
+        <div className="flex w-max flex-nowrap items-start gap-[9px]">
           {files.map((file) =>
             file.mime.startsWith("image/") && (file.id || file.preview) ? (
               <ChatImage
