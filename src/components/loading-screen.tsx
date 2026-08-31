@@ -1,9 +1,9 @@
-import { LoaderCircle } from "lucide-react";
+import { LoadingWave } from "@/components/loading-wave";
 
 export function LoadingScreen() {
   return (
     <div className="flex h-svh items-center justify-center">
-      <LoaderCircle className="size-5 animate-spin text-primary" aria-label="読み込み中" />
+      <LoadingWave className="text-2xl text-primary" label="読み込み中" />
     </div>
   );
 }

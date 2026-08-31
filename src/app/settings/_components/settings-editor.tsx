@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoadingWave } from "@/components/loading-wave";
 import { api, type Project, type Skill } from "@/lib/api";
 import { projectColorClasses, projectIcons } from "@/lib/ui";
 import { projectColors } from "@/app/settings/_libs/settings";
@@ -156,7 +156,7 @@ export function Editor({
           className="inline-flex h-[39px] items-center gap-1.5 rounded-xl bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-[15px] text-[11px] font-bold text-primary-foreground shadow-[0_8px_20px_color-mix(in_srgb,#9f7ab8_25%,transparent)] disabled:opacity-50"
           disabled={saving}
         >
-          {saving && <LoaderCircle className="size-4 animate-spin" />}
+          {saving && <LoadingWave className="text-sm" />}
           {saving ? "保存中" : "保存"}
         </button>
       </footer>

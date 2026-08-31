@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleAlert, LoaderCircle, Trash2 } from "lucide-react";
+import { CircleAlert, Trash2 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { NativeDialog } from "@/components/native-dialog";
+import { LoadingWave } from "@/components/loading-wave";
 
 export const drawerPanelClass = "rounded-t-[25px] border-border bg-card";
 export const dialogHeaderClass =
@@ -123,7 +124,7 @@ export function ConfirmDialog({
                 disabled={deleting}
                 onClick={() => void confirm()}
               >
-                {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+                {deleting ? <LoadingWave className="text-sm" /> : <Trash2 />}
                 {deleting ? "削除中" : "削除"}
               </button>
             </footer>

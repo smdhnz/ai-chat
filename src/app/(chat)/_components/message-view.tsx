@@ -11,7 +11,6 @@ import {
   Copy,
   File,
   ImageIcon,
-  LoaderCircle,
   Pencil,
   RotateCcw,
   Search,
@@ -27,6 +26,7 @@ import {
 } from "@/lib/api";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
 import { ImageDialog } from "@/components/image-dialog";
+import { LoadingWave } from "@/components/loading-wave";
 
 export function MessageView({
   message,
@@ -149,7 +149,7 @@ function ActivityPanel({
         onClick={() => setExpanded((value) => !value)}
       >
         {streaming && latest && latest.type !== "reasoning" ? (
-          <LoaderCircle className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          <LoadingWave className="shrink-0 text-sm" />
         ) : (
           <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
         )}
@@ -316,7 +316,7 @@ export function AuthCard({ auth }: { auth: DeviceAuth }) {
   return (
     <div className="mt-[15px] flex flex-col gap-2.5 rounded-[17px] border border-[color-mix(in_srgb,var(--warning)_38%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,var(--card))] p-[17px]">
       <div className="flex items-center gap-[9px]">
-        <LoaderCircle className="size-4 animate-spin text-warning" aria-label="認証待ち" />
+        <LoadingWave className="text-base text-warning" label="認証待ち" />
         <strong>Codexの再認証が必要です</strong>
       </div>
       <a
@@ -426,7 +426,7 @@ export function Thinking() {
   return (
     <motion.div className="mb-6 flex gap-3.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <div className="flex h-[30px] items-center">
-        <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-label="生成中" />
+        <LoadingWave className="text-lg text-muted-foreground" label="生成中" />
       </div>
     </motion.div>
   );

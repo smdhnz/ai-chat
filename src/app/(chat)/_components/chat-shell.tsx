@@ -613,6 +613,7 @@ export function ChatShell() {
               height={96}
               alt=""
               className="m-auto size-24"
+              loading="eager"
               unoptimized
             />
           )}
