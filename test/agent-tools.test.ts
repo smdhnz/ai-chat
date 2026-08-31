@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
-import { createDatabase } from "../src/database";
+import { createDatabase } from "../src/api/database";
 import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -10,8 +10,8 @@ import {
   appendLegacyMessage,
   decodeStoredEntry,
   hydrateStoredEntry,
-} from "../src/agent-messages";
-import { createAgentTools } from "../src/agent-tools";
+} from "../src/api/agent-messages";
+import { createAgentTools } from "../src/api/agent-tools";
 
 const directories: string[] = [];
 const png = Buffer.from("89504e470d0a1a0a", "hex");

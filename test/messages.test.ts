@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { regenerationIndex } from "../src/messages";
+import { regenerationIndex } from "../src/api/messages";
 
 describe("regenerationIndex", () => {
   test("未指定時は最後のuser messageを再生成対象にする", () => {

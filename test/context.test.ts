@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
-import { createDatabase, type Database } from "../src/database";
+import { createDatabase, type Database } from "../src/api/database";
 import type { AssistantMessage, Message, Usage } from "@earendil-works/pi-ai";
 import {
   compactConversation,
@@ -9,8 +9,8 @@ import {
   hydrateActiveContext,
   serializeCompactionInput,
   shouldCompact,
-} from "../src/context";
-import type { ConversationEntry } from "../src/agent-messages";
+} from "../src/api/context";
+import type { ConversationEntry } from "../src/api/agent-messages";
 
 const usage: Usage = {
   input: 80,

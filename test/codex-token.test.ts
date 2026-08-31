@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getCodexAccountId } from "../src/codex-token";
+import { getCodexAccountId } from "../src/api/codex-token";
 
 const token = (payload: unknown) =>
   `header.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`;

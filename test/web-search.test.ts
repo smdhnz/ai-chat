@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseWebSearchResponse } from "../src/web-search";
+import { parseWebSearchResponse } from "../src/api/web-search";
 
 describe("parseWebSearchResponse", () => {
   test("Exa MCPのSSE結果から本文を取り出す", () => {

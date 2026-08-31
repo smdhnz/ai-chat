@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
-import { createDatabase, type Database } from "../src/database";
+import { createDatabase, type Database } from "../src/api/database";
 import type { AgentTool, StreamFn } from "@earendil-works/pi-agent-core";
 import {
   createAssistantMessageEventStream,
@@ -8,14 +8,14 @@ import {
   type Model,
   type Usage,
 } from "@earendil-works/pi-ai";
-import { ConversationRunner, publicReasoning, type ChatEventEnvelope } from "../src/agent";
+import { ConversationRunner, publicReasoning, type ChatEventEnvelope } from "../src/api/agent";
 import {
   appendLegacyMessage,
   decodeStoredEntry,
   hydrateConversationEntries,
-} from "../src/agent-messages";
-import { createAgentTools, type ToolContext } from "../src/agent-tools";
-import type { SummarizeConversation } from "../src/context";
+} from "../src/api/agent-messages";
+import { createAgentTools, type ToolContext } from "../src/api/agent-tools";
+import type { SummarizeConversation } from "../src/api/context";
 
 const usage: Usage = {
   input: 3,

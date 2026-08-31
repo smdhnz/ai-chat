@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
-import { createDatabase, type Database } from "../src/database";
+import { createDatabase, type Database } from "../src/api/database";
 import type { Message } from "@earendil-works/pi-ai";
 import {
   allConversationFileIds,
@@ -13,7 +13,7 @@ import {
   pagePublicMessages,
   rewindConversation,
   validateToolResultLinks,
-} from "../src/agent-messages";
+} from "../src/api/agent-messages";
 
 function database() {
   const db = createDatabase(new SQLiteDatabase(":memory:"));

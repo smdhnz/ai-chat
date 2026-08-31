@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseThinkingClassification } from "../src/thinking-classifier";
+import { parseThinkingClassification } from "../src/api/thinking-classifier";
 
 describe("parseThinkingClassification", () => {
   test("thinkingと初回titleだけを受け入れる", () => {

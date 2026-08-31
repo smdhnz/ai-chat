@@ -6,8 +6,8 @@ import {
   resolveAiSettings,
   resolveRunThinking,
   resolveThinkingLevel,
-} from "../src/ai";
-import { config } from "../src/config";
+} from "../src/api/ai";
+import { config } from "../src/api/config";
 
 const model: Model<"openai-responses"> = {
   id: "fake",

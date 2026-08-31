@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
-import { createDatabase } from "../src/database";
-import { BASE_SYSTEM_PROMPT, buildSystemPrompt } from "../src/prompt";
+import { createDatabase } from "../src/api/database";
+import { BASE_SYSTEM_PROMPT, buildSystemPrompt } from "../src/api/prompt";
 
 function fixture() {
   const db = createDatabase(new SQLiteDatabase(":memory:"));

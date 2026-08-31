@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { utils, write } from "xlsx";
-import { attachmentText } from "../src/attachments";
+import { attachmentText } from "../src/api/attachments";
 
 const directory = await mkdtemp(join(tmpdir(), "ai-chat-attachments-"));
 afterAll(() => rm(directory, { recursive: true, force: true }));
