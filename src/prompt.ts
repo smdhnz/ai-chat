@@ -1,6 +1,8 @@
-import type { Database } from "bun:sqlite";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import type { Database } from "./database";
 import { allConversationFileIds } from "./agent-messages";
 import { availableSkillCatalog } from "./agent-tools";
+import { conversations, files, projects } from "./schema";
 
 export const BASE_SYSTEM_PROMPT = `You are a general-purpose conversational assistant in a private web chat.
 
@@ -111,12 +113,14 @@ export function buildSystemPrompt(
   date = new Date(),
 ): string {
   const conversation = database
-    .query(
-      `SELECT p.system_prompt FROM conversations c
-       LEFT JOIN projects p ON p.id=c.project_id AND p.user_id=c.user_id
-       WHERE c.id=? AND c.user_id=?`,
+    .select({ system_prompt: projects.system_prompt })
+    .from(conversations)
+    .leftJoin(
+      projects,
+      and(eq(projects.id, conversations.project_id), eq(projects.user_id, conversations.user_id)),
     )
-    .get(conversationId, userId) as { system_prompt: string | null } | null;
+    .where(and(eq(conversations.id, conversationId), eq(conversations.user_id, userId)))
+    .get();
   if (!conversation) throw new Error("conversation not found");
 
   const projectInstructions = conversation.system_prompt
@@ -134,18 +138,19 @@ export function buildSystemPrompt(
     "</available_skills>",
   ].join("\n");
   const imageIds = allConversationFileIds(database, conversationId);
-  const files = imageIds.length
-    ? (database
-        .query(
-          `SELECT id,name,source FROM files WHERE user_id=?
-           AND id IN (${imageIds.map(() => "?").join(",")}) ORDER BY created_at DESC LIMIT 20`,
-        )
-        .all(userId, ...imageIds) as { id: string; name: string; source: string }[])
+  const imageFiles = imageIds.length
+    ? database
+        .select({ id: files.id, name: files.name, source: files.source })
+        .from(files)
+        .where(and(eq(files.user_id, userId), inArray(files.id, imageIds)))
+        .orderBy(desc(files.created_at))
+        .limit(20)
+        .all()
     : [];
-  const imageManifest = files.length
+  const imageManifest = imageFiles.length
     ? [
         "<conversation_images>",
-        ...files.map(
+        ...imageFiles.map(
           (file) =>
             `  <image id="${xml(file.id)}" source="${xml(file.source)}" name="${xml(file.name)}" />`,
         ),

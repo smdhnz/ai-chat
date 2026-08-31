@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { Database as SQLiteDatabase } from "bun:sqlite";
+import { createDatabase } from "../src/database";
 import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -22,8 +23,8 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "ai-chat-tools-"));
   directories.push(root);
-  const db = new Database(":memory:");
-  db.exec(`
+  const db = createDatabase(new SQLiteDatabase(":memory:"));
+  db.$client.exec(`
     PRAGMA foreign_keys=ON;
     CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id));
@@ -56,10 +57,12 @@ async function fixture() {
     content: "start",
     createdAt: "2025-01-01T00:00:00.000Z",
   });
-  db.query(
-    `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
+  db.$client
+    .query(
+      `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
      VALUES('run','conversation-1','user-entry','running','fake','low','low','2025-01-01T00:00:00.000Z')`,
-  ).run();
+    )
+    .run();
   return { db, root };
 }
 
@@ -110,19 +113,21 @@ describe("custom tool executor", () => {
       ["disabled", "user-1", "disabled", 0],
       ["foreign", "user-2", "foreign", 1],
     ] as const)
-      db.query(
-        `INSERT INTO skills(id,user_id,name,description,instructions,enabled,created_at,updated_at)
+      db.$client
+        .query(
+          `INSERT INTO skills(id,user_id,name,description,instructions,enabled,created_at,updated_at)
          VALUES(?,?,?,?,?,?,?,?)`,
-      ).run(
-        id,
-        userId,
-        name,
-        "description",
-        `private instructions for ${name}`,
-        enabled,
-        "2025-01-01T00:00:00.000Z",
-        "2025-01-01T00:00:00.000Z",
-      );
+        )
+        .run(
+          id,
+          userId,
+          name,
+          "description",
+          `private instructions for ${name}`,
+          enabled,
+          "2025-01-01T00:00:00.000Z",
+          "2025-01-01T00:00:00.000Z",
+        );
     const load = tool(
       createAgentTools(
         { userId: "user-1", conversationId: "conversation-1", runId: "run" },
@@ -143,18 +148,20 @@ describe("custom tool executor", () => {
     const { db, root } = await fixture();
     const path = join(root, "image.png");
     await writeFile(path, png);
-    db.query(
-      "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(
-      "other-conversation",
-      "user-1",
-      "image.png",
-      path,
-      "image/png",
-      png.length,
-      "upload",
-      "2025-01-01T00:00:00.000Z",
-    );
+    db.$client
+      .query(
+        "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        "other-conversation",
+        "user-1",
+        "image.png",
+        path,
+        "image/png",
+        png.length,
+        "upload",
+        "2025-01-01T00:00:00.000Z",
+      );
     appendLegacyMessage(db, {
       id: "other-entry",
       conversationId: "conversation-2",
@@ -174,18 +181,20 @@ describe("custom tool executor", () => {
       "not associated",
     );
 
-    db.query(
-      "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(
-      "wrong-mime",
-      "user-1",
-      "image.jpg",
-      path,
-      "image/jpeg",
-      png.length,
-      "upload",
-      "2025-01-01T00:00:00.000Z",
-    );
+    db.$client
+      .query(
+        "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        "wrong-mime",
+        "user-1",
+        "image.jpg",
+        path,
+        "image/jpeg",
+        png.length,
+        "upload",
+        "2025-01-01T00:00:00.000Z",
+      );
     appendLegacyMessage(db, {
       id: "mime-entry",
       conversationId: "conversation-1",
@@ -218,12 +227,14 @@ describe("custom tool executor", () => {
       file: { id: "generated-file", source: "generated" },
       operation: "generation",
     });
-    const generatedRow = db.query("SELECT path FROM files WHERE id='generated-file'").get() as {
+    const generatedRow = db.$client
+      .query("SELECT path FROM files WHERE id='generated-file'")
+      .get() as {
       path: string;
     };
     const stablePath = join(root, "generated.png");
     await rename(generatedRow.path, stablePath);
-    db.query("UPDATE files SET path=? WHERE id='generated-file'").run(stablePath);
+    db.$client.query("UPDATE files SET path=? WHERE id='generated-file'").run(stablePath);
     const message: ToolResultMessage = {
       role: "toolResult",
       toolCallId: "generate",

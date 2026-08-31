@@ -1,4 +1,5 @@
-import type { Database } from "bun:sqlite";
+import { eq, sql } from "drizzle-orm";
+import type { Database } from "./database";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Context, Message, Usage } from "@earendil-works/pi-ai";
 import {
@@ -10,6 +11,7 @@ import {
   type StoredContent,
 } from "./agent-messages";
 import { conversationSummaryMessage } from "./prompt";
+import { conversationEntries, conversations, files } from "./schema";
 
 export const COMPACTION_RESERVE_TOKENS = 16_384;
 export const COMPACTION_KEEP_RECENT_TOKENS = 20_000;
@@ -176,34 +178,32 @@ export async function compactConversation(input: {
     createdAt,
   };
   try {
-    input.database.transaction(() => {
-      const sequence = (
-        input.database
-          .query(
-            "SELECT COALESCE(MAX(sequence),0)+1 AS sequence FROM conversation_entries WHERE conversation_id=?",
-          )
-          .get(input.conversationId) as { sequence: number }
-      ).sequence;
-      input.database
-        .query(
-          `INSERT INTO conversation_entries(id,conversation_id,run_id,sequence,kind,payload_json,created_at)
-           VALUES(?,?,?,?,?,?,?)`,
-        )
-        .run(
-          (input.id ?? (() => crypto.randomUUID()))(),
-          input.conversationId,
-          input.runId,
+    input.database.transaction((tx) => {
+      const sequence = tx
+        .select({ sequence: sql<number>`coalesce(max(${conversationEntries.sequence}), 0) + 1` })
+        .from(conversationEntries)
+        .where(eq(conversationEntries.conversation_id, input.conversationId))
+        .get()!.sequence;
+      tx.insert(conversationEntries)
+        .values({
+          id: (input.id ?? (() => crypto.randomUUID()))(),
+          conversation_id: input.conversationId,
+          run_id: input.runId,
           sequence,
-          "compaction",
-          JSON.stringify(checkpoint),
-          createdAt,
-        );
-      input.database
-        .query(
-          "UPDATE conversations SET context_summary=?,compacted_through_id=?,context_tokens=? WHERE id=?",
-        )
-        .run(summary, summarizedEntries.at(-1)?.id ?? null, tokensBefore, input.conversationId);
-    })();
+          kind: "compaction",
+          payload_json: JSON.stringify(checkpoint),
+          created_at: createdAt,
+        })
+        .run();
+      tx.update(conversations)
+        .set({
+          context_summary: summary,
+          compacted_through_id: summarizedEntries.at(-1)?.id ?? null,
+          context_tokens: tokensBefore,
+        })
+        .where(eq(conversations.id, input.conversationId))
+        .run();
+    });
   } catch (error) {
     throw new CompactionCheckpointError(
       `compaction checkpoint persistence failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -346,10 +346,11 @@ function imageReference(
   database: Database,
   block: Extract<StoredContent, { type: "imageRef" }>,
 ): string {
-  const file = database.query("SELECT name,source FROM files WHERE id=?").get(block.fileId) as {
-    name: string;
-    source: string;
-  } | null;
+  const file = database
+    .select({ name: files.name, source: files.source })
+    .from(files)
+    .where(eq(files.id, block.fileId))
+    .get();
   return `[Image fileId=${block.fileId} name=${file?.name ?? "unknown"} source=${file?.source ?? "unknown"}]`;
 }
 

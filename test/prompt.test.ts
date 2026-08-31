@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { Database as SQLiteDatabase } from "bun:sqlite";
+import { createDatabase } from "../src/database";
 import { BASE_SYSTEM_PROMPT, buildSystemPrompt } from "../src/prompt";
 
 function fixture() {
-  const db = new Database(":memory:");
-  db.exec(`
+  const db = createDatabase(new SQLiteDatabase(":memory:"));
+  db.$client.exec(`
     CREATE TABLE projects (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, system_prompt TEXT NOT NULL);
     CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT);
     CREATE TABLE skills (
@@ -34,37 +35,43 @@ function fixture() {
   for (let index = 0; index < 21; index++) {
     const id = `image-${index}`;
     refs.push({ type: "imageRef", fileId: id, mimeType: "image/png" });
-    db.query("INSERT INTO files VALUES(?,?,?,?,?,?,?,?)").run(
-      id,
-      "user-1",
-      `${id}.png`,
-      `/secret/${id}.png`,
+    db.$client
+      .query("INSERT INTO files VALUES(?,?,?,?,?,?,?,?)")
+      .run(
+        id,
+        "user-1",
+        `${id}.png`,
+        `/secret/${id}.png`,
+        "image/png",
+        1,
+        "upload",
+        `2025-01-${String(index + 1).padStart(2, "0")}`,
+      );
+  }
+  refs.push({ type: "imageRef", fileId: "foreign-image", mimeType: "image/png" });
+  db.$client
+    .query("INSERT INTO files VALUES(?,?,?,?,?,?,?,?)")
+    .run(
+      "foreign-image",
+      "user-2",
+      "foreign.png",
+      "/secret/foreign.png",
       "image/png",
       1,
       "upload",
-      `2025-01-${String(index + 1).padStart(2, "0")}`,
+      "2025-01-31",
     );
-  }
-  refs.push({ type: "imageRef", fileId: "foreign-image", mimeType: "image/png" });
-  db.query("INSERT INTO files VALUES(?,?,?,?,?,?,?,?)").run(
-    "foreign-image",
-    "user-2",
-    "foreign.png",
-    "/secret/foreign.png",
-    "image/png",
-    1,
-    "upload",
-    "2025-01-31",
-  );
-  db.query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)").run(
-    "entry",
-    "conversation-1",
-    null,
-    1,
-    "user_message",
-    JSON.stringify({ role: "user", content: refs }),
-    "2025-01-31",
-  );
+  db.$client
+    .query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)")
+    .run(
+      "entry",
+      "conversation-1",
+      null,
+      1,
+      "user_message",
+      JSON.stringify({ role: "user", content: refs }),
+      "2025-01-31",
+    );
   return db;
 }
 

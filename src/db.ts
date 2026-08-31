@@ -1,13 +1,16 @@
-import { Database } from "bun:sqlite";
+import { Database as SQLiteDatabase } from "bun:sqlite";
+import { eq, inArray, lt } from "drizzle-orm";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { migrateCanonicalTranscript } from "./agent-messages";
 import { config } from "./config";
+import { createDatabase } from "./database";
+import { conversations, oauthStates, runs, sessions } from "./schema";
 
 mkdirSync(config.dataDir, { recursive: true });
-export const db = new Database(join(config.dataDir, "chat.sqlite"), { create: true });
-db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-db.exec(`
+const sqlite = new SQLiteDatabase(join(config.dataDir, "chat.sqlite"), { create: true });
+sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+sqlite.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, username TEXT NOT NULL, display_name TEXT NOT NULL,
   avatar TEXT, language TEXT NOT NULL DEFAULT 'Japanese', ctrl_enter_send INTEGER NOT NULL DEFAULT 0,
@@ -55,15 +58,9 @@ CREATE TABLE IF NOT EXISTS runs (
   conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   user_entry_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('queued','running','completed','stopped','failed')),
-  model TEXT NOT NULL,
-  requested_thinking TEXT NOT NULL,
-  resolved_thinking TEXT NOT NULL,
-  turn_count INTEGER NOT NULL DEFAULT 0,
-  context_tokens INTEGER NOT NULL DEFAULT 0,
-  error TEXT,
-  started_at TEXT,
-  finished_at TEXT,
-  created_at TEXT NOT NULL
+  model TEXT NOT NULL, requested_thinking TEXT NOT NULL, resolved_thinking TEXT NOT NULL,
+  turn_count INTEGER NOT NULL DEFAULT 0, context_tokens INTEGER NOT NULL DEFAULT 0,
+  error TEXT, started_at TEXT, finished_at TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS conversation_entries (
   id TEXT PRIMARY KEY,
@@ -71,8 +68,7 @@ CREATE TABLE IF NOT EXISTS conversation_entries (
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   sequence INTEGER NOT NULL,
   kind TEXT NOT NULL CHECK(kind IN ('user_message','assistant_message','tool_result','compaction','activity')),
-  payload_json TEXT NOT NULL,
-  created_at TEXT NOT NULL,
+  payload_json TEXT NOT NULL, created_at TEXT NOT NULL,
   UNIQUE(conversation_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS conversations_user_updated ON conversations(user_id, updated_at DESC);
@@ -84,44 +80,50 @@ CREATE INDEX IF NOT EXISTS files_user_created ON files(user_id, created_at DESC)
 
 const columns = (table: string) =>
   new Set(
-    (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+    (sqlite.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
       (column) => column.name,
     ),
   );
 const userColumns = columns("users");
 if (!userColumns.has("language"))
-  db.exec("ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese'");
+  sqlite.exec("ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese'");
 if (!userColumns.has("ctrl_enter_send"))
-  db.exec("ALTER TABLE users ADD COLUMN ctrl_enter_send INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec("ALTER TABLE users ADD COLUMN ctrl_enter_send INTEGER NOT NULL DEFAULT 0");
 if (!userColumns.has("thinking_level"))
-  db.exec("ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low'");
+  sqlite.exec("ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low'");
 const projectColumns = columns("projects");
-if (projectColumns.has("icon")) db.exec("ALTER TABLE projects DROP COLUMN icon");
-if (projectColumns.has("color")) db.exec("ALTER TABLE projects DROP COLUMN color");
+if (projectColumns.has("icon")) sqlite.exec("ALTER TABLE projects DROP COLUMN icon");
+if (projectColumns.has("color")) sqlite.exec("ALTER TABLE projects DROP COLUMN color");
 const conversationColumns = columns("conversations");
 if (!conversationColumns.has("context_summary"))
-  db.exec("ALTER TABLE conversations ADD COLUMN context_summary TEXT NOT NULL DEFAULT ''");
+  sqlite.exec("ALTER TABLE conversations ADD COLUMN context_summary TEXT NOT NULL DEFAULT ''");
 if (!conversationColumns.has("compacted_through_id"))
-  db.exec("ALTER TABLE conversations ADD COLUMN compacted_through_id TEXT");
+  sqlite.exec("ALTER TABLE conversations ADD COLUMN compacted_through_id TEXT");
 if (!conversationColumns.has("context_tokens"))
-  db.exec("ALTER TABLE conversations ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec("ALTER TABLE conversations ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0");
 if (!conversationColumns.has("temporary"))
-  db.exec("ALTER TABLE conversations ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0");
+  sqlite.exec("ALTER TABLE conversations ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0");
 if (!conversationColumns.has("generation_status"))
-  db.exec("ALTER TABLE conversations ADD COLUMN generation_status TEXT NOT NULL DEFAULT 'idle'");
+  sqlite.exec(
+    "ALTER TABLE conversations ADD COLUMN generation_status TEXT NOT NULL DEFAULT 'idle'",
+  );
 if (!conversationColumns.has("unread"))
-  db.exec("ALTER TABLE conversations ADD COLUMN unread INTEGER NOT NULL DEFAULT 0");
-db.query(
-  "UPDATE runs SET status='failed',error='server restarted',finished_at=? WHERE status IN ('queued','running')",
-).run(new Date().toISOString());
-db.query(
-  "UPDATE conversations SET generation_status='stopped' WHERE generation_status='running'",
-).run();
+  sqlite.exec("ALTER TABLE conversations ADD COLUMN unread INTEGER NOT NULL DEFAULT 0");
 const messageColumns = columns("messages");
 if (!messageColumns.has("skills"))
-  db.exec("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'");
+  sqlite.exec("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'");
 if (!messageColumns.has("attachment_context"))
-  db.exec("ALTER TABLE messages ADD COLUMN attachment_context TEXT NOT NULL DEFAULT ''");
+  sqlite.exec("ALTER TABLE messages ADD COLUMN attachment_context TEXT NOT NULL DEFAULT ''");
+
+export const db = createDatabase(sqlite);
+db.update(runs)
+  .set({ status: "failed", error: "server restarted", finished_at: new Date().toISOString() })
+  .where(inArray(runs.status, ["queued", "running"]))
+  .run();
+db.update(conversations)
+  .set({ generation_status: "stopped" })
+  .where(eq(conversations.generation_status, "running"))
+  .run();
 migrateCanonicalTranscript(db, config.codexModel);
 
 export const now = () => new Date().toISOString();
@@ -129,6 +131,6 @@ export const id = () => crypto.randomUUID();
 
 export function cleanupExpired(): void {
   const timestamp = now();
-  db.query("DELETE FROM sessions WHERE expires_at < ?").run(timestamp);
-  db.query("DELETE FROM oauth_states WHERE expires_at < ?").run(timestamp);
+  db.delete(sessions).where(lt(sessions.expires_at, timestamp)).run();
+  db.delete(oauthStates).where(lt(oauthStates.expires_at, timestamp)).run();
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { Database as SQLiteDatabase } from "bun:sqlite";
+import { createDatabase, type Database } from "../src/database";
 import type { AgentTool, StreamFn } from "@earendil-works/pi-agent-core";
 import {
   createAssistantMessageEventStream,
@@ -38,8 +39,8 @@ const model: Model<"openai-responses"> = {
 };
 
 function database() {
-  const db = new Database(":memory:");
-  db.exec(`
+  const db = createDatabase(new SQLiteDatabase(":memory:"));
+  db.$client.exec(`
     PRAGMA foreign_keys=ON;
     CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE conversations (
@@ -149,7 +150,7 @@ async function startAndWait(
 }
 
 function seedCompactableHistory(db: Database) {
-  db.query("DELETE FROM conversation_entries").run();
+  db.$client.query("DELETE FROM conversation_entries").run();
   appendLegacyMessage(db, {
     id: "old-user",
     conversationId: "conversation",
@@ -174,7 +175,7 @@ function seedCompactableHistory(db: Database) {
 }
 
 function run(db: Database) {
-  return db.query("SELECT status,turn_count,context_tokens,error FROM runs").get() as {
+  return db.$client.query("SELECT status,turn_count,context_tokens,error FROM runs").get() as {
     status: string;
     turn_count: number;
     context_tokens: number;
@@ -199,11 +200,13 @@ describe("ConversationRunner integration", () => {
     const { events } = await startAndWait(db, streamFn);
 
     expect(run(db)).toEqual({ status: "completed", turn_count: 2, context_tokens: 5, error: null });
-    expect(db.query("SELECT requested_thinking,resolved_thinking FROM runs").get()).toEqual({
-      requested_thinking: "low",
-      resolved_thinking: "low",
-    });
-    const rows = db
+    expect(db.$client.query("SELECT requested_thinking,resolved_thinking FROM runs").get()).toEqual(
+      {
+        requested_thinking: "low",
+        resolved_thinking: "low",
+      },
+    );
+    const rows = db.$client
       .query("SELECT kind,payload_json FROM conversation_entries ORDER BY sequence")
       .all() as { kind: string; payload_json: string }[];
     expect(rows.map((row) => row.kind)).toEqual([
@@ -250,7 +253,7 @@ describe("ConversationRunner integration", () => {
     });
 
     expect(run(db)).toMatchObject({ status: "completed", turn_count: 2 });
-    const result = db
+    const result = db.$client
       .query("SELECT kind,payload_json FROM conversation_entries WHERE kind='tool_result'")
       .get() as { kind: "tool_result"; payload_json: string };
     expect(decodeStoredEntry(result)).toMatchObject({
@@ -280,7 +283,7 @@ describe("ConversationRunner integration", () => {
     const { events } = await startAndWait(db, () =>
       completedStream(assistant([thinking, { type: "text", text: "answer" }], "stop")),
     );
-    const row = db
+    const row = db.$client
       .query("SELECT kind,payload_json FROM conversation_entries WHERE kind='assistant_message'")
       .get() as { kind: "assistant_message"; payload_json: string };
     expect(decodeStoredEntry(row)).toMatchObject({ content: [thinking, { type: "text" }] });
@@ -327,7 +330,7 @@ describe("ConversationRunner integration", () => {
     expect(await runner.stop("conversation", "user")).toBe(true);
 
     expect(run(db).status).toBe("stopped");
-    const saved = db
+    const saved = db.$client
       .query("SELECT kind,payload_json FROM conversation_entries WHERE kind='assistant_message'")
       .get() as { kind: "assistant_message"; payload_json: string };
     expect(decodeStoredEntry(saved)).toMatchObject({
@@ -359,7 +362,7 @@ describe("ConversationRunner integration", () => {
     expect(run(db)).toMatchObject({ status: "completed" });
     expect(
       (
-        db
+        db.$client
           .query("SELECT COUNT(*) AS count FROM conversation_entries WHERE kind='compaction'")
           .get() as {
           count: number;
@@ -390,13 +393,15 @@ describe("ConversationRunner integration", () => {
     expect(turn).toBe(2);
     expect(
       (
-        recoveredDb
+        recoveredDb.$client
           .query("SELECT COUNT(*) AS count FROM conversation_entries WHERE kind='compaction'")
           .get() as { count: number }
       ).count,
     ).toBe(1);
     expect(
-      JSON.stringify(recoveredDb.query("SELECT payload_json FROM conversation_entries").all()),
+      JSON.stringify(
+        recoveredDb.$client.query("SELECT payload_json FROM conversation_entries").all(),
+      ),
     ).not.toContain("exceeds the context window");
 
     const failedDb = database();
@@ -422,7 +427,7 @@ describe("ConversationRunner integration", () => {
   test("compaction checkpoint保存失敗は元contextへfallbackせずrunをfailedにする", async () => {
     const db = database();
     seedCompactableHistory(db);
-    db.exec(`CREATE TRIGGER fail_compaction BEFORE INSERT ON conversation_entries
+    db.$client.exec(`CREATE TRIGGER fail_compaction BEFORE INSERT ON conversation_entries
       WHEN NEW.kind='compaction' BEGIN SELECT RAISE(FAIL,'checkpoint blocked'); END;`);
     const runner = new ConversationRunner({
       database: db,

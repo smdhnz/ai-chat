@@ -5,7 +5,7 @@ ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`
 ## 構成
 
 - Next.js 16 (App Router) / React 19 / shadcn/ui / Tailwind CSS 4 / Motion
-- Bun HTTP API / SQLite
+- Bun HTTP API / Drizzle ORM + SQLite
 - Discord OAuth2、DiscordユーザーID許可リスト
 - Codexサブスク認証による会話（モデルは`CODEX_MODEL`で固定、Thinkingは一般設定で選択）
 - ユーザーの依頼内容に応じた自律Web検索（Exa MCP、APIキー不要）

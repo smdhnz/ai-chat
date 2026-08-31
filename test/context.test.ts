@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { Database as SQLiteDatabase } from "bun:sqlite";
+import { createDatabase, type Database } from "../src/database";
 import type { AssistantMessage, Message, Usage } from "@earendil-works/pi-ai";
 import {
   compactConversation,
@@ -37,8 +38,8 @@ function entry(
 }
 
 function database() {
-  const db = new Database(":memory:");
-  db.exec(`
+  const db = createDatabase(new SQLiteDatabase(":memory:"));
+  db.$client.exec(`
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, context_summary TEXT NOT NULL DEFAULT '',
       compacted_through_id TEXT, context_tokens INTEGER NOT NULL DEFAULT 0
@@ -60,15 +61,17 @@ function database() {
 }
 
 function insert(db: Database, row: ConversationEntry) {
-  db.query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)").run(
-    row.id,
-    row.conversation_id,
-    row.run_id,
-    row.sequence,
-    row.kind,
-    row.payload_json,
-    row.created_at,
-  );
+  db.$client
+    .query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)")
+    .run(
+      row.id,
+      row.conversation_id,
+      row.run_id,
+      row.sequence,
+      row.kind,
+      row.payload_json,
+      row.created_at,
+    );
 }
 
 function assistantPayload(content: AssistantMessage["content"]) {
@@ -162,14 +165,9 @@ describe("context compaction", () => {
 
   test("summary payloadはprevious summary・画像ID・source URLを残し、除外対象を含めない", () => {
     const db = database();
-    db.query("INSERT INTO files VALUES(?,?,?,?,?,?)").run(
-      "image-1",
-      "user",
-      "photo.png",
-      "secret/path.png",
-      "image/png",
-      "upload",
-    );
+    db.$client
+      .query("INSERT INTO files VALUES(?,?,?,?,?,?)")
+      .run("image-1", "user", "photo.png", "secret/path.png", "image/png", "upload");
     const entries = [
       entry(1, "user_message", {
         role: "user",
@@ -295,8 +293,11 @@ describe("context compaction", () => {
       content: [{ type: "text", text: "new latest" }],
     });
     expect(
-      (db.query("SELECT COUNT(*) AS count FROM conversation_entries").get() as { count: number })
-        .count,
+      (
+        db.$client.query("SELECT COUNT(*) AS count FROM conversation_entries").get() as {
+          count: number;
+        }
+      ).count,
     ).toBe(8);
   });
 });

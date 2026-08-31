@@ -1,4 +1,5 @@
 import { basename, extname, join } from "node:path";
+import { and, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import {
   classifyThinking,
@@ -26,6 +27,16 @@ import { cleanupExpired, db, id, now } from "./db";
 import { MESSAGE_PAGE_SIZE, regenerationIndex } from "./messages";
 import { buildSystemPrompt } from "./prompt";
 import { webSearch } from "./web-search";
+import {
+  conversations as conversationsTable,
+  files as filesTable,
+  oauthStates,
+  projects as projectsTable,
+  runs as runsTable,
+  sessions,
+  skills as skillsTable,
+  users,
+} from "./schema";
 
 type SocketData = { userId: string };
 const chatModel = getChatModel(config.codexModel);
@@ -74,7 +85,10 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/logout" && request.method === "POST") {
         verifyOrigin(request);
         const token = cookie(request, "session");
-        if (token) db.query("DELETE FROM sessions WHERE token_hash = ?").run(hash(token));
+        if (token)
+          db.delete(sessions)
+            .where(eq(sessions.token_hash, hash(token)))
+            .run();
         return new Response(null, {
           status: 303,
           headers: { Location: "/login", "Set-Cookie": sessionCookie("", 0) },
@@ -175,38 +189,89 @@ type HistoryRow = {
   attachment_context: string;
   created_at: string;
 };
-type FileRow = { name: string; path: string; mime: string };
-
 function bootstrap(user: User): Response {
   const projects = db
-    .query(
-      "SELECT id,name,system_prompt,created_at,updated_at FROM projects WHERE user_id=? ORDER BY updated_at DESC",
-    )
-    .all(user.id) as ProjectRow[];
+    .select({
+      id: projectsTable.id,
+      name: projectsTable.name,
+      system_prompt: projectsTable.system_prompt,
+      created_at: projectsTable.created_at,
+      updated_at: projectsTable.updated_at,
+    })
+    .from(projectsTable)
+    .where(eq(projectsTable.user_id, user.id))
+    .orderBy(desc(projectsTable.updated_at))
+    .all() satisfies ProjectRow[];
+  const activeRuns = new Map(
+    db
+      .select({ id: runsTable.id, conversation_id: runsTable.conversation_id })
+      .from(runsTable)
+      .innerJoin(conversationsTable, eq(conversationsTable.id, runsTable.conversation_id))
+      .where(
+        and(
+          eq(conversationsTable.user_id, user.id),
+          inArray(runsTable.status, ["queued", "running"]),
+        ),
+      )
+      .orderBy(desc(runsTable.created_at))
+      .all()
+      .reverse()
+      .map((run) => [run.conversation_id, run.id]),
+  );
+  const conversations = db
+    .select({
+      id: conversationsTable.id,
+      project_id: conversationsTable.project_id,
+      title: conversationsTable.title,
+      temporary: conversationsTable.temporary,
+      generation_status: conversationsTable.generation_status,
+      unread: conversationsTable.unread,
+      created_at: conversationsTable.created_at,
+      updated_at: conversationsTable.updated_at,
+    })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.user_id, user.id))
+    .orderBy(desc(conversationsTable.updated_at))
+    .all()
+    .map((conversation) => ({
+      ...conversation,
+      activeRunId: activeRuns.get(conversation.id) ?? null,
+    }));
   const settings = resolveAiSettings(user.thinking_level);
   return json({
     user: { ...user, thinking_level: settings.thinking },
     supported_thinking_levels: supportedThinkingLevels(chatModel),
     model: { id: chatModel.id, supportedThinkingLevels: supportedThinkingLevels(chatModel) },
     projects,
-    conversations: db
-      .query(
-        `SELECT c.id,c.project_id,c.title,c.temporary,c.generation_status,c.unread,c.created_at,c.updated_at,
-         (SELECT r.id FROM runs r WHERE r.conversation_id=c.id AND r.status IN ('queued','running')
-          ORDER BY r.created_at DESC LIMIT 1) AS activeRunId
-         FROM conversations c WHERE c.user_id=? ORDER BY c.updated_at DESC`,
-      )
-      .all(user.id),
+    conversations,
     files: db
-      .query(
-        "SELECT id,name,mime,size,source,created_at FROM files WHERE user_id=? ORDER BY created_at DESC LIMIT 200",
-      )
-      .all(user.id),
+      .select({
+        id: filesTable.id,
+        name: filesTable.name,
+        mime: filesTable.mime,
+        size: filesTable.size,
+        source: filesTable.source,
+        created_at: filesTable.created_at,
+      })
+      .from(filesTable)
+      .where(eq(filesTable.user_id, user.id))
+      .orderBy(desc(filesTable.created_at))
+      .limit(200)
+      .all(),
     skills: db
-      .query(
-        "SELECT id,name,description,instructions,enabled,created_at,updated_at FROM skills WHERE user_id=? ORDER BY updated_at DESC",
-      )
-      .all(user.id),
+      .select({
+        id: skillsTable.id,
+        name: skillsTable.name,
+        description: skillsTable.description,
+        instructions: skillsTable.instructions,
+        enabled: skillsTable.enabled,
+        created_at: skillsTable.created_at,
+        updated_at: skillsTable.updated_at,
+      })
+      .from(skillsTable)
+      .where(eq(skillsTable.user_id, user.id))
+      .orderBy(desc(skillsTable.updated_at))
+      .all(),
   });
 }
 
@@ -219,7 +284,11 @@ async function createConversation(request: Request, user: User): Promise<Respons
   };
   const project =
     body.projectId &&
-    db.query("SELECT id FROM projects WHERE id=? AND user_id=?").get(body.projectId, user.id);
+    db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, body.projectId), eq(projectsTable.user_id, user.id)))
+      .get();
   const conversation = {
     id: id(),
     project_id: project ? (body.projectId ?? null) : null,
@@ -230,19 +299,9 @@ async function createConversation(request: Request, user: User): Promise<Respons
     created_at: now(),
     updated_at: now(),
   };
-  db.query(
-    "INSERT INTO conversations(id,user_id,project_id,title,temporary,generation_status,unread,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
-  ).run(
-    conversation.id,
-    user.id,
-    conversation.project_id,
-    conversation.title,
-    conversation.temporary,
-    conversation.generation_status,
-    conversation.unread,
-    conversation.created_at,
-    conversation.updated_at,
-  );
+  db.insert(conversationsTable)
+    .values({ ...conversation, user_id: user.id })
+    .run();
   return json(conversation, 201);
 }
 
@@ -260,10 +319,10 @@ function conversationMessages(
   before: string | null,
 ): Response {
   if (!ownedConversation(conversationId, userId)) return json({ error: "not found" }, 404);
-  db.query("UPDATE conversations SET unread=0 WHERE id=? AND user_id=?").run(
-    conversationId,
-    userId,
-  );
+  db.update(conversationsTable)
+    .set({ unread: 0 })
+    .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, userId)))
+    .run();
   let page;
   try {
     page = pagePublicMessages(db, conversationId, before, MESSAGE_PAGE_SIZE);
@@ -308,8 +367,15 @@ async function sendMessage(request: Request, user: User): Promise<Response> {
   if (!conversation) return json({ error: "conversation not found" }, 404);
   if (
     db
-      .query("SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')")
-      .get(conversationId)
+      .select({ id: runsTable.id })
+      .from(runsTable)
+      .where(
+        and(
+          eq(runsTable.conversation_id, conversationId),
+          inArray(runsTable.status, ["queued", "running"]),
+        ),
+      )
+      .get()
   )
     return json({ error: "すでに生成中です" }, 409);
 
@@ -362,11 +428,12 @@ async function startGeneration(
     needsTitle,
   );
   if (needsTitle && thinking.title)
-    db.query("UPDATE conversations SET title=? WHERE id=? AND user_id=?").run(
-      clean(thinking.title, 100),
-      conversationId,
-      user.id,
-    );
+    db.update(conversationsTable)
+      .set({ title: clean(thinking.title, 100) })
+      .where(
+        and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, user.id)),
+      )
+      .run();
   await conversationRunner.start({
     conversationId,
     userId: user.id,
@@ -419,7 +486,7 @@ async function regenerate(request: Request, conversationId: string, user: User):
       user.id,
     ).filter((file) => file.source === "generated");
     deleteFileRecords(removedFiles, user.id);
-  })();
+  });
   await removeFiles(removedFiles);
   await startGeneration(conversationId, user, userMessage.id);
   return json({ status: "running" }, 202);
@@ -437,9 +504,15 @@ async function saveSettings(request: Request, userId: string): Promise<Response>
   const thinking = clean(body.thinking, 20);
   if (!["auto", "minimal", "low", "medium", "high", "xhigh", "max"].includes(thinking))
     return json({ error: "invalid thinking level" }, 400);
-  db.query(
-    "UPDATE users SET language=?,ctrl_enter_send=?,thinking_level=?,updated_at=? WHERE id=?",
-  ).run(language, ctrlEnterSend, thinking, now(), userId);
+  db.update(users)
+    .set({
+      language,
+      ctrl_enter_send: ctrlEnterSend,
+      thinking_level: thinking,
+      updated_at: now(),
+    })
+    .where(eq(users.id, userId))
+    .run();
   return json({
     language,
     ctrl_enter_send: ctrlEnterSend,
@@ -458,20 +531,40 @@ async function saveProject(
   const prompt = clean(body.systemPrompt, 30_000);
   if (!name) return json({ error: "name is required" }, 400);
   const existing = db
-    .query("SELECT id FROM projects WHERE id=? AND user_id=?")
-    .get(projectId, userId);
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
+    .get();
   if (existing)
-    db.query(
-      "UPDATE projects SET name=?,system_prompt=?,updated_at=? WHERE id=? AND user_id=?",
-    ).run(name, prompt, now(), projectId, userId);
-  else
-    db.query(
-      "INSERT INTO projects(id,user_id,name,system_prompt,created_at,updated_at) VALUES(?,?,?,?,?,?)",
-    ).run(projectId, userId, name, prompt, now(), now());
+    db.update(projectsTable)
+      .set({ name, system_prompt: prompt, updated_at: now() })
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
+      .run();
+  else {
+    const timestamp = now();
+    db.insert(projectsTable)
+      .values({
+        id: projectId,
+        user_id: userId,
+        name,
+        system_prompt: prompt,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .run();
+  }
   return json(
     db
-      .query("SELECT id,name,system_prompt,created_at,updated_at FROM projects WHERE id=?")
-      .get(projectId),
+      .select({
+        id: projectsTable.id,
+        name: projectsTable.name,
+        system_prompt: projectsTable.system_prompt,
+        created_at: projectsTable.created_at,
+        updated_at: projectsTable.updated_at,
+      })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
+      .get(),
     existing ? 200 : 201,
   );
 }
@@ -493,56 +586,87 @@ async function saveSkill(
     instructions = clean(body.instructions, 30_000);
   if (!name || !instructions) return json({ error: "name and instructions are required" }, 400);
   const enabled = body.enabled === false ? 0 : 1;
-  const existing = db.query("SELECT id FROM skills WHERE id=? AND user_id=?").get(skillId, userId);
+  const existing = db
+    .select({ id: skillsTable.id })
+    .from(skillsTable)
+    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+    .get();
   if (existing)
-    db.query(
-      "UPDATE skills SET name=?,description=?,instructions=?,enabled=?,updated_at=? WHERE id=? AND user_id=?",
-    ).run(name, description, instructions, enabled, now(), skillId, userId);
-  else
-    db.query(
-      "INSERT INTO skills(id,user_id,name,description,instructions,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(skillId, userId, name, description, instructions, enabled, now(), now());
+    db.update(skillsTable)
+      .set({ name, description, instructions, enabled, updated_at: now() })
+      .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+      .run();
+  else {
+    const timestamp = now();
+    db.insert(skillsTable)
+      .values({
+        id: skillId,
+        user_id: userId,
+        name,
+        description,
+        instructions,
+        enabled,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .run();
+  }
   return json(
     db
-      .query(
-        "SELECT id,name,description,instructions,enabled,created_at,updated_at FROM skills WHERE id=?",
-      )
-      .get(skillId),
+      .select({
+        id: skillsTable.id,
+        name: skillsTable.name,
+        description: skillsTable.description,
+        instructions: skillsTable.instructions,
+        enabled: skillsTable.enabled,
+        created_at: skillsTable.created_at,
+        updated_at: skillsTable.updated_at,
+      })
+      .from(skillsTable)
+      .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+      .get(),
     existing ? 200 : 201,
   );
 }
 
 async function cleanupTemporaryConversations(): Promise<void> {
   const expired = db
-    .query("SELECT id,user_id FROM conversations WHERE temporary=1 AND updated_at < ?")
-    .all(new Date(Date.now() - 24 * 60 * 60_000).toISOString()) as {
-    id: string;
-    user_id: string;
-  }[];
+    .select({ id: conversationsTable.id, user_id: conversationsTable.user_id })
+    .from(conversationsTable)
+    .where(
+      and(
+        eq(conversationsTable.temporary, 1),
+        lt(conversationsTable.updated_at, new Date(Date.now() - 24 * 60 * 60_000).toISOString()),
+      ),
+    )
+    .all();
   for (const conversation of expired)
     await removeConversationData(conversation.id, conversation.user_id);
 }
 
 async function removeConversationData(conversationId: string, userId: string): Promise<void> {
   const files = fileRecords(allConversationFileIds(db, conversationId), userId);
-  db.transaction(() => {
-    db.query("DELETE FROM conversations WHERE id=? AND user_id=?").run(conversationId, userId);
+  db.transaction((tx) => {
+    tx.delete(conversationsTable)
+      .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, userId)))
+      .run();
     deleteFileRecords(files, userId);
-  })();
+  });
   await removeFiles(files);
 }
 
 async function deleteAllData(request: Request, userId: string): Promise<Response> {
   verifyOrigin(request);
-  const files = db.query("SELECT id,path FROM files WHERE user_id=?").all(userId) as {
-    id: string;
-    path: string;
-  }[];
-  db.transaction(() => {
-    db.query("DELETE FROM conversations WHERE user_id=?").run(userId);
-    db.query("DELETE FROM projects WHERE user_id=?").run(userId);
+  const files = db
+    .select({ id: filesTable.id, path: filesTable.path })
+    .from(filesTable)
+    .where(eq(filesTable.user_id, userId))
+    .all();
+  db.transaction((tx) => {
+    tx.delete(conversationsTable).where(eq(conversationsTable.user_id, userId)).run();
+    tx.delete(projectsTable).where(eq(projectsTable.user_id, userId)).run();
     deleteFileRecords(files, userId);
-  })();
+  });
   await removeFiles(files);
   return new Response(null, { status: 204 });
 }
@@ -557,18 +681,31 @@ async function removeOwned(
   const files =
     table === "projects"
       ? fileRecords(
-          (
-            db
-              .query("SELECT id FROM conversations WHERE project_id=? AND user_id=?")
-              .all(objectId, userId) as { id: string }[]
-          ).flatMap((conversation) => allConversationFileIds(db, conversation.id)),
+          db
+            .select({ id: conversationsTable.id })
+            .from(conversationsTable)
+            .where(
+              and(
+                eq(conversationsTable.project_id, objectId),
+                eq(conversationsTable.user_id, userId),
+              ),
+            )
+            .all()
+            .flatMap((conversation) => allConversationFileIds(db, conversation.id)),
           userId,
         )
       : [];
-  db.transaction(() => {
-    db.query(`DELETE FROM ${table} WHERE id=? AND user_id=?`).run(objectId, userId);
+  db.transaction((tx) => {
+    if (table === "projects")
+      tx.delete(projectsTable)
+        .where(and(eq(projectsTable.id, objectId), eq(projectsTable.user_id, userId)))
+        .run();
+    else
+      tx.delete(skillsTable)
+        .where(and(eq(skillsTable.id, objectId), eq(skillsTable.user_id, userId)))
+        .run();
     deleteFileRecords(files, userId);
-  })();
+  });
   await removeFiles(files);
   return new Response(null, { status: 204 });
 }
@@ -579,20 +716,27 @@ function fileRecords(
 ): { id: string; path: string; source: string }[] {
   const unique = [...new Set(ids)];
   return unique.length
-    ? (db
-        .query(
-          `SELECT id,path,source FROM files WHERE user_id=? AND id IN (${unique.map(() => "?").join(",")})`,
-        )
-        .all(userId, ...unique) as { id: string; path: string; source: string }[])
+    ? db
+        .select({ id: filesTable.id, path: filesTable.path, source: filesTable.source })
+        .from(filesTable)
+        .where(and(eq(filesTable.user_id, userId), inArray(filesTable.id, unique)))
+        .all()
     : [];
 }
 
 function deleteFileRecords(files: { id: string }[], userId: string): void {
   if (files.length)
-    db.query(`DELETE FROM files WHERE user_id=? AND id IN (${files.map(() => "?").join(",")})`).run(
-      userId,
-      ...files.map((file) => file.id),
-    );
+    db.delete(filesTable)
+      .where(
+        and(
+          eq(filesTable.user_id, userId),
+          inArray(
+            filesTable.id,
+            files.map((file) => file.id),
+          ),
+        ),
+      )
+      .run();
 }
 
 async function removeFiles(files: { path: string }[]): Promise<void> {
@@ -601,8 +745,10 @@ async function removeFiles(files: { path: string }[]): Promise<void> {
 
 async function serveUserFile(fileId: string, userId: string, download: boolean): Promise<Response> {
   const file = db
-    .query("SELECT name,path,mime FROM files WHERE id=? AND user_id=?")
-    .get(fileId, userId) as FileRow | null;
+    .select({ name: filesTable.name, path: filesTable.path, mime: filesTable.mime })
+    .from(filesTable)
+    .where(and(eq(filesTable.id, fileId), eq(filesTable.user_id, userId)))
+    .get();
   if (!file) return json({ error: "not found" }, 404);
   const path = storedFilePath(file.path);
   if (!(await Bun.file(path).exists())) return json({ error: "not found" }, 404);
@@ -660,9 +806,9 @@ type StoredFile = {
   created_at: string;
 };
 function insertFile(file: StoredFile, userId: string): void {
-  db.query(
-    "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
-  ).run(file.id, userId, file.name, file.path, file.mime, file.size, file.source, file.created_at);
+  db.insert(filesTable)
+    .values({ ...file, user_id: userId })
+    .run();
 }
 function publicFiles(files: StoredFile[]) {
   return files.map(({ id, name, mime, size, source, created_at }) => ({
@@ -677,19 +823,25 @@ function publicFiles(files: StoredFile[]) {
 function filesByIds(ids: string[], userId: string) {
   return ids.length
     ? db
-        .query(
-          `SELECT id,name,mime,size,source,created_at FROM files WHERE user_id=? AND id IN (${ids.map(() => "?").join(",")})`,
-        )
-        .all(userId, ...ids)
+        .select({
+          id: filesTable.id,
+          name: filesTable.name,
+          mime: filesTable.mime,
+          size: filesTable.size,
+          source: filesTable.source,
+          created_at: filesTable.created_at,
+        })
+        .from(filesTable)
+        .where(and(eq(filesTable.user_id, userId), inArray(filesTable.id, ids)))
+        .all()
     : [];
 }
 
 function startDiscordLogin(): Response {
   const state = crypto.randomUUID();
-  db.query("INSERT INTO oauth_states(state,expires_at) VALUES(?,?)").run(
-    state,
-    new Date(Date.now() + 10 * 60_000).toISOString(),
-  );
+  db.insert(oauthStates)
+    .values({ state, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() })
+    .run();
   const target = new URL("https://discord.com/oauth2/authorize");
   target.search = new URLSearchParams({
     client_id: config.discordClientId,
@@ -711,10 +863,14 @@ async function finishDiscordLogin(request: Request, url: URL): Promise<Response>
     !state ||
     cookie(request, "oauth_state") !== state ||
     !code ||
-    !db.query("SELECT state FROM oauth_states WHERE state=? AND expires_at>?").get(state, now())
+    !db
+      .select({ state: oauthStates.state })
+      .from(oauthStates)
+      .where(and(eq(oauthStates.state, state), gt(oauthStates.expires_at, now())))
+      .get()
   )
     return redirect("/login?error=oauth");
-  db.query("DELETE FROM oauth_states WHERE state=?").run(state);
+  db.delete(oauthStates).where(eq(oauthStates.state, state)).run();
   const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -742,23 +898,33 @@ async function finishDiscordLogin(request: Request, url: URL): Promise<Response>
     avatar = profile.avatar
       ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=128`
       : null;
-  db.query(
-    `INSERT INTO users(id,username,display_name,avatar,created_at,updated_at) VALUES(?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET username=excluded.username,display_name=excluded.display_name,avatar=excluded.avatar,updated_at=excluded.updated_at`,
-  ).run(
-    profile.id,
-    profile.username,
-    profile.global_name || profile.username,
-    avatar,
-    timestamp,
-    timestamp,
-  );
+  db.insert(users)
+    .values({
+      id: profile.id,
+      username: profile.username,
+      display_name: profile.global_name || profile.username,
+      avatar,
+      created_at: timestamp,
+      updated_at: timestamp,
+    })
+    .onConflictDoUpdate({
+      target: users.id,
+      set: {
+        username: profile.username,
+        display_name: profile.global_name || profile.username,
+        avatar,
+        updated_at: timestamp,
+      },
+    })
+    .run();
   const session = randomToken();
-  db.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").run(
-    hash(session),
-    profile.id,
-    new Date(Date.now() + 30 * 86400_000).toISOString(),
-  );
+  db.insert(sessions)
+    .values({
+      token_hash: hash(session),
+      user_id: profile.id,
+      expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+    })
+    .run();
   return new Response(null, {
     status: 303,
     headers: { Location: "/", "Set-Cookie": sessionCookie(session, 30 * 86400) },
@@ -768,17 +934,27 @@ async function finishDiscordLogin(request: Request, url: URL): Promise<Response>
 function sessionUser(request: Request): User | null {
   const token = cookie(request, "session");
   if (!token) return null;
-  return db
-    .query(
-      `SELECT u.id,u.username,u.display_name,u.avatar,u.language,u.ctrl_enter_send,u.thinking_level FROM sessions s JOIN users u ON u.id=s.user_id
-    WHERE s.token_hash=? AND s.expires_at>?`,
-    )
-    .get(hash(token), now()) as User | null;
+  return (db
+    .select({
+      id: users.id,
+      username: users.username,
+      display_name: users.display_name,
+      avatar: users.avatar,
+      language: users.language,
+      ctrl_enter_send: users.ctrl_enter_send,
+      thinking_level: users.thinking_level,
+    })
+    .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.user_id))
+    .where(and(eq(sessions.token_hash, hash(token)), gt(sessions.expires_at, now())))
+    .get() ?? null) as User | null;
 }
 function ownedConversation(conversationId: string, userId: string) {
   return db
-    .query("SELECT id,generation_status FROM conversations WHERE id=? AND user_id=?")
-    .get(conversationId, userId);
+    .select({ id: conversationsTable.id, generation_status: conversationsTable.generation_status })
+    .from(conversationsTable)
+    .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, userId)))
+    .get();
 }
 function clean(value: unknown, max: number): string {
   return typeof value === "string" ? value.replace(/\0/g, "").trim().slice(0, max) : "";

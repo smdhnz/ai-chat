@@ -1,4 +1,5 @@
-import type { Database } from "bun:sqlite";
+import { and, asc, count, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
+import type { Database } from "./database";
 import { readFile } from "node:fs/promises";
 import type {
   Api,
@@ -11,6 +12,7 @@ import type {
   Usage,
 } from "@earendil-works/pi-ai";
 import { storedFilePath } from "./config";
+import { conversationEntries, conversations, files, messages, runs } from "./schema";
 
 export type StoredContent =
   | { type: "text"; text: string; textSignature?: string }
@@ -285,15 +287,18 @@ export function projectLegacyMessage(entry: ConversationEntry): LegacyMessageRow
 }
 
 export function listLegacyMessages(database: Database, conversationId: string): LegacyMessageRow[] {
-  return (
-    database
-      .query(
-        `SELECT id,conversation_id,run_id,sequence,kind,payload_json,created_at
-         FROM conversation_entries WHERE conversation_id=?
-         AND kind IN ('user_message','assistant_message') ORDER BY sequence`,
-      )
-      .all(conversationId) as ConversationEntry[]
-  ).map((entry) => projectLegacyMessage(entry)!);
+  return database
+    .select()
+    .from(conversationEntries)
+    .where(
+      and(
+        eq(conversationEntries.conversation_id, conversationId),
+        inArray(conversationEntries.kind, ["user_message", "assistant_message"]),
+      ),
+    )
+    .orderBy(asc(conversationEntries.sequence))
+    .all()
+    .map((entry) => projectLegacyMessage(entry)!);
 }
 
 export function pageLegacyMessages(
@@ -303,19 +308,31 @@ export function pageLegacyMessages(
   limit: number,
 ): { messages: LegacyMessageRow[]; hasMore: boolean } {
   const cursor = before
-    ? (database
-        .query("SELECT sequence FROM conversation_entries WHERE id=? AND conversation_id=?")
-        .get(before, conversationId) as { sequence: number } | null)
+    ? database
+        .select({ sequence: conversationEntries.sequence })
+        .from(conversationEntries)
+        .where(
+          and(
+            eq(conversationEntries.id, before),
+            eq(conversationEntries.conversation_id, conversationId),
+          ),
+        )
+        .get()
     : null;
   if (before && !cursor) throw new Error("invalid cursor");
   const rows = database
-    .query(
-      `SELECT id,conversation_id,run_id,sequence,kind,payload_json,created_at
-       FROM conversation_entries WHERE conversation_id=?
-       AND kind IN ('user_message','assistant_message') ${cursor ? "AND sequence < ?" : ""}
-       ORDER BY sequence DESC LIMIT ${limit + 1}`,
+    .select()
+    .from(conversationEntries)
+    .where(
+      and(
+        eq(conversationEntries.conversation_id, conversationId),
+        inArray(conversationEntries.kind, ["user_message", "assistant_message"]),
+        cursor ? lt(conversationEntries.sequence, cursor.sequence) : undefined,
+      ),
     )
-    .all(...(cursor ? [conversationId, cursor.sequence] : [conversationId])) as ConversationEntry[];
+    .orderBy(desc(conversationEntries.sequence))
+    .limit(limit + 1)
+    .all();
   return {
     messages: rows
       .slice(0, limit)
@@ -334,12 +351,13 @@ export function pagePublicMessages(
   const entries = listConversationEntries(database, conversationId).filter((entry) =>
     ["user_message", "assistant_message", "tool_result"].includes(entry.kind),
   );
-  const runs = new Map(
-    (
-      database
-        .query("SELECT id,status,error FROM runs WHERE conversation_id=?")
-        .all(conversationId) as { id: string; status: string; error: string | null }[]
-    ).map((run) => [run.id, run]),
+  const runMap = new Map(
+    database
+      .select({ id: runs.id, status: runs.status, error: runs.error })
+      .from(runs)
+      .where(eq(runs.conversation_id, conversationId))
+      .all()
+      .map((run) => [run.id, run]),
   );
   const messages: PublicTranscriptMessage[] = [];
   const toolCalls = new Map<string, { group: PublicTranscriptMessage; activityIndex: number }>();
@@ -401,7 +419,7 @@ export function pagePublicMessages(
           typeof block.id === "string" &&
           typeof block.name === "string"
         ) {
-          const runStatus = entry.run_id ? runs.get(entry.run_id)?.status : undefined;
+          const runStatus = entry.run_id ? runMap.get(entry.run_id)?.status : undefined;
           const activityIndex = group.activities.push(
             publicToolCall(
               { name: block.name, arguments: block.arguments },
@@ -431,7 +449,7 @@ export function pagePublicMessages(
   for (const message of messages) {
     message.fileIds = [...new Set(message.fileIds)];
     message.skills = [...new Set(message.skills)];
-    const run = message.runId ? runs.get(message.runId) : undefined;
+    const run = message.runId ? runMap.get(message.runId) : undefined;
     if (run?.status === "stopped" || run?.status === "failed") message.status = run.status;
     else if (message.role === "assistant") message.status = "completed";
     if (run?.status === "failed")
@@ -468,9 +486,11 @@ export function appendLegacyMessage(
   const content: StoredContent[] = [
     ...(message.content ? [{ type: "text" as const, text: message.content }] : []),
     ...(message.fileIds ?? []).map((fileId) => {
-      const file = database.query("SELECT mime FROM files WHERE id=?").get(fileId) as {
-        mime: string;
-      } | null;
+      const file = database
+        .select({ mime: files.mime })
+        .from(files)
+        .where(eq(files.id, fileId))
+        .get();
       if (!file) throw new Error(`missing transcript file: ${fileId}`);
       return { type: "imageRef" as const, fileId, mimeType: file.mime };
     }),
@@ -493,27 +513,23 @@ export function appendLegacyMessage(
           stopReason: "stop",
           skills: message.skills,
         };
-  const sequence = (
-    database
-      .query(
-        "SELECT COALESCE(MAX(sequence),0)+1 AS sequence FROM conversation_entries WHERE conversation_id=?",
-      )
-      .get(message.conversationId) as { sequence: number }
-  ).sequence;
+  const sequence = database
+    .select({ sequence: sql<number>`coalesce(max(${conversationEntries.sequence}), 0) + 1` })
+    .from(conversationEntries)
+    .where(eq(conversationEntries.conversation_id, message.conversationId))
+    .get()!.sequence;
   database
-    .query(
-      `INSERT INTO conversation_entries(id,conversation_id,run_id,sequence,kind,payload_json,created_at)
-       VALUES(?,?,?,?,?,?,?)`,
-    )
-    .run(
-      message.id,
-      message.conversationId,
-      message.runId ?? null,
+    .insert(conversationEntries)
+    .values({
+      id: message.id,
+      conversation_id: message.conversationId,
+      run_id: message.runId ?? null,
       sequence,
-      `${message.role}_message`,
-      JSON.stringify(payload),
-      message.createdAt,
-    );
+      kind: `${message.role}_message`,
+      payload_json: JSON.stringify(payload),
+      created_at: message.createdAt,
+    })
+    .run();
 }
 
 export function updateAttachmentContext(
@@ -522,14 +538,18 @@ export function updateAttachmentContext(
   attachmentContext: string,
 ): void {
   const entry = database
-    .query("SELECT kind,payload_json FROM conversation_entries WHERE id=?")
-    .get(entryId) as Pick<ConversationEntry, "kind" | "payload_json"> | null;
+    .select({ kind: conversationEntries.kind, payload_json: conversationEntries.payload_json })
+    .from(conversationEntries)
+    .where(eq(conversationEntries.id, entryId))
+    .get();
   if (!entry || entry.kind !== "user_message") throw new Error("user message not found");
   const payload = decodeStoredEntry(entry) as UserPayload;
   payload.attachmentContext = attachmentContext;
   database
-    .query("UPDATE conversation_entries SET payload_json=? WHERE id=?")
-    .run(JSON.stringify(payload), entryId);
+    .update(conversationEntries)
+    .set({ payload_json: JSON.stringify(payload) })
+    .where(eq(conversationEntries.id, entryId))
+    .run();
 }
 
 export function rewindConversation(
@@ -540,59 +560,77 @@ export function rewindConversation(
   content: string,
 ): void {
   const entry = database
-    .query(
-      `SELECT e.sequence,e.kind,e.payload_json FROM conversation_entries e
-       JOIN conversations c ON c.id=e.conversation_id
-       WHERE e.id=? AND e.conversation_id=? AND c.user_id=?`,
+    .select({
+      sequence: conversationEntries.sequence,
+      kind: conversationEntries.kind,
+      payload_json: conversationEntries.payload_json,
+    })
+    .from(conversationEntries)
+    .innerJoin(conversations, eq(conversations.id, conversationEntries.conversation_id))
+    .where(
+      and(
+        eq(conversationEntries.id, entryId),
+        eq(conversationEntries.conversation_id, conversationId),
+        eq(conversations.user_id, userId),
+      ),
     )
-    .get(entryId, conversationId, userId) as Pick<
-    ConversationEntry,
-    "sequence" | "kind" | "payload_json"
-  > | null;
+    .get();
   if (!entry || entry.kind !== "user_message") throw new Error("user message not found");
   const payload = decodeStoredEntry(entry) as UserPayload;
   const firstText = payload.content.findIndex((block) => block.type === "text");
   if (firstText < 0) payload.content.unshift({ type: "text", text: content });
   else payload.content[firstText] = { ...payload.content[firstText], type: "text", text: content };
 
-  const runIds = (
-    database
-      .query(
-        `SELECT r.id FROM runs r JOIN conversation_entries e ON e.id=r.user_entry_id
-         WHERE r.conversation_id=? AND e.sequence>=?`,
-      )
-      .all(conversationId, entry.sequence) as { id: string }[]
-  ).map((run) => run.id);
+  const runIds = database
+    .select({ id: runs.id })
+    .from(runs)
+    .innerJoin(conversationEntries, eq(conversationEntries.id, runs.user_entry_id))
+    .where(
+      and(
+        eq(runs.conversation_id, conversationId),
+        gte(conversationEntries.sequence, entry.sequence),
+      ),
+    )
+    .all()
+    .map((run) => run.id);
   database
-    .query("DELETE FROM conversation_entries WHERE conversation_id=? AND sequence>?")
-    .run(conversationId, entry.sequence);
-  if (runIds.length)
-    database
-      .query(`DELETE FROM runs WHERE id IN (${runIds.map(() => "?").join(",")})`)
-      .run(...runIds);
+    .delete(conversationEntries)
+    .where(
+      and(
+        eq(conversationEntries.conversation_id, conversationId),
+        gt(conversationEntries.sequence, entry.sequence),
+      ),
+    )
+    .run();
+  if (runIds.length) database.delete(runs).where(inArray(runs.id, runIds)).run();
   database
-    .query("UPDATE conversation_entries SET payload_json=? WHERE id=?")
-    .run(JSON.stringify(payload), entryId);
+    .update(conversationEntries)
+    .set({ payload_json: JSON.stringify(payload) })
+    .where(eq(conversationEntries.id, entryId))
+    .run();
 
   const checkpoint = database
-    .query(
-      `SELECT kind,payload_json FROM conversation_entries
-       WHERE conversation_id=? AND kind='compaction' ORDER BY sequence DESC LIMIT 1`,
+    .select({ kind: conversationEntries.kind, payload_json: conversationEntries.payload_json })
+    .from(conversationEntries)
+    .where(
+      and(
+        eq(conversationEntries.conversation_id, conversationId),
+        eq(conversationEntries.kind, "compaction"),
+      ),
     )
-    .get(conversationId) as Pick<ConversationEntry, "kind" | "payload_json"> | null;
+    .orderBy(desc(conversationEntries.sequence))
+    .get();
   const compacted = checkpoint ? (decodeStoredEntry(checkpoint) as CompactionPayload) : null;
   database
-    .query(
-      `UPDATE conversations SET context_summary=?,compacted_through_id=?,context_tokens=?,unread=0
-       WHERE id=? AND user_id=?`,
-    )
-    .run(
-      compacted?.summary ?? "",
-      compacted?.compactedThroughId ?? null,
-      compacted?.tokensBefore ?? 0,
-      conversationId,
-      userId,
-    );
+    .update(conversations)
+    .set({
+      context_summary: compacted?.summary ?? "",
+      compacted_through_id: compacted?.compactedThroughId ?? null,
+      context_tokens: compacted?.tokensBefore ?? 0,
+      unread: 0,
+    })
+    .where(and(eq(conversations.id, conversationId), eq(conversations.user_id, userId)))
+    .run();
 }
 
 export function allConversationFileIds(database: Database, conversationId: string): string[] {
@@ -615,8 +653,10 @@ export async function hydrateStoredEntry(
 ): Promise<Message | null> {
   if (!new Set(["user_message", "assistant_message", "tool_result"]).has(entry.kind)) return null;
   const owned = database
-    .query(`SELECT 1 FROM conversations WHERE id=? AND user_id=?`)
-    .get(entry.conversation_id, userId);
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, entry.conversation_id), eq(conversations.user_id, userId)))
+    .get();
   if (!owned) throw new Error("conversation transcript ownership mismatch");
   const payload = decodeStoredEntry(entry) as UserPayload | AssistantPayload | ToolResultPayload;
   const content: (StoredContent | ImageContent)[] = [];
@@ -633,8 +673,10 @@ export async function hydrateStoredEntry(
     )
       throw new Error("conversation transcript image reference is invalid");
     const file = database
-      .query("SELECT path,mime FROM files WHERE id=? AND user_id=?")
-      .get(block.fileId, userId) as { path: string; mime: string } | null;
+      .select({ path: files.path, mime: files.mime })
+      .from(files)
+      .where(and(eq(files.id, block.fileId), eq(files.user_id, userId)))
+      .get();
     if (
       !file ||
       file.mime !== block.mimeType ||
@@ -676,8 +718,10 @@ export async function hydrateStoredEntry(
 
 function isConversationFile(database: Database, conversationId: string, fileId: string): boolean {
   const entries = database
-    .query("SELECT kind,payload_json FROM conversation_entries WHERE conversation_id=?")
-    .all(conversationId) as Pick<ConversationEntry, "kind" | "payload_json">[];
+    .select({ kind: conversationEntries.kind, payload_json: conversationEntries.payload_json })
+    .from(conversationEntries)
+    .where(eq(conversationEntries.conversation_id, conversationId))
+    .all();
   return entries.some((entry) => {
     const payload = decodeStoredEntry(entry);
     return (
@@ -700,11 +744,11 @@ export function listConversationEntries(
   conversationId: string,
 ): ConversationEntry[] {
   return database
-    .query(
-      `SELECT id,conversation_id,run_id,sequence,kind,payload_json,created_at
-       FROM conversation_entries WHERE conversation_id=? ORDER BY sequence`,
-    )
-    .all(conversationId) as ConversationEntry[];
+    .select()
+    .from(conversationEntries)
+    .where(eq(conversationEntries.conversation_id, conversationId))
+    .orderBy(asc(conversationEntries.sequence))
+    .all();
 }
 
 export async function hydrateConversationEntries(
@@ -736,11 +780,11 @@ export function appendAgentMessage(
     const fileId = toolResultFileId(message.details);
     if (!fileId) throw new Error("tool result image is missing its file reference");
     const file = database
-      .query(
-        `SELECT f.mime FROM files f JOIN conversations c ON c.user_id=f.user_id
-         WHERE f.id=? AND c.id=?`,
-      )
-      .get(fileId, conversationId) as { mime: string } | null;
+      .select({ mime: files.mime })
+      .from(files)
+      .innerJoin(conversations, eq(conversations.user_id, files.user_id))
+      .where(and(eq(files.id, fileId), eq(conversations.id, conversationId)))
+      .get();
     if (!file || file.mime !== block.mimeType)
       throw new Error("tool result image ownership mismatch");
     return { type: "imageRef" as const, fileId, mimeType: file.mime };
@@ -756,29 +800,14 @@ export function appendAgentMessage(
     payload_json: JSON.stringify(payload),
     created_at: new Date(message.timestamp).toISOString(),
   };
-  database.transaction(() => {
-    entry.sequence = (
-      database
-        .query(
-          "SELECT COALESCE(MAX(sequence),0)+1 AS sequence FROM conversation_entries WHERE conversation_id=?",
-        )
-        .get(conversationId) as { sequence: number }
-    ).sequence;
-    database
-      .query(
-        `INSERT INTO conversation_entries(id,conversation_id,run_id,sequence,kind,payload_json,created_at)
-         VALUES(?,?,?,?,?,?,?)`,
-      )
-      .run(
-        entry.id,
-        entry.conversation_id,
-        entry.run_id,
-        entry.sequence,
-        entry.kind,
-        entry.payload_json,
-        entry.created_at,
-      );
-  })();
+  database.transaction((tx) => {
+    entry.sequence = tx
+      .select({ sequence: sql<number>`coalesce(max(${conversationEntries.sequence}), 0) + 1` })
+      .from(conversationEntries)
+      .where(eq(conversationEntries.conversation_id, conversationId))
+      .get()!.sequence;
+    tx.insert(conversationEntries).values(entry).run();
+  });
   return entry;
 }
 
@@ -793,44 +822,53 @@ export function validateToolResultLinks(messages: readonly Message[]): void {
 }
 
 export function migrateCanonicalTranscript(database: Database, model: string): void {
-  database.transaction(() => {
-    const conversations = database
-      .query(
-        "SELECT id,context_summary,compacted_through_id FROM conversations ORDER BY created_at,id",
-      )
-      .all() as { id: string; context_summary: string; compacted_through_id: string | null }[];
-    for (const conversation of conversations) {
-      const existing = database
-        .query("SELECT COUNT(*) AS count FROM conversation_entries WHERE conversation_id=?")
-        .get(conversation.id) as { count: number };
+  database.transaction((tx) => {
+    const conversationRows = tx
+      .select({
+        id: conversations.id,
+        context_summary: conversations.context_summary,
+        compacted_through_id: conversations.compacted_through_id,
+      })
+      .from(conversations)
+      .orderBy(asc(conversations.created_at), asc(conversations.id))
+      .all();
+    for (const conversation of conversationRows) {
+      const existing = tx
+        .select({ count: count() })
+        .from(conversationEntries)
+        .where(eq(conversationEntries.conversation_id, conversation.id))
+        .get()!;
       if (existing.count) continue;
       let sequence = 0;
-      if (conversation.context_summary) {
-        database
-          .query(
-            `INSERT INTO conversation_entries(id,conversation_id,sequence,kind,payload_json,created_at)
-             VALUES(?,?,?,?,?,?)`,
-          )
-          .run(
-            crypto.randomUUID(),
-            conversation.id,
-            sequence++,
-            "compaction",
-            JSON.stringify({
+      if (conversation.context_summary)
+        tx.insert(conversationEntries)
+          .values({
+            id: crypto.randomUUID(),
+            conversation_id: conversation.id,
+            sequence: sequence++,
+            kind: "compaction",
+            payload_json: JSON.stringify({
               summary: conversation.context_summary,
               compactedThroughId: conversation.compacted_through_id ?? undefined,
             }),
-            new Date(0).toISOString(),
-          );
-      }
-      const messages = database
-        .query(
-          `SELECT id,role,content,file_ids,skills,attachment_context,created_at FROM messages
-           WHERE conversation_id=? ORDER BY created_at,id`,
-        )
-        .all(conversation.id) as LegacyMessageRow[];
-      for (const message of messages) {
-        const fileIds = JSON.parse(message.file_ids) as string[];
+            created_at: new Date(0).toISOString(),
+          })
+          .run();
+      const legacyMessages = tx
+        .select({
+          id: messages.id,
+          role: messages.role,
+          content: messages.content,
+          file_ids: messages.file_ids,
+          skills: messages.skills,
+          attachment_context: messages.attachment_context,
+          created_at: messages.created_at,
+        })
+        .from(messages)
+        .where(eq(messages.conversation_id, conversation.id))
+        .orderBy(asc(messages.created_at), asc(messages.id))
+        .all();
+      for (const message of legacyMessages)
         appendLegacyMessageAtSequence(database, {
           id: message.id,
           role: message.role,
@@ -838,14 +876,13 @@ export function migrateCanonicalTranscript(database: Database, model: string): v
           attachment_context: message.attachment_context,
           created_at: message.created_at,
           conversationId: conversation.id,
-          fileIds,
+          fileIds: JSON.parse(message.file_ids) as string[],
           skills: JSON.parse(message.skills) as string[],
           sequence: sequence++,
           model,
         });
-      }
     }
-  })();
+  });
 }
 
 function appendLegacyMessageAtSequence(
@@ -861,9 +898,11 @@ function appendLegacyMessageAtSequence(
   const content: StoredContent[] = [
     ...(message.content ? [{ type: "text" as const, text: message.content }] : []),
     ...message.fileIds.map((fileId) => {
-      const file = database.query("SELECT mime FROM files WHERE id=?").get(fileId) as {
-        mime: string;
-      } | null;
+      const file = database
+        .select({ mime: files.mime })
+        .from(files)
+        .where(eq(files.id, fileId))
+        .get();
       if (!file) throw new Error(`missing transcript file: ${fileId}`);
       return { type: "imageRef" as const, fileId, mimeType: file.mime };
     }),
@@ -887,16 +926,14 @@ function appendLegacyMessageAtSequence(
           skills: message.skills,
         };
   database
-    .query(
-      `INSERT INTO conversation_entries(id,conversation_id,sequence,kind,payload_json,created_at)
-       VALUES(?,?,?,?,?,?)`,
-    )
-    .run(
-      message.id,
-      message.conversationId,
-      message.sequence,
-      `${message.role}_message`,
-      JSON.stringify(payload),
-      message.created_at,
-    );
+    .insert(conversationEntries)
+    .values({
+      id: message.id,
+      conversation_id: message.conversationId,
+      sequence: message.sequence,
+      kind: `${message.role}_message`,
+      payload_json: JSON.stringify(payload),
+      created_at: message.created_at,
+    })
+    .run();
 }

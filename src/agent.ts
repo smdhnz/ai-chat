@@ -1,4 +1,5 @@
-import type { Database } from "bun:sqlite";
+import { and, eq, inArray } from "drizzle-orm";
+import type { Database } from "./database";
 import {
   Agent,
   type AgentEvent,
@@ -23,6 +24,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { appendAgentMessage, type ConversationEntry } from "./agent-messages";
 import type { ToolContext } from "./agent-tools";
+import { conversationEntries, conversations, runs } from "./schema";
 import {
   compactConversation,
   CompactionCheckpointError,
@@ -114,36 +116,45 @@ export class ConversationRunner {
     if (this.active.has(input.conversationId)) throw new Error("conversation already running");
     const runId = this.id();
     const createdAt = this.now();
-    this.options.database.transaction(() => {
-      const owner = this.options.database
-        .query(
-          `SELECT 1 FROM conversation_entries e JOIN conversations c ON c.id=e.conversation_id
-           WHERE e.id=? AND e.conversation_id=? AND e.kind='user_message' AND c.user_id=?`,
+    this.options.database.transaction((tx) => {
+      const owner = tx
+        .select({ id: conversationEntries.id })
+        .from(conversationEntries)
+        .innerJoin(conversations, eq(conversations.id, conversationEntries.conversation_id))
+        .where(
+          and(
+            eq(conversationEntries.id, input.userEntryId),
+            eq(conversationEntries.conversation_id, input.conversationId),
+            eq(conversationEntries.kind, "user_message"),
+            eq(conversations.user_id, input.userId),
+          ),
         )
-        .get(input.userEntryId, input.conversationId, input.userId);
+        .get();
       if (!owner) throw new Error("user entry not found");
-      const running = this.options.database
-        .query(
-          "SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running') LIMIT 1",
+      const running = tx
+        .select({ id: runs.id })
+        .from(runs)
+        .where(
+          and(
+            eq(runs.conversation_id, input.conversationId),
+            inArray(runs.status, ["queued", "running"]),
+          ),
         )
-        .get(input.conversationId);
+        .get();
       if (running) throw new Error("conversation already running");
-      this.options.database
-        .query(
-          `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
-           VALUES(?,?,?,?,?,?,?,?)`,
-        )
-        .run(
-          runId,
-          input.conversationId,
-          input.userEntryId,
-          "queued",
-          this.options.model.id,
-          input.requestedThinking,
-          input.resolvedThinking,
-          createdAt,
-        );
-    })();
+      tx.insert(runs)
+        .values({
+          id: runId,
+          conversation_id: input.conversationId,
+          user_entry_id: input.userEntryId,
+          status: "queued",
+          model: this.options.model.id,
+          requested_thinking: input.requestedThinking,
+          resolved_thinking: input.resolvedThinking,
+          created_at: createdAt,
+        })
+        .run();
+    });
 
     try {
       let providerTurns = 0;
@@ -270,16 +281,16 @@ export class ConversationRunner {
           throw error;
         }
       });
-      this.options.database.transaction(() => {
-        this.options.database
-          .query("UPDATE runs SET status='running',started_at=? WHERE id=?")
-          .run(this.now(), runId);
-        this.options.database
-          .query(
-            "UPDATE conversations SET generation_status='running',unread=0,updated_at=? WHERE id=?",
-          )
-          .run(this.now(), input.conversationId);
-      })();
+      this.options.database.transaction((tx) => {
+        tx.update(runs)
+          .set({ status: "running", started_at: this.now() })
+          .where(eq(runs.id, runId))
+          .run();
+        tx.update(conversations)
+          .set({ generation_status: "running", unread: 0, updated_at: this.now() })
+          .where(eq(conversations.id, input.conversationId))
+          .run();
+      });
       publish({ type: "run.status", status: "running" });
       active.settlement = this.execute(
         input.conversationId,
@@ -355,7 +366,7 @@ export class ConversationRunner {
     publish: (event: ChatEvent) => void,
   ): Promise<void> {
     if (event.type === "turn_start") {
-      this.options.database.query("UPDATE runs SET turn_count=? WHERE id=?").run(turn, runId);
+      this.options.database.update(runs).set({ turn_count: turn }).where(eq(runs.id, runId)).run();
       publish({ type: "turn.start", turn });
       return;
     }
@@ -406,8 +417,10 @@ export class ConversationRunner {
       const entry = appendAgentMessage(this.options.database, conversationId, runId, message);
       if (message.role === "assistant")
         this.options.database
-          .query("UPDATE runs SET context_tokens=? WHERE id=?")
-          .run(totalTokens(message), runId);
+          .update(runs)
+          .set({ context_tokens: totalTokens(message) })
+          .where(eq(runs.id, runId))
+          .run();
       publish({ type: "message.final", entry: publicEntry(entry, message) });
       return;
     }
@@ -446,14 +459,20 @@ export class ConversationRunner {
     error?: string,
   ): void {
     const timestamp = this.now();
-    this.options.database.transaction(() => {
-      this.options.database
-        .query("UPDATE runs SET status=?,error=?,finished_at=? WHERE id=?")
-        .run(status, error ?? null, timestamp, runId);
-      this.options.database
-        .query("UPDATE conversations SET generation_status=?,unread=1,updated_at=? WHERE id=?")
-        .run(status === "stopped" ? "stopped" : "idle", timestamp, conversationId);
-    })();
+    this.options.database.transaction((tx) => {
+      tx.update(runs)
+        .set({ status, error: error ?? null, finished_at: timestamp })
+        .where(eq(runs.id, runId))
+        .run();
+      tx.update(conversations)
+        .set({
+          generation_status: status === "stopped" ? "stopped" : "idle",
+          unread: 1,
+          updated_at: timestamp,
+        })
+        .where(eq(conversations.id, conversationId))
+        .run();
+    });
   }
 }
 

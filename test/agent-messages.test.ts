@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { Database as SQLiteDatabase } from "bun:sqlite";
+import { createDatabase, type Database } from "../src/database";
 import type { Message } from "@earendil-works/pi-ai";
 import {
   allConversationFileIds,
@@ -15,8 +16,8 @@ import {
 } from "../src/agent-messages";
 
 function database() {
-  const db = new Database(":memory:");
-  db.exec(`
+  const db = createDatabase(new SQLiteDatabase(":memory:"));
+  db.$client.exec(`
     PRAGMA foreign_keys=ON;
     CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE conversations (
@@ -45,18 +46,22 @@ function database() {
       payload_json TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(conversation_id,sequence)
     );
   `);
-  db.query("INSERT INTO users(id) VALUES('user-1'),('user-2')").run();
-  db.query(
-    "INSERT INTO conversations(id,user_id,context_summary,compacted_through_id,created_at) VALUES(?,?,?,?,?)",
-  ).run("conversation", "user-1", "以前の要約", "old-user", "2025-01-01T00:00:00.000Z");
+  db.$client.query("INSERT INTO users(id) VALUES('user-1'),('user-2')").run();
+  db.$client
+    .query(
+      "INSERT INTO conversations(id,user_id,context_summary,compacted_through_id,created_at) VALUES(?,?,?,?,?)",
+    )
+    .run("conversation", "user-1", "以前の要約", "old-user", "2025-01-01T00:00:00.000Z");
   for (const [id, user, mime, source] of [
     ["upload", "user-1", "image/png", "upload"],
     ["generated", "user-1", "image/png", "generated"],
     ["generated-2", "user-1", "image/png", "generated"],
   ])
-    db.query(
-      "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(id, user, `${id}.png`, `/tmp/${id}.png`, mime, 1, source, "2025-01-01T00:00:00.000Z");
+    db.$client
+      .query(
+        "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+      )
+      .run(id, user, `${id}.png`, `/tmp/${id}.png`, mime, 1, source, "2025-01-01T00:00:00.000Z");
   return db;
 }
 
@@ -69,18 +74,20 @@ function oldMessage(
   skills: string[] = [],
   createdAt = "2025-01-01T00:00:00.000Z",
 ) {
-  db.query(
-    `INSERT INTO messages(id,conversation_id,role,content,file_ids,skills,created_at)
+  db.$client
+    .query(
+      `INSERT INTO messages(id,conversation_id,role,content,file_ids,skills,created_at)
      VALUES(?,?,?,?,?,?,?)`,
-  ).run(
-    id,
-    "conversation",
-    role,
-    content,
-    JSON.stringify(fileIds),
-    JSON.stringify(skills),
-    createdAt,
-  );
+    )
+    .run(
+      id,
+      "conversation",
+      role,
+      content,
+      JSON.stringify(fileIds),
+      JSON.stringify(skills),
+      createdAt,
+    );
 }
 
 describe("canonical transcript migration", () => {
@@ -115,7 +122,9 @@ describe("canonical transcript migration", () => {
     });
     expect(all[1]).toMatchObject({ content: "画像を見て", file_ids: '["upload"]' });
     expect(
-      db.query("SELECT COUNT(*) AS count FROM conversation_entries WHERE kind='compaction'").get(),
+      db.$client
+        .query("SELECT COUNT(*) AS count FROM conversation_entries WHERE kind='compaction'")
+        .get(),
     ).toEqual({ count: 1 });
     const page = pageLegacyMessages(db, "conversation", null, 50);
     expect(page.hasMore).toBe(true);
@@ -129,7 +138,7 @@ describe("canonical transcript migration", () => {
       fileIds: ["generated"],
       skills: ["imagegen"],
     });
-    expect(db.query("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 53 });
+    expect(db.$client.query("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 53 });
   });
 
   test("新規writeは旧messagesへdual writeしない", () => {
@@ -143,17 +152,19 @@ describe("canonical transcript migration", () => {
       createdAt: "2025-01-03T00:00:00.000Z",
     });
     expect(listLegacyMessages(db, "conversation").map(({ id }) => id)).toEqual(["new"]);
-    expect(db.query("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 0 });
+    expect(db.$client.query("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 0 });
   });
 });
 
 describe("public transcript projection", () => {
   test("同じrunのreasoning・tool・final textを1件へまとめてsecretを公開しない", () => {
     const db = database();
-    db.query(
-      `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
+    db.$client
+      .query(
+        `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
        VALUES('run','conversation','user','completed','fake','low','low','2025-01-02')`,
-    ).run();
+      )
+      .run();
     const rows = [
       [
         "user",
@@ -258,15 +269,17 @@ describe("public transcript projection", () => {
       ],
     ] as const;
     for (const [id, runId, sequence, kind, payload] of rows)
-      db.query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)").run(
-        id,
-        "conversation",
-        runId,
-        sequence,
-        kind,
-        JSON.stringify(payload),
-        `2025-01-02T00:00:0${sequence}.000Z`,
-      );
+      db.$client
+        .query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)")
+        .run(
+          id,
+          "conversation",
+          runId,
+          sequence,
+          kind,
+          JSON.stringify(payload),
+          `2025-01-02T00:00:0${sequence}.000Z`,
+        );
 
     const page = pagePublicMessages(db, "conversation", null, 50);
     expect(page.messages).toHaveLength(2);
@@ -294,10 +307,12 @@ describe("public transcript projection", () => {
 
   test("failed runの未完了画像生成とsanitized中断理由を公開する", () => {
     const db = database();
-    db.query(
-      `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,error,created_at)
+    db.$client
+      .query(
+        `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,error,created_at)
        VALUES('failed-run','conversation','user','failed','fake','low','low',?,'2025-01-02')`,
-    ).run("server restarted\nSECRET STACK TRACE");
+      )
+      .run("server restarted\nSECRET STACK TRACE");
     const rows = [
       [
         "user",
@@ -380,15 +395,17 @@ describe("public transcript projection", () => {
       ],
     ] as const;
     for (const [id, runId, sequence, kind, payload] of rows)
-      db.query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)").run(
-        id,
-        "conversation",
-        runId,
-        sequence,
-        kind,
-        JSON.stringify(payload),
-        `2025-01-02T00:00:0${sequence}.000Z`,
-      );
+      db.$client
+        .query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)")
+        .run(
+          id,
+          "conversation",
+          runId,
+          sequence,
+          kind,
+          JSON.stringify(payload),
+          `2025-01-02T00:00:0${sequence}.000Z`,
+        );
 
     const page = pagePublicMessages(db, "conversation", null, 50);
     expect(page.messages[1]).toMatchObject({
@@ -421,10 +438,12 @@ describe("conversation regeneration", () => {
       content: "first",
       createdAt: "2025-01-01T00:00:01.000Z",
     });
-    db.query(
-      `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
+    db.$client
+      .query(
+        `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
        VALUES('run-1','conversation','user-1','completed','model','low','low','2025-01-01T00:00:01.000Z')`,
-    ).run();
+      )
+      .run();
     appendLegacyMessage(db, {
       id: "assistant-1",
       conversationId: "conversation",
@@ -434,10 +453,12 @@ describe("conversation regeneration", () => {
       createdAt: "2025-01-01T00:00:02.000Z",
       runId: "run-1",
     });
-    db.query(
-      `INSERT INTO conversation_entries(id,conversation_id,run_id,sequence,kind,payload_json,created_at)
+    db.$client
+      .query(
+        `INSERT INTO conversation_entries(id,conversation_id,run_id,sequence,kind,payload_json,created_at)
        VALUES('checkpoint','conversation','run-1',3,'compaction',?,'2025-01-01T00:00:03.000Z')`,
-    ).run(JSON.stringify({ summary: "retained summary", tokensBefore: 123 }));
+      )
+      .run(JSON.stringify({ summary: "retained summary", tokensBefore: 123 }));
     appendLegacyMessage(db, {
       id: "user-2",
       conversationId: "conversation",
@@ -445,10 +466,12 @@ describe("conversation regeneration", () => {
       content: "second",
       createdAt: "2025-01-01T00:00:04.000Z",
     });
-    db.query(
-      `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
+    db.$client
+      .query(
+        `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
        VALUES('run-2','conversation','user-2','completed','model','low','low','2025-01-01T00:00:04.000Z')`,
-    ).run();
+      )
+      .run();
     appendLegacyMessage(db, {
       id: "assistant-2",
       conversationId: "conversation",
@@ -458,20 +481,24 @@ describe("conversation regeneration", () => {
       createdAt: "2025-01-01T00:00:05.000Z",
       runId: "run-2",
     });
-    db.query(
-      "UPDATE conversations SET context_summary='newer',compacted_through_id='user-2',context_tokens=999,unread=1 WHERE id='conversation'",
-    ).run();
+    db.$client
+      .query(
+        "UPDATE conversations SET context_summary='newer',compacted_through_id='user-2',context_tokens=999,unread=1 WHERE id='conversation'",
+      )
+      .run();
     const filesBefore = allConversationFileIds(db, "conversation");
 
     rewindConversation(db, "conversation", "user-1", "user-2", "edited second");
 
     expect(
-      db.query("SELECT id FROM conversation_entries ORDER BY sequence").all() as { id: string }[],
+      db.$client.query("SELECT id FROM conversation_entries ORDER BY sequence").all() as {
+        id: string;
+      }[],
     ).toEqual([{ id: "user-1" }, { id: "assistant-1" }, { id: "checkpoint" }, { id: "user-2" }]);
-    expect(db.query("SELECT id FROM runs ORDER BY id").all()).toEqual([{ id: "run-1" }]);
+    expect(db.$client.query("SELECT id FROM runs ORDER BY id").all()).toEqual([{ id: "run-1" }]);
     expect(listLegacyMessages(db, "conversation").at(-1)?.content).toBe("edited second");
     expect(
-      db
+      db.$client
         .query(
           "SELECT context_summary,compacted_through_id,context_tokens,unread FROM conversations WHERE id='conversation'",
         )
@@ -508,18 +535,20 @@ describe("StoredMessage codec", () => {
 
   test("imageRefを別ユーザーのfile rowから復元しない", async () => {
     const db = database();
-    db.query(
-      "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(
-      "foreign",
-      "user-2",
-      "foreign.png",
-      "/tmp/foreign.png",
-      "image/png",
-      1,
-      "upload",
-      "2025-01-01T00:00:00.000Z",
-    );
+    db.$client
+      .query(
+        "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        "foreign",
+        "user-2",
+        "foreign.png",
+        "/tmp/foreign.png",
+        "image/png",
+        1,
+        "upload",
+        "2025-01-01T00:00:00.000Z",
+      );
     await expect(
       hydrateStoredEntry(
         db,

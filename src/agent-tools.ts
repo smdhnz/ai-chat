@@ -1,4 +1,5 @@
-import type { Database } from "bun:sqlite";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import type { Database } from "./database";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -11,6 +12,7 @@ import {
   type StoredContent,
 } from "./agent-messages";
 import { config, storedFilePath } from "./config";
+import { files, skills } from "./schema";
 import { webSearch as defaultWebSearch } from "./web-search";
 
 export type ToolContext = {
@@ -46,14 +48,12 @@ type ImageDetails = { file: PublicFile; operation?: "generation" | "edit" };
 
 export function availableSkillCatalog(database: Database, userId: string) {
   return database
-    .query(
-      "SELECT name,description FROM skills WHERE user_id=? AND enabled=1 ORDER BY updated_at DESC",
-    )
-    .all(userId)
-    .map((skill) => ({
-      ...(skill as { name: string; description: string }),
-      source: "user" as const,
-    }));
+    .select({ name: skills.name, description: skills.description })
+    .from(skills)
+    .where(and(eq(skills.user_id, userId), eq(skills.enabled, 1)))
+    .orderBy(desc(skills.updated_at))
+    .all()
+    .map((skill) => ({ ...skill, source: "user" as const }));
 }
 
 export function createAgentTools(
@@ -129,10 +129,13 @@ export function createAgentTools(
         const scopedSignal = toolSignal(signal, 10_000);
         const source = "user" satisfies SkillDetails["source"];
         const skill = database
-          .query(
-            "SELECT instructions FROM skills WHERE user_id=? AND enabled=1 AND name=? ORDER BY updated_at DESC LIMIT 1",
+          .select({ instructions: skills.instructions })
+          .from(skills)
+          .where(
+            and(eq(skills.user_id, context.userId), eq(skills.enabled, 1), eq(skills.name, name)),
           )
-          .get(context.userId, name) as { instructions: string } | null;
+          .orderBy(desc(skills.updated_at))
+          .get();
         if (!skill) throw new Error(`Skill ${name} is not available`);
         const instructions = skill.instructions;
         if (scopedSignal.aborted) throw scopedSignal.reason;
@@ -188,19 +191,18 @@ export function createAgentTools(
           await rename(temporary, path);
           if (scopedSignal.aborted) throw scopedSignal.reason;
           database
-            .query(
-              "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
-            )
-            .run(
-              fileId,
-              context.userId,
+            .insert(files)
+            .values({
+              id: fileId,
+              user_id: context.userId,
               name,
               path,
-              "image/png",
-              bytes.length,
-              "generated",
-              createdAt,
-            );
+              mime: "image/png",
+              size: bytes.length,
+              source: "generated",
+              created_at: createdAt,
+            })
+            .run();
           if (scopedSignal.aborted) throw scopedSignal.reason;
           saved = true;
           const file: PublicFile = {
@@ -224,8 +226,9 @@ export function createAgentTools(
         } finally {
           if (!saved) {
             database
-              .query("DELETE FROM files WHERE id=? AND user_id=?")
-              .run(fileId, context.userId);
+              .delete(files)
+              .where(and(eq(files.id, fileId), eq(files.user_id, context.userId)))
+              .run();
             await Promise.all([
               unlink(temporary).catch(() => undefined),
               unlink(path).catch(() => undefined),
@@ -290,11 +293,24 @@ function ownedConversationImage(database: Database, context: ToolContext, fileId
   if (!conversationFileIds(database, context.conversationId).has(fileId))
     throw new Error("Image is not associated with this conversation");
   const file = database
-    .query(
-      `SELECT id,name,path,mime,size,source,created_at FROM files
-       WHERE id=? AND user_id=? AND mime IN ('image/png','image/jpeg','image/webp','image/gif')`,
+    .select({
+      id: files.id,
+      name: files.name,
+      path: files.path,
+      mime: files.mime,
+      size: files.size,
+      source: files.source,
+      created_at: files.created_at,
+    })
+    .from(files)
+    .where(
+      and(
+        eq(files.id, fileId),
+        eq(files.user_id, context.userId),
+        inArray(files.mime, ["image/png", "image/jpeg", "image/webp", "image/gif"]),
+      ),
     )
-    .get(fileId, context.userId) as FileRow | null;
+    .get();
   if (!file) throw new Error("Conversation image not found");
   return file;
 }
