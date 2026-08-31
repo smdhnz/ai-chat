@@ -175,7 +175,6 @@ export function createAgentTools(
       execute: async (_toolCallId, params, signal) => {
         const input = params as { prompt: string; inputFileIds?: string[] };
         consumeBudget(counts, "generate_image", 2);
-        if (!loadedSkills.has("imagegen")) throw new Error("Load the imagegen skill first");
         const inputIds =
           input.inputFileIds?.length || !latestUserRequestsImageEdit(database, context)
             ? (input.inputFileIds ?? [])

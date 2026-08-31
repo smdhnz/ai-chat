@@ -201,7 +201,7 @@ describe("custom tool executor", () => {
     );
   });
 
-  test("generate_imageをimageRefとして保存し、hydrate時に関連付けを再検証する", async () => {
+  test("generate_imageはskill読込順に依存せず、imageRefとして保存する", async () => {
     const { db, root, skillPath } = await fixture();
     const tools = createAgentTools(
       { userId: "user-1", conversationId: "conversation-1", runId: "run" },
@@ -214,7 +214,6 @@ describe("custom tool executor", () => {
         now: () => "2025-01-02T00:00:00.000Z",
       },
     );
-    await tool(tools, "load_skill").execute("load", { name: "imagegen" });
     const generated = await tool(tools, "generate_image").execute("generate", {
       prompt: "a simple image",
     });

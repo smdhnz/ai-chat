@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useDeferredValue, useEffect, useRef, useState, type ComponentProps } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -137,10 +137,8 @@ function ActivityPanel({
   activities: PublicActivity[];
   streaming: boolean;
 }) {
-  const hasError = activities.some(
-    (activity) => activity.type !== "reasoning" && activity.status === "error",
-  );
-  const [expanded, setExpanded] = useState(hasError);
+  const [expanded, setExpanded] = useState(false);
+  const reducedMotion = useReducedMotion();
   const latest = activities.at(-1);
   return (
     <div className="mb-3 w-fit min-w-[min(180px,78vw)] max-w-[min(280px,78vw)] rounded-[13px] border border-border bg-[color-mix(in_srgb,var(--muted)_62%,transparent)] text-xs">
@@ -158,52 +156,66 @@ function ActivityPanel({
         <span className="min-w-0 flex-1 truncate">
           {streaming && latest ? activityLabel(latest) : `${activities.length}件の処理`}
         </span>
-        <ChevronDown
-          className={`size-3.5 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
+        <motion.span
+          className="shrink-0"
+          animate={{ rotate: expanded ? 180 : 0 }}
+          transition={{ duration: reducedMotion ? 0 : 0.18 }}
+        >
+          <ChevronDown className="size-3.5" aria-hidden="true" />
+        </motion.span>
       </button>
-      {expanded && (
-        <div className="border-t border-border px-3 py-1.5">
-          {activities.map((activity, index) => (
-            <div
-              key={`${activity.type}-${index}`}
-              className="flex gap-2 border-b border-border/60 py-2.5 last:border-b-0"
-            >
-              <span className="mt-0.5 text-muted-foreground">{activityIcon(activity)}</span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 break-words font-medium text-foreground">
-                    {activityLabel(activity)}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {activityStatus(activity)}
-                  </span>
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            key="activity-details"
+            className="overflow-hidden"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }}
+          >
+            <div className="border-t border-border px-3 py-1.5">
+              {activities.map((activity, index) => (
+                <div
+                  key={`${activity.type}-${index}`}
+                  className="flex gap-2 border-b border-border/60 py-2.5 last:border-b-0"
+                >
+                  <span className="mt-0.5 text-muted-foreground">{activityIcon(activity)}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 break-words font-medium text-foreground">
+                        {activityLabel(activity)}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {activityStatus(activity)}
+                      </span>
+                    </div>
+                    {activity.type === "reasoning" && (
+                      <p className="mt-1 break-words whitespace-pre-wrap text-muted-foreground">
+                        {activity.text}
+                      </p>
+                    )}
+                    {activity.type === "web_search" && activity.sources.length > 0 && (
+                      <ul className="mt-1 space-y-1">
+                        {activity.sources.map((source) => (
+                          <li key={source.url} className="break-words">
+                            <a href={source.url} target="_blank" rel="noopener noreferrer">
+                              {source.title || source.url}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {activity.type === "tool" && (
+                      <p className="mt-1 break-words text-muted-foreground">{activity.summary}</p>
+                    )}
+                  </div>
                 </div>
-                {activity.type === "reasoning" && (
-                  <p className="mt-1 break-words whitespace-pre-wrap text-muted-foreground">
-                    {activity.text}
-                  </p>
-                )}
-                {activity.type === "web_search" && activity.sources.length > 0 && (
-                  <ul className="mt-1 space-y-1">
-                    {activity.sources.map((source) => (
-                      <li key={source.url} className="break-words">
-                        <a href={source.url} target="_blank" rel="noopener noreferrer">
-                          {source.title || source.url}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {activity.type === "tool" && (
-                  <p className="mt-1 break-words text-muted-foreground">{activity.summary}</p>
-                )}
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
