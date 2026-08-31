@@ -1,44 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import {
-  ASSISTANT_CONTINUE_MARKER,
-  lastUserIndex,
-  newestMessagePage,
-  parseAssistantReply,
-  regenerationIndex,
-} from "../src/messages";
+import { regenerationIndex } from "../src/messages";
 
-describe("newestMessagePage", () => {
-  test("新しい順の51件から最新50件を古い順で返す", () => {
-    const page = newestMessagePage(Array.from({ length: 51 }, (_, index) => 51 - index));
-    expect(page.messages).toEqual(Array.from({ length: 50 }, (_, index) => index + 2));
-    expect(page.hasMore).toBe(true);
-  });
-});
-
-describe("parseAssistantReply", () => {
-  test("通常の返答は1メッセージで終了する", () => {
-    expect(parseAssistantReply("  回答です。  ")).toEqual({
-      content: "回答です。",
-      continueGeneration: false,
-    });
-  });
-
-  test("末尾の専用マーカーだけを継続要求として除去する", () => {
-    expect(parseAssistantReply(`途中結果です。\n${ASSISTANT_CONTINUE_MARKER}`)).toEqual({
-      content: "途中結果です。",
-      continueGeneration: true,
-    });
-    expect(parseAssistantReply(`文中の ${ASSISTANT_CONTINUE_MARKER} はそのまま`)).toEqual({
-      content: `文中の ${ASSISTANT_CONTINUE_MARKER} はそのまま`,
-      continueGeneration: false,
-    });
-  });
-});
-
-describe("lastUserIndex", () => {
-  test("応答済みと停止済みのどちらも最後の送信を再生成対象にする", () => {
-    expect(lastUserIndex([{ role: "user" }, { role: "assistant" }])).toBe(0);
-    expect(lastUserIndex([{ role: "assistant" }, { role: "user" }])).toBe(1);
+describe("regenerationIndex", () => {
+  test("未指定時は最後のuser messageを再生成対象にする", () => {
+    expect(
+      regenerationIndex([
+        { id: "user", role: "user" },
+        { id: "answer", role: "assistant" },
+      ]),
+    ).toBe(0);
+    expect(
+      regenerationIndex([
+        { id: "answer", role: "assistant" },
+        { id: "user", role: "user" },
+      ]),
+    ).toBe(1);
   });
 
   test("指定したユーザーメッセージから分岐する", () => {

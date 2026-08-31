@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Model } from "@earendil-works/pi-ai";
 import {
-  AUTO_THINKING_MODEL,
-  cacheSessionId,
   DEFAULT_THINKING_LEVEL,
   isAuthenticationError,
-  needsCompaction,
   resolveAiSettings,
   resolveRunThinking,
   resolveThinkingLevel,
@@ -27,9 +24,8 @@ const model: Model<"openai-responses"> = {
 };
 
 describe("Codex設定", () => {
-  test("設定モデルとターンプランモデルを解決できる", () => {
+  test("設定モデルを解決できる", () => {
     expect(resolveAiSettings("auto").model).toBe(config.codexModel);
-    expect(needsCompaction(0, AUTO_THINKING_MODEL)).toBe(false);
   });
 
   test("未設定providerを認証エラーとして扱う", () => {
@@ -57,12 +53,5 @@ describe("Codex設定", () => {
     expect(
       await resolveRunThinking("auto", model, async () => Promise.reject(new Error("fail"))),
     ).toEqual({ resolved: "medium", title: "" });
-  });
-
-  test("会話・用途・モデル単位でキャッシュセッションを分離する", () => {
-    const chat = cacheSessionId("conversation", config.codexModel);
-    expect(chat).toBe(cacheSessionId("conversation", config.codexModel));
-    expect(chat).not.toBe(cacheSessionId("conversation", config.codexModel, "plan"));
-    expect(chat).not.toBe(cacheSessionId("conversation", "gpt-5.6-terra"));
   });
 });

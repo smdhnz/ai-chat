@@ -6,31 +6,18 @@ import {
   getSupportedThinkingLevels,
   Type,
   type Api,
-  type AssistantMessage,
   type Context,
   type Credential,
   type CredentialInfo,
   type CredentialStore,
-  type ImageContent,
-  type Message,
   type Model,
   type ModelThinkingLevel,
 } from "@earendil-works/pi-ai";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { config } from "./config";
-import { shouldCompact } from "./context";
 import { getCodexAccountId } from "./codex-token";
 import { COMPACTION_SYSTEM_PROMPT } from "./prompt";
 import { parseThinkingClassification } from "./thinking-classifier";
-
-const zeroUsage = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
 
 export const AUTO_THINKING_MODEL = "gpt-5.6-luna";
 export const DEFAULT_THINKING_LEVEL = "low";
@@ -46,20 +33,6 @@ export type ThinkingClassifierInput = {
   recentText: { role: "user" | "assistant"; text: string }[];
   imageCount: number;
   needsTitle: boolean;
-};
-type ChatOptions = AiSettings & {
-  images?: ImageContent[];
-  signal?: AbortSignal;
-  sessionId?: string;
-  cacheRetention?: "none" | "short";
-  onText?: (text: string) => void;
-};
-
-export type HistoryEntry = {
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-  images?: ImageContent[];
 };
 export type DeviceAuthInfo = {
   userCode: string;
@@ -203,18 +176,6 @@ function isThinkingLevel(value: string): value is ThinkingLevel {
   return ["auto", "minimal", "low", "medium", "high", "xhigh", "max"].includes(value);
 }
 
-export function cacheSessionId(
-  conversationId: string,
-  model: string,
-  purpose: "chat" | "plan" | "image" = "chat",
-): string {
-  return `${conversationId}:${purpose}:${model}`;
-}
-
-export function needsCompaction(inputTokens: number, modelId: string): boolean {
-  return shouldCompact(inputTokens, getModel(modelId).contextWindow);
-}
-
 export async function summarizeConversation(payload: string, signal?: AbortSignal) {
   const model = getModel(config.codexModel);
   const stream = models.streamSimple(
@@ -236,68 +197,6 @@ export async function summarizeConversation(payload: string, signal?: AbortSigna
   if (response.stopReason === "error" || response.stopReason === "aborted")
     throw new Error(response.errorMessage || "compaction summary failed");
   return { summary: contentText(response.content).trim(), usage: response.usage };
-}
-
-export async function chat(
-  systemPrompt: string,
-  history: HistoryEntry[],
-  options: ChatOptions,
-): Promise<{ text: string; contextTokens: number }> {
-  const model = getModel(options.model);
-  const images = options.images ?? [];
-  const messages: Message[] = history.map((entry, index) => {
-    const attachedImages = entry.images?.length
-      ? entry.images
-      : index === history.length - 1
-        ? images
-        : [];
-    return entry.role === "user"
-      ? {
-          role: "user",
-          content: attachedImages.length
-            ? [{ type: "text", text: entry.content }, ...attachedImages]
-            : entry.content,
-          timestamp: Date.parse(entry.created_at),
-        }
-      : ({
-          role: "assistant",
-          content: [{ type: "text", text: entry.content }],
-          api: model.api,
-          provider: model.provider,
-          model: model.id,
-          usage: zeroUsage,
-          stopReason: "stop",
-          timestamp: Date.parse(entry.created_at),
-        } as AssistantMessage);
-  });
-  const context: Context = { systemPrompt, messages };
-  const stream = models.streamSimple(model, context, {
-    reasoning: options.thinking === "auto" ? "medium" : options.thinking,
-    sessionId: options.sessionId,
-    cacheRetention: options.cacheRetention ?? "short",
-    signal: options.signal
-      ? AbortSignal.any([options.signal, AbortSignal.timeout(config.aiTimeoutMs)])
-      : AbortSignal.timeout(config.aiTimeoutMs),
-  });
-  let text = "";
-  for await (const event of stream) {
-    if (event.type !== "text_delta") continue;
-    text += event.delta;
-    options.onText?.(text);
-  }
-  const response = await stream.result();
-  if (response.stopReason === "error" || response.stopReason === "aborted") {
-    throw new Error(response.errorMessage || "AI request failed");
-  }
-  return {
-    text: contentText(response.content).trim(),
-    contextTokens:
-      response.usage.totalTokens ||
-      response.usage.input +
-        response.usage.output +
-        response.usage.cacheRead +
-        response.usage.cacheWrite,
-  };
 }
 
 export async function generateImage(
