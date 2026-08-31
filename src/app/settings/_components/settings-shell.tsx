@@ -505,9 +505,11 @@ function SettingsDetail({
               value={thinking}
               onChange={(event) => saveThinking(event.target.value as ThinkingLevel)}
             >
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
+              {data.supported_thinking_levels.map((level) => (
+                <option key={level} value={level}>
+                  {level === "auto" ? "Auto" : level === "xhigh" ? "XHigh" : capitalize(level)}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -627,6 +629,10 @@ function DetailLayout({
 
 function EmptyText({ children }: { children: ReactNode }) {
   return <p className="py-12 text-center text-[12px] text-muted-foreground">{children}</p>;
+}
+
+function capitalize(value: string): string {
+  return value[0].toUpperCase() + value.slice(1);
 }
 
 function SettingsCard({

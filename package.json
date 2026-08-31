@@ -19,7 +19,8 @@
     "check": "bun run format:check && bun run typecheck && bun run lint && bun test && bun run build"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.83.0",
+    "@earendil-works/pi-agent-core": "0.84.4",
+    "@earendil-works/pi-ai": "0.84.4",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "motion": "^12.0.0",

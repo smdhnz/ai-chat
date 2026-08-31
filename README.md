@@ -78,6 +78,16 @@ data/
 
 ファイルは認証済み本人の `/files/:id` からのみ取得できます。アップロード上限は既定で1リクエスト合計20MBです。
 
+DB migration前はアプリを停止し、SQLite本体とWALをまとめて退避します。
+
+```bash
+docker compose down
+backup="data/backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$backup"
+cp -a data/chat.sqlite* "$backup"/
+docker compose up -d
+```
+
 ## 公開
 
 Composeの `tunnel` サービスが `gateway.fumiya.dev:2222` へSSH接続し、`chat:80` をアプリの `chat:3000` へリバースフォワードします。ホストの `~/.ssh/id_ed25519` と、StrictHostKeyChecking用の `known_hosts` が必要です。TLS終端はgateway側で行います。

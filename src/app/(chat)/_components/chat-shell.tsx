@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ import {
   getBootstrap,
   readJson,
   socketUrl,
+  type ChatEventEnvelope,
   type Conversation,
   type Message,
   type MessagePage,
@@ -24,7 +25,13 @@ import {
 import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
 import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
-import { chatUrl, conversationIdFromPath } from "@/app/(chat)/_libs/chat";
+import {
+  chatUrl,
+  conversationIdFromPath,
+  isChatEventEnvelope,
+  reduceChatStreams,
+  streamMessage,
+} from "@/app/(chat)/_libs/chat";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
 import { ProjectIcon } from "@/components/project-icon";
@@ -46,7 +53,7 @@ export function ChatShell() {
   const [projectId, setProjectId] = useState("");
   const [temporary, setTemporary] = useState(temporaryParam);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [pendingStreamPage, setPendingStreamPage] = useState<MessagePage | null>(null);
+  const [streams, dispatchStream] = useReducer(reduceChatStreams, {});
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
@@ -59,6 +66,7 @@ export function ChatShell() {
   const [prompt, setPrompt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -148,72 +156,88 @@ export function ChatShell() {
     let active = true;
     let socket: WebSocket | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const streamingConversations = new Set<string>();
+    let attempts = 0;
+    let connected = false;
+    const refreshAfterReconnect = async () => {
+      const openId = openConversationRef.current;
+      const [fresh, page] = await Promise.all([
+        getBootstrap(),
+        openId ? api<MessagePage>(`/api/conversations/${openId}`) : Promise.resolve(null),
+      ]);
+      if (!active) return;
+      setData(fresh);
+      if (openId && page && openConversationRef.current === openId) {
+        setMessages(page.messages);
+        setHasOlderMessages(page.hasMore);
+        dispatchStream({ type: "clear", conversationId: openId });
+      }
+    };
+    const finishRun = (event: ChatEventEnvelope) => {
+      const current =
+        openConversationRef.current === event.conversationId
+          ? api<MessagePage>(`/api/conversations/${event.conversationId}`)
+          : Promise.resolve(null);
+      void Promise.all([getBootstrap(), current])
+        .then(([fresh, page]) => {
+          if (!active) return;
+          setData(fresh);
+          if (page && openConversationRef.current === event.conversationId) {
+            setMessages(page.messages);
+            setHasOlderMessages(page.hasMore);
+          }
+          dispatchStream({ type: "clear", conversationId: event.conversationId });
+        })
+        .catch(() => undefined);
+    };
     const connect = () => {
       socket = new WebSocket(socketUrl());
+      socket.onopen = () => {
+        setSocketConnected(true);
+        const reconnecting = connected;
+        connected = true;
+        attempts = 0;
+        if (reconnecting) void refreshAfterReconnect().catch(() => undefined);
+      };
       socket.onmessage = ({ data: message }) => {
-        const event = JSON.parse(String(message)) as
-          | {
-              type: "status";
-              conversationId: string;
-              status: Conversation["generation_status"];
-            }
-          | { type: "content"; conversationId: string; content: string }
-          | { type: "done"; conversationId: string };
-        if (event.type === "status") {
+        let event: unknown;
+        try {
+          event = JSON.parse(String(message));
+        } catch {
+          return;
+        }
+        if (!isChatEventEnvelope(event)) return;
+        dispatchStream({ type: "event", envelope: event });
+        if (event.event.type === "run.status") {
+          const status = event.event.status;
           setData((value) =>
             value
               ? {
                   ...value,
                   conversations: value.conversations.map((conversation) =>
                     conversation.id === event.conversationId
-                      ? { ...conversation, generation_status: event.status }
+                      ? {
+                          ...conversation,
+                          generation_status:
+                            status === "running" || status === "stopped" ? status : "idle",
+                          activeRunId:
+                            status === "queued" || status === "running" ? event.runId : null,
+                        }
                       : conversation,
                   ),
                 }
               : value,
           );
-          return;
-        }
-        if (event.type === "done") {
-          const waitForStream = streamingConversations.delete(event.conversationId);
-          const current =
-            openConversationRef.current === event.conversationId
-              ? api<MessagePage>(`/api/conversations/${event.conversationId}`)
-              : Promise.resolve(null);
-          void Promise.all([getBootstrap(), current])
-            .then(([fresh, page]) => {
-              if (!active) return;
-              setData(fresh);
-              if (page && openConversationRef.current === event.conversationId) {
-                if (waitForStream) setPendingStreamPage(page);
-                else {
-                  setMessages(page.messages);
-                  setHasOlderMessages(page.hasMore);
-                }
-              }
-            })
-            .catch(() => undefined);
-          return;
-        }
-        if (openConversationRef.current !== event.conversationId || !event.content) return;
-        streamingConversations.add(event.conversationId);
-        const streamId = `stream-${event.conversationId}`;
-        setMessages((value) => {
-          const streamed: Message = {
-            id: streamId,
-            role: "assistant",
-            content: event.content,
-            files: [],
-            created_at: new Date().toISOString(),
-          };
-          return value.some((item) => item.id === streamId)
-            ? value.map((item) => (item.id === streamId ? streamed : item))
-            : [...value, streamed];
-        });
+        } else if (event.event.type === "run.done") finishRun(event);
+      };
+      socket.onerror = () => {
+        setSocketConnected(false);
+        socket?.close();
       };
       socket.onclose = () => {
-        if (active) retry = setTimeout(connect, 1_000);
+        if (!active) return;
+        setSocketConnected(false);
+        const delay = Math.min(10_000, 500 * 2 ** attempts++);
+        retry = setTimeout(connect, delay);
       };
     };
     connect();
@@ -221,11 +245,9 @@ export function ChatShell() {
       active = false;
       clearTimeout(retry);
       const closingSocket = socket;
-      if (closingSocket?.readyState === WebSocket.CONNECTING) {
+      if (closingSocket?.readyState === WebSocket.CONNECTING)
         closingSocket.onopen = () => closingSocket.close();
-      } else {
-        closingSocket?.close();
-      }
+      else closingSocket?.close();
     };
   }, [setData]);
 
@@ -250,7 +272,6 @@ export function ChatShell() {
       return;
     }
     let active = true;
-    setPendingStreamPage(null);
     void api<MessagePage>(`/api/conversations/${resolvedConversationId}`).then((page) => {
       if (!active) return;
       setMessages(page.messages);
@@ -278,7 +299,6 @@ export function ChatShell() {
         api<MessagePage>(`/api/conversations/${id}`),
       ]);
       setData(fresh);
-      setPendingStreamPage(null);
       setMessages(page.messages);
       setHasOlderMessages(page.hasMore);
     },
@@ -289,13 +309,19 @@ export function ChatShell() {
 
   const project = data.projects.find((item) => item.id === projectId);
   const activeConversation = data.conversations.find((item) => item.id === conversationId);
+  const activeStream = conversationId ? streams[conversationId] : undefined;
+  const streamedMessage = activeStream ? streamMessage(activeStream) : undefined;
+  const displayedMessages = streamedMessage
+    ? [...messages.filter((message) => message.runId !== streamedMessage.runId), streamedMessage]
+    : messages;
   const generating =
-    sending || activeConversation?.generation_status === "running" || pendingStreamPage !== null;
+    sending ||
+    activeConversation?.generation_status === "running" ||
+    activeStream?.status === "queued" ||
+    activeStream?.status === "running";
   const editing = editingMessageId !== null;
-  const streaming = messages.some(
-    (message) => message.id === `stream-${conversationId}` && Boolean(message.content),
-  );
-  const newestImageMessageId = messages.reduceRight<string | undefined>(
+  const streaming = Boolean(streamedMessage?.content);
+  const newestImageMessageId = displayedMessages.reduceRight<string | undefined>(
     (id, message) =>
       id ?? (message.files.some((file) => file.mime.startsWith("image/")) ? message.id : undefined),
     undefined,
@@ -545,6 +571,14 @@ export function ChatShell() {
           >
             <Menu />
           </button>
+          {!socketConnected && (
+            <div
+              className="pointer-events-none absolute top-[52px] left-1/2 -translate-x-1/2 rounded-full bg-muted px-2.5 py-1 text-[10px] text-muted-foreground"
+              role="status"
+            >
+              再接続中
+            </div>
+          )}
           {project && (
             <div className="absolute left-1/2 flex h-10 min-w-0 max-w-[calc(100%-132px)] -translate-x-1/2 items-center gap-2 px-2 text-[13px] font-semibold">
               <ProjectIcon project={project} className="size-[26px]" />
@@ -582,10 +616,12 @@ export function ChatShell() {
               unoptimized
             />
           )}
-          {messages.length > 0 && (
+          {displayedMessages.length > 0 && (
             <div
               ref={messageListRef}
               className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]"
+              aria-live="polite"
+              aria-busy={generating}
             >
               <motion.div
                 key={conversationId}
@@ -603,7 +639,7 @@ export function ChatShell() {
                     {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
                   </button>
                 )}
-                {messages.map((message) => (
+                {displayedMessages.map((message) => (
                   <MessageView
                     key={message.id}
                     message={message}
@@ -616,15 +652,6 @@ export function ChatShell() {
                       setFiles([]);
                     }}
                     prioritizeImages={message.id === newestImageMessageId}
-                    finishStreaming={
-                      message.id === `stream-${conversationId}` && pendingStreamPage
-                        ? () => {
-                            setMessages(pendingStreamPage.messages);
-                            setHasOlderMessages(pendingStreamPage.hasMore);
-                            setPendingStreamPage(null);
-                          }
-                        : undefined
-                    }
                   />
                 ))}
                 {generating && !streaming && <Thinking />}

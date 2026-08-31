@@ -5,7 +5,11 @@ type McpResponse = {
   error?: { message?: string };
 };
 
-export async function webSearch(query: string, signal?: AbortSignal): Promise<string> {
+export async function webSearch(
+  query: string,
+  maxResults = 5,
+  signal?: AbortSignal,
+): Promise<string> {
   const searchSignal = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
     : AbortSignal.timeout(30_000);
@@ -18,14 +22,17 @@ export async function webSearch(query: string, signal?: AbortSignal): Promise<st
       method: "tools/call",
       params: {
         name: "web_search_exa",
-        arguments: { query: query.slice(0, 500), numResults: 5 },
+        arguments: {
+          query: query.slice(0, 500),
+          numResults: Math.max(1, Math.min(8, Math.trunc(maxResults))),
+        },
       },
     }),
     signal: searchSignal,
   });
   if (!response.ok) throw new Error(`Web検索に失敗しました: HTTP ${response.status}`);
 
-  return parseWebSearchResponse(await response.text());
+  return parseWebSearchResponse(await response.text()).slice(0, 30_000);
 }
 
 export function parseWebSearchResponse(body: string): string {

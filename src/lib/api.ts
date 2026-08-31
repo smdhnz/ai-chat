@@ -25,6 +25,23 @@ export type Skill = {
   created_at: string;
   updated_at: string;
 };
+export type ActivityStatus = "running" | "completed" | "error";
+export type PublicActivity =
+  | { type: "reasoning"; text: string; redacted?: boolean }
+  | { type: "skill"; name: string; status: ActivityStatus }
+  | {
+      type: "web_search";
+      query: string;
+      sources: { title: string; url: string }[];
+      status: ActivityStatus;
+    }
+  | {
+      type: "image_generation";
+      operation?: "generation" | "edit";
+      status: ActivityStatus;
+    }
+  | { type: "tool"; name: string; summary: string; status: ActivityStatus };
+
 export type Conversation = {
   id: string;
   project_id: string | null;
@@ -34,6 +51,7 @@ export type Conversation = {
   unread: number;
   created_at: string;
   updated_at: string;
+  activeRunId?: string | null;
 };
 export type Message = {
   id: string;
@@ -42,9 +60,39 @@ export type Message = {
   files: FileItem[];
   created_at: string;
   skills?: string[];
+  activities?: PublicActivity[];
+  status?: "completed" | "stopped" | "failed";
+  runId?: string;
   auth?: DeviceAuth;
 };
 export type MessagePage = { messages: Message[]; hasMore: boolean };
+export type RunStatus = "queued" | "running" | "completed" | "stopped" | "failed";
+export type ChatEvent =
+  | { type: "run.status"; status: RunStatus }
+  | { type: "turn.start"; turn: number }
+  | { type: "assistant.text.delta"; contentIndex: number; delta: string }
+  | { type: "assistant.reasoning.delta"; contentIndex: number; delta: string }
+  | { type: "assistant.tool_call.start"; contentIndex: number; id: string; name: string }
+  | { type: "assistant.tool_call.delta"; contentIndex: number; delta: string }
+  | { type: "tool.start"; id: string; name: string; args: unknown }
+  | { type: "tool.update"; id: string; name: string; summary: string }
+  | { type: "tool.end"; id: string; name: string; isError: boolean; result: unknown }
+  | {
+      type: "message.final";
+      entry: { id: string; role: "assistant" | "toolResult"; content: string; created_at: string };
+    }
+  | { type: "compaction.start" }
+  | { type: "compaction.end"; tokensBefore: number }
+  | { type: "run.error"; message: string }
+  | { type: "run.done" };
+export type ChatEventEnvelope = {
+  version: 1;
+  conversationId: string;
+  runId: string;
+  seq: number;
+  timestamp: string;
+  event: ChatEvent;
+};
 export type DeviceAuth = { userCode: string; verificationUri: string; expiresInSeconds: number };
 
 export function parseDeviceAuth(content: string): DeviceAuth | undefined {
@@ -55,7 +103,7 @@ export function parseDeviceAuth(content: string): DeviceAuth | undefined {
   return { verificationUri: match[1], userCode: match[2], expiresInSeconds: 0 };
 }
 
-export type ThinkingLevel = "low" | "medium" | "high";
+export type ThinkingLevel = "auto" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type Bootstrap = {
   user: {
     id: string;
@@ -66,6 +114,8 @@ export type Bootstrap = {
     ctrl_enter_send: number;
     thinking_level: ThinkingLevel;
   };
+  supported_thinking_levels: ThinkingLevel[];
+  model: { id: string; supportedThinkingLevels: ThinkingLevel[] };
   projects: Project[];
   skills: Skill[];
   conversations: Conversation[];

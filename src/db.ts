@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { migrateCanonicalTranscript } from "./agent-messages";
 import { config } from "./config";
 
 mkdirSync(config.dataDir, { recursive: true });
@@ -49,8 +50,35 @@ CREATE TABLE IF NOT EXISTS messages (
   file_ids TEXT NOT NULL DEFAULT '[]', skills TEXT NOT NULL DEFAULT '[]',
   attachment_context TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_entry_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('queued','running','completed','stopped','failed')),
+  model TEXT NOT NULL,
+  requested_thinking TEXT NOT NULL,
+  resolved_thinking TEXT NOT NULL,
+  turn_count INTEGER NOT NULL DEFAULT 0,
+  context_tokens INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS conversation_entries (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+  sequence INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('user_message','assistant_message','tool_result','compaction','activity')),
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(conversation_id, sequence)
+);
 CREATE INDEX IF NOT EXISTS conversations_user_updated ON conversations(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS messages_conversation_created ON messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS conversation_entries_conversation_sequence ON conversation_entries(conversation_id, sequence);
+CREATE INDEX IF NOT EXISTS runs_conversation_created ON runs(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS files_user_created ON files(user_id, created_at DESC);
 `);
 
@@ -86,6 +114,9 @@ if (!conversationColumns.has("generation_status"))
 if (!conversationColumns.has("unread"))
   db.exec("ALTER TABLE conversations ADD COLUMN unread INTEGER NOT NULL DEFAULT 0");
 db.query(
+  "UPDATE runs SET status='failed',error='server restarted',finished_at=? WHERE status IN ('queued','running')",
+).run(new Date().toISOString());
+db.query(
   "UPDATE conversations SET generation_status='stopped' WHERE generation_status='running'",
 ).run();
 const messageColumns = columns("messages");
@@ -93,6 +124,7 @@ if (!messageColumns.has("skills"))
   db.exec("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'");
 if (!messageColumns.has("attachment_context"))
   db.exec("ALTER TABLE messages ADD COLUMN attachment_context TEXT NOT NULL DEFAULT ''");
+migrateCanonicalTranscript(db, config.codexModel);
 
 export const now = () => new Date().toISOString();
 export const id = () => crypto.randomUUID();
