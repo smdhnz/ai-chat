@@ -348,16 +348,20 @@ async function startGeneration(
   if (!latest || latest.id !== userEntryId || latest.role !== "user")
     throw new Error("latest user message not found");
   const needsTitle = messages.filter((message) => message.role === "user").length === 1;
-  const thinking = await resolveRunThinking(settings.thinking, chatModel, () =>
-    classifyThinking({
-      latestUserText: latest.content.slice(0, 4_000),
-      recentText: messages.slice(-3, -1).map((message) => ({
-        role: message.role,
-        text: message.content.slice(0, 2_000),
-      })),
-      imageCount: (JSON.parse(latest.file_ids) as string[]).length,
-      needsTitle,
-    }),
+  const thinking = await resolveRunThinking(
+    settings.thinking,
+    chatModel,
+    () =>
+      classifyThinking({
+        latestUserText: latest.content.slice(0, 4_000),
+        recentText: messages.slice(-3, -1).map((message) => ({
+          role: message.role,
+          text: message.content.slice(0, 2_000),
+        })),
+        imageCount: (JSON.parse(latest.file_ids) as string[]).length,
+        needsTitle,
+      }),
+    needsTitle,
   );
   if (needsTitle && thinking.title)
     db.query("UPDATE conversations SET title=? WHERE id=? AND user_id=?").run(

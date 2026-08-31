@@ -41,15 +41,22 @@ describe("Codex設定", () => {
     expect(resolveThinkingLevel(model, "max")).toBe("high");
   });
 
-  test("explicitではclassifierを呼ばず、auto失敗時はmediumへfallbackする", async () => {
+  test("explicitでは初回だけtitleを生成し、auto失敗時はmediumへfallbackする", async () => {
     let calls = 0;
-    expect(
-      await resolveRunThinking("high", model, async () => {
-        calls++;
-        return { thinking: "minimal", title: "ignored" };
-      }),
-    ).toEqual({ resolved: "high", title: "" });
+    const classify = async () => {
+      calls++;
+      return { thinking: "minimal" as const, title: "生成した題名" };
+    };
+    expect(await resolveRunThinking("high", model, classify)).toEqual({
+      resolved: "high",
+      title: "",
+    });
     expect(calls).toBe(0);
+    expect(await resolveRunThinking("high", model, classify, true)).toEqual({
+      resolved: "high",
+      title: "生成した題名",
+    });
+    expect(calls).toBe(1);
     expect(
       await resolveRunThinking("auto", model, async () => Promise.reject(new Error("fail"))),
     ).toEqual({ resolved: "medium", title: "" });

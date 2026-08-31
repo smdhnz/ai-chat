@@ -115,13 +115,18 @@ export async function resolveRunThinking(
   model: Model<Api>,
   classify: () => Promise<ThinkingClassification> = () =>
     Promise.reject(new Error("thinking classifier is not configured")),
+  needsTitle = false,
 ): Promise<{ resolved: ResolvedThinkingLevel; title: string }> {
-  if (requested !== "auto") return { resolved: resolveThinkingLevel(model, requested), title: "" };
+  const fixed = requested === "auto" ? undefined : resolveThinkingLevel(model, requested);
+  if (fixed !== undefined && !needsTitle) return { resolved: fixed, title: "" };
   try {
     const result = await classify();
-    return { resolved: resolveThinkingLevel(model, result.thinking), title: result.title };
+    return {
+      resolved: fixed ?? resolveThinkingLevel(model, result.thinking),
+      title: result.title,
+    };
   } catch {
-    return { resolved: resolveThinkingLevel(model, "medium"), title: "" };
+    return { resolved: fixed ?? resolveThinkingLevel(model, "medium"), title: "" };
   }
 }
 
