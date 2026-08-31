@@ -138,7 +138,7 @@ export function ChatSidebar({
                         <ChevronRight
                           className={`size-[13px]! transition-transform ${projectOpen ? "rotate-90" : ""}`}
                         />
-                        <ProjectIcon project={group} className="size-[22px]" />
+                        <ProjectIcon className="size-[22px]" />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
                       </button>
                       <button

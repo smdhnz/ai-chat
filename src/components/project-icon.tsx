@@ -1,20 +1,15 @@
 import { Folder } from "lucide-react";
-import type { Project } from "@/lib/api";
-import { projectColorClasses, projectIcons } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
-export function ProjectIcon({ project, className }: { project?: Project; className?: string }) {
-  const Icon = projectIcons[project?.icon as keyof typeof projectIcons] || Folder;
-  const color = project?.color as keyof typeof projectColorClasses;
+export function ProjectIcon({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-[color-mix(in_srgb,var(--project-color)_13%,var(--card))] text-[var(--project-color)] [&_svg]:w-4",
-        projectColorClasses[color] || projectColorClasses.clay,
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-[color-mix(in_srgb,var(--primary)_13%,var(--card))] text-primary [&_svg]:w-4",
         className,
       )}
     >
-      <Icon />
+      <Folder />
     </span>
   );
 }

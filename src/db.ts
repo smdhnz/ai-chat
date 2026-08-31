@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 );
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL, system_prompt TEXT NOT NULL DEFAULT '', icon TEXT NOT NULL DEFAULT 'folder',
-  color TEXT NOT NULL DEFAULT 'clay', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  name TEXT NOT NULL, system_prompt TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -96,10 +96,8 @@ if (!userColumns.has("ctrl_enter_send"))
 if (!userColumns.has("thinking_level"))
   db.exec("ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low'");
 const projectColumns = columns("projects");
-if (!projectColumns.has("icon"))
-  db.exec("ALTER TABLE projects ADD COLUMN icon TEXT NOT NULL DEFAULT 'folder'");
-if (!projectColumns.has("color"))
-  db.exec("ALTER TABLE projects ADD COLUMN color TEXT NOT NULL DEFAULT 'clay'");
+if (projectColumns.has("icon")) db.exec("ALTER TABLE projects DROP COLUMN icon");
+if (projectColumns.has("color")) db.exec("ALTER TABLE projects DROP COLUMN color");
 const conversationColumns = columns("conversations");
 if (!conversationColumns.has("context_summary"))
   db.exec("ALTER TABLE conversations ADD COLUMN context_summary TEXT NOT NULL DEFAULT ''");

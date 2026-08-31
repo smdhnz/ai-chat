@@ -11,8 +11,6 @@ export type Project = {
   id: string;
   name: string;
   system_prompt: string;
-  icon: string;
-  color: string;
   created_at: string;
   updated_at: string;
 };

@@ -164,8 +164,6 @@ type ProjectRow = {
   id: string;
   name: string;
   system_prompt: string;
-  icon: string;
-  color: string;
   created_at: string;
   updated_at: string;
 };
@@ -182,7 +180,7 @@ type FileRow = { name: string; path: string; mime: string };
 function bootstrap(user: User): Response {
   const projects = db
     .query(
-      "SELECT id,name,system_prompt,icon,color,created_at,updated_at FROM projects WHERE user_id=? ORDER BY updated_at DESC",
+      "SELECT id,name,system_prompt,created_at,updated_at FROM projects WHERE user_id=? ORDER BY updated_at DESC",
     )
     .all(user.id) as ProjectRow[];
   const settings = resolveAiSettings(user.thinking_level);
@@ -455,39 +453,24 @@ async function saveProject(
   projectId: string = id(),
 ): Promise<Response> {
   verifyOrigin(request);
-  const body = (await request.json()) as {
-    name?: string;
-    systemPrompt?: string;
-    icon?: string;
-    color?: string;
-  };
+  const body = (await request.json()) as { name?: string; systemPrompt?: string };
   const name = clean(body.name, 80);
   const prompt = clean(body.systemPrompt, 30_000);
-  const icon = ["folder", "briefcase", "code", "book", "palette", "rocket"].includes(
-    String(body.icon),
-  )
-    ? String(body.icon)
-    : "folder";
-  const color = ["clay", "blue", "green", "purple", "gold", "rose"].includes(String(body.color))
-    ? String(body.color)
-    : "clay";
   if (!name) return json({ error: "name is required" }, 400);
   const existing = db
     .query("SELECT id FROM projects WHERE id=? AND user_id=?")
     .get(projectId, userId);
   if (existing)
     db.query(
-      "UPDATE projects SET name=?,system_prompt=?,icon=?,color=?,updated_at=? WHERE id=? AND user_id=?",
-    ).run(name, prompt, icon, color, now(), projectId, userId);
+      "UPDATE projects SET name=?,system_prompt=?,updated_at=? WHERE id=? AND user_id=?",
+    ).run(name, prompt, now(), projectId, userId);
   else
     db.query(
-      "INSERT INTO projects(id,user_id,name,system_prompt,icon,color,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(projectId, userId, name, prompt, icon, color, now(), now());
+      "INSERT INTO projects(id,user_id,name,system_prompt,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+    ).run(projectId, userId, name, prompt, now(), now());
   return json(
     db
-      .query(
-        "SELECT id,name,system_prompt,icon,color,created_at,updated_at FROM projects WHERE id=?",
-      )
+      .query("SELECT id,name,system_prompt,created_at,updated_at FROM projects WHERE id=?")
       .get(projectId),
     existing ? 200 : 201,
   );

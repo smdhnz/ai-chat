@@ -22,7 +22,6 @@ COPY --from=build /app/.next ./.next
 COPY package.json next.config.mjs ./
 COPY public ./public
 COPY src ./src
-COPY skills ./skills
 RUN mkdir -p /app/data
 EXPOSE 3000
 ENTRYPOINT ["/sbin/tini", "--"]

@@ -3,15 +3,10 @@
 import { useId, useState, type FormEvent } from "react";
 import { LoadingWave } from "@/components/loading-wave";
 import { api, type Project, type Skill } from "@/lib/api";
-import { projectColorClasses, projectIcons } from "@/lib/ui";
-import { projectColors } from "@/app/settings/_libs/settings";
 
 const fieldLabelClass = "text-[10px] font-bold text-muted-foreground";
 const controlClass =
   "w-full rounded-[11px] border border-border bg-background px-[11px] py-2.5 text-xs leading-[1.55] text-foreground outline-none focus:border-ring";
-const swatchClass =
-  "inline-flex size-[34px] items-center justify-center rounded-[10px] border border-border p-0 aria-pressed:border-ring aria-pressed:shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_18%,transparent)]";
-
 export function Editor({
   editor,
   saved,
@@ -31,8 +26,6 @@ export function Editor({
   const [instructions, setInstructions] = useState(
     skill?.instructions || project?.system_prompt || "",
   );
-  const [icon, setIcon] = useState(project?.icon || "folder");
-  const [color, setColor] = useState(project?.color || "clay");
   const [enabled, setEnabled] = useState(skill?.enabled !== 0);
   const [saving, setSaving] = useState(false);
 
@@ -46,7 +39,7 @@ export function Editor({
         body: JSON.stringify(
           isSkill
             ? { name, description, instructions, enabled }
-            : { name, systemPrompt: instructions, icon, color },
+            : { name, systemPrompt: instructions },
         ),
       });
       await saved();
@@ -68,42 +61,6 @@ export function Editor({
           required
         />
       </label>
-      {!isSkill && (
-        <>
-          <fieldset className="flex flex-col gap-[7px]">
-            <legend className={fieldLabelClass}>アイコン</legend>
-            <div className="flex gap-[7px]" role="group">
-              {Object.entries(projectIcons).map(([value, Icon]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-label={value}
-                  aria-pressed={icon === value}
-                  className={`${swatchClass} bg-background [&_svg]:size-4`}
-                  onClick={() => setIcon(value)}
-                >
-                  <Icon />
-                </button>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset className="flex flex-col gap-[7px]">
-            <legend className={fieldLabelClass}>色</legend>
-            <div className="flex gap-[7px]" role="group">
-              {projectColors.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-label={value}
-                  aria-pressed={color === value}
-                  className={`${swatchClass} ${projectColorClasses[value]} bg-[var(--project-color)]`}
-                  onClick={() => setColor(value)}
-                />
-              ))}
-            </div>
-          </fieldset>
-        </>
-      )}
       {isSkill && (
         <label className="flex flex-col gap-[7px]" htmlFor={`${id}-description`}>
           <span className={fieldLabelClass}>説明</span>

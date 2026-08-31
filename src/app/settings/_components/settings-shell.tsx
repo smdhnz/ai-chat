@@ -9,7 +9,6 @@ import {
   type PanInfo,
 } from "motion/react";
 import {
-  Bot,
   ChevronLeft,
   ChevronRight,
   FolderKanban,
@@ -284,6 +283,15 @@ export function SettingsShell({
                       <SettingsDetail
                         tab={tab}
                         data={data}
+                        edit={showEditor}
+                        askDelete={(next) => {
+                          setDeleteTarget(next);
+                          setDeleteOpen(true);
+                        }}
+                      />
+                    ) : (
+                      <SettingsHome
+                        data={data}
                         language={language}
                         thinking={thinking}
                         saveLanguage={(value) => {
@@ -294,14 +302,12 @@ export function SettingsShell({
                           setThinking(value);
                           autoSaveSettings(language, ctrlEnterSend, value);
                         }}
-                        edit={showEditor}
-                        askDelete={(next) => {
-                          setDeleteTarget(next);
+                        showTab={showTab}
+                        deleteData={() => {
+                          setDeleteTarget({ type: "data", id: "", name: "すべてのデータ" });
                           setDeleteOpen(true);
                         }}
                       />
-                    ) : (
-                      <SettingsHome data={data} showTab={showTab} />
                     )}
                   </div>
                 </motion.div>
@@ -336,7 +342,23 @@ export function SettingsShell({
   );
 }
 
-function SettingsHome({ data, showTab }: { data: Bootstrap; showTab: (tab: SettingsTab) => void }) {
+function SettingsHome({
+  data,
+  language,
+  thinking,
+  saveLanguage,
+  saveThinking,
+  showTab,
+  deleteData,
+}: {
+  data: Bootstrap;
+  language: string;
+  thinking: ThinkingLevel;
+  saveLanguage: (value: string) => void;
+  saveThinking: (value: ThinkingLevel) => void;
+  showTab: (tab: SettingsTab) => void;
+  deleteData: () => void;
+}) {
   return (
     <div className="flex flex-col gap-6 px-4 pt-5 pb-[max(28px,env(safe-area-inset-bottom))]">
       <section className="flex items-center gap-3 rounded-[14px] bg-card p-3.5">
@@ -348,13 +370,54 @@ function SettingsHome({ data, showTab }: { data: Bootstrap; showTab: (tab: Setti
             data.user.display_name[0]
           )}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-semibold">{data.user.display_name}</h3>
           <p className="truncate text-[11px] text-muted-foreground">@{data.user.username}</p>
         </div>
+        <form className="shrink-0" method="post" action="/logout">
+          <button
+            type="submit"
+            className="inline-flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground [&_svg]:size-[18px]"
+            aria-label="ログアウト"
+          >
+            <LogOut />
+          </button>
+        </form>
+      </section>
+      <section>
+        <p className="mb-2 px-1 text-[11px] text-muted-foreground">回答</p>
+        <div className="overflow-hidden rounded-[14px] bg-card">
+          <label className={settingFieldClass} htmlFor="response-language">
+            <span className={settingLabelClass}>回答言語</span>
+            <input
+              className={settingControlClass}
+              id="response-language"
+              type="text"
+              value={language}
+              onChange={(event) => saveLanguage(event.target.value)}
+              maxLength={80}
+              placeholder="Japanese"
+            />
+          </label>
+          <div className="ml-4 border-t border-border" />
+          <label className={settingFieldClass} htmlFor="response-thinking">
+            <span className={settingLabelClass}>Thinking</span>
+            <select
+              id="response-thinking"
+              className={settingControlClass}
+              value={thinking}
+              onChange={(event) => saveThinking(event.target.value as ThinkingLevel)}
+            >
+              {data.supported_thinking_levels.map((level) => (
+                <option key={level} value={level}>
+                  {level === "auto" ? "Auto" : level === "xhigh" ? "XHigh" : capitalize(level)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
       <section className="overflow-hidden rounded-[14px] bg-card">
-        <SettingsLink icon={Bot} label="一般" onClick={() => showTab("general")} />
         <SettingsLink
           icon={FolderKanban}
           label="プロジェクト"
@@ -374,6 +437,14 @@ function SettingsHome({ data, showTab }: { data: Bootstrap; showTab: (tab: Setti
           onClick={() => showTab("files")}
         />
       </section>
+      <button
+        type="button"
+        className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-card text-[13px] text-destructive [&_svg]:size-4"
+        onClick={deleteData}
+      >
+        <Trash2 />
+        すべてのデータを削除
+      </button>
     </div>
   );
 }
@@ -408,19 +479,11 @@ function SettingsLink({
 function SettingsDetail({
   tab,
   data,
-  language,
-  thinking,
-  saveLanguage,
-  saveThinking,
   edit,
   askDelete,
 }: {
   tab: SettingsTab;
   data: Bootstrap;
-  language: string;
-  thinking: ThinkingLevel;
-  saveLanguage: (value: string) => void;
-  saveThinking: (value: ThinkingLevel) => void;
   edit: (editor: EditorState) => void;
   askDelete: (target: DeleteTarget) => void;
 }) {
@@ -436,7 +499,7 @@ function SettingsDetail({
             {data.projects.map((item) => (
               <SettingsCard
                 key={item.id}
-                icon={<ProjectIcon project={item} />}
+                icon={<ProjectIcon />}
                 title={item.name}
                 text={item.system_prompt || "カスタム指示なし"}
                 edit={() => edit({ type: "project", item })}
@@ -477,82 +540,7 @@ function SettingsDetail({
       </DetailLayout>
     );
 
-  if (tab === "files") return <SettingsImages files={data.files} />;
-
-  return (
-    <div className="flex flex-col gap-6 px-4 pt-5 pb-[max(28px,env(safe-area-inset-bottom))]">
-      <section>
-        <p className="mb-2 px-1 text-[11px] text-muted-foreground">回答</p>
-        <div className="overflow-hidden rounded-[14px] bg-card">
-          <label className={settingFieldClass} htmlFor="response-language">
-            <span className={settingLabelClass}>回答言語</span>
-            <input
-              className={settingControlClass}
-              id="response-language"
-              type="text"
-              value={language}
-              onChange={(event) => saveLanguage(event.target.value)}
-              maxLength={80}
-              placeholder="Japanese"
-            />
-          </label>
-          <div className="ml-4 border-t border-border" />
-          <label className={settingFieldClass} htmlFor="response-thinking">
-            <span className={settingLabelClass}>Thinking</span>
-            <select
-              id="response-thinking"
-              className={settingControlClass}
-              value={thinking}
-              onChange={(event) => saveThinking(event.target.value as ThinkingLevel)}
-            >
-              {data.supported_thinking_levels.map((level) => (
-                <option key={level} value={level}>
-                  {level === "auto" ? "Auto" : level === "xhigh" ? "XHigh" : capitalize(level)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-      <section>
-        <p className="mb-2 px-1 text-[11px] text-muted-foreground">アカウント</p>
-        <div className="overflow-hidden rounded-[14px] bg-card">
-          <div className="flex items-center gap-3 p-4">
-            <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted font-bold">
-              {data.user.avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="size-full object-cover" src={data.user.avatar} alt="" />
-              ) : (
-                data.user.display_name[0]
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-[14px] font-semibold">{data.user.display_name}</h3>
-              <p className="truncate text-[10px] text-muted-foreground">@{data.user.username}</p>
-            </div>
-          </div>
-          <div className="ml-4 border-t border-border" />
-          <form method="post" action="/logout">
-            <button className="flex min-h-[52px] w-full items-center justify-center gap-2 text-[13px] text-destructive [&_svg]:size-4">
-              <LogOut />
-              ログアウト
-            </button>
-          </form>
-        </div>
-      </section>
-      <section>
-        <p className="mb-2 px-1 text-[11px] text-muted-foreground">データ</p>
-        <button
-          type="button"
-          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-card text-[13px] text-destructive [&_svg]:size-4"
-          onClick={() => askDelete({ type: "data", id: "", name: "すべてのデータ" })}
-        >
-          <Trash2 />
-          すべてのデータを削除
-        </button>
-      </section>
-    </div>
-  );
+  return <SettingsImages files={data.files} />;
 }
 
 function SettingsImages({ files }: { files: FileItem[] }) {

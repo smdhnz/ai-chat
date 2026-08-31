@@ -7,6 +7,8 @@
 - ESLintのwarningは `--max-warnings=0` で失敗として扱う。
 - error・warningを無効化コメントや設定緩和で隠さず、原因を修正する。
 - 検証を実行できない場合は、理由と未確認項目を明記する。
+- 変更ごとに`Dockerfile`、`compose.yml`、`.env.example`を確認し、COPY元、依存関係、環境変数、ポート、volume、起動コマンド、DB migrationへの本番影響を確認する。
+- コンテナのビルド・起動経路に影響する変更後は、`docker compose config`と`docker build -t ai-chat:check .`を実行する。
 
 ## フォーマット
 
