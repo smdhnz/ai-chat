@@ -60,9 +60,7 @@ async function fixture() {
     `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,created_at)
      VALUES('run','conversation-1','user-entry','running','fake','low','low','2025-01-01T00:00:00.000Z')`,
   ).run();
-  const skillPath = join(root, "SKILL.md");
-  await writeFile(skillPath, "# Image generation\nUse the image tool.");
-  return { db, root, skillPath };
+  return { db, root };
 }
 
 function tool(tools: ReturnType<typeof createAgentTools>, name: string) {
@@ -106,7 +104,7 @@ describe("custom tool executor", () => {
   });
 
   test("load_skillはenabledな所有skillだけを一度読み込む", async () => {
-    const { db, skillPath } = await fixture();
+    const { db } = await fixture();
     for (const [id, userId, name, enabled] of [
       ["owned", "user-1", "owned", 1],
       ["disabled", "user-1", "disabled", 0],
@@ -128,7 +126,7 @@ describe("custom tool executor", () => {
     const load = tool(
       createAgentTools(
         { userId: "user-1", conversationId: "conversation-1", runId: "run" },
-        { database: db, imagegenSkillPath: skillPath },
+        { database: db },
       ),
       "load_skill",
     );
@@ -202,13 +200,12 @@ describe("custom tool executor", () => {
   });
 
   test("generate_imageはskill読込順に依存せず、imageRefとして保存する", async () => {
-    const { db, root, skillPath } = await fixture();
+    const { db, root } = await fixture();
     const tools = createAgentTools(
       { userId: "user-1", conversationId: "conversation-1", runId: "run" },
       {
         database: db,
         dataDir: root,
-        imagegenSkillPath: skillPath,
         generateImage: async () => png,
         id: () => "generated-file",
         now: () => "2025-01-02T00:00:00.000Z",

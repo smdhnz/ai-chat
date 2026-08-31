@@ -88,6 +88,7 @@ describe("system prompt assembly", () => {
     expect(prompt).toContain("Current date: 2026-08-31");
     expect(prompt).toContain("OWNER PROJECT INSTRUCTION");
     expect(prompt).toContain("owned description");
+    expect(prompt).not.toContain("<name>imagegen</name>");
     expect(prompt.match(/<image id=/g)).toHaveLength(20);
     for (const secret of [
       "FULL SKILL INSTRUCTIONS",

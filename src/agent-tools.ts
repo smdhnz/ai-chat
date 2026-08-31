@@ -22,7 +22,6 @@ export type ToolContext = {
 type ToolDependencies = {
   database: Database;
   dataDir?: string;
-  imagegenSkillPath?: string;
   maxImageBytes?: number;
   imageTimeoutMs?: number;
   webSearch?: (query: string, maxResults: number, signal: AbortSignal) => Promise<string>;
@@ -41,25 +40,20 @@ type PublicFile = {
 };
 
 type FileRow = PublicFile & { path: string };
-type SkillDetails = { name: string; source: "builtin" | "user"; alreadyLoaded?: boolean };
+type SkillDetails = { name: string; source: "user"; alreadyLoaded?: boolean };
 type SearchDetails = { query: string; sources: { title: string; url: string }[] };
 type ImageDetails = { file: PublicFile; operation?: "generation" | "edit" };
 
-export const builtinImagegenDescription =
-  "Generate or edit raster images. Use for photos, illustrations, textures, sprites, mockups, and other bitmap assets.";
-
 export function availableSkillCatalog(database: Database, userId: string) {
-  const userSkills = database
+  return database
     .query(
       "SELECT name,description FROM skills WHERE user_id=? AND enabled=1 ORDER BY updated_at DESC",
     )
-    .all(userId) as { name: string; description: string }[];
-  return [
-    { name: "imagegen", description: builtinImagegenDescription, source: "builtin" as const },
-    ...userSkills
-      .filter((skill) => skill.name !== "imagegen")
-      .map((skill) => ({ ...skill, source: "user" as const })),
-  ];
+    .all(userId)
+    .map((skill) => ({
+      ...(skill as { name: string; description: string }),
+      source: "user" as const,
+    }));
 }
 
 export function createAgentTools(
@@ -68,7 +62,6 @@ export function createAgentTools(
 ): AgentTool[] {
   const database = dependencies.database;
   const dataDir = dependencies.dataDir ?? config.dataDir;
-  const skillPath = dependencies.imagegenSkillPath ?? "skills/imagegen/SKILL.md";
   const maxImageBytes = dependencies.maxImageBytes ?? config.maxUploadBytes;
   const imageTimeoutMs = dependencies.imageTimeoutMs ?? config.aiTimeoutMs;
   const search = dependencies.webSearch ?? defaultWebSearch;
@@ -130,29 +123,18 @@ export function createAgentTools(
         if (loadedSkills.has(name))
           return {
             content: [{ type: "text", text: `Skill ${name} is already loaded.` }],
-            details: {
-              name,
-              source: name === "imagegen" ? "builtin" : "user",
-              alreadyLoaded: true,
-            } satisfies SkillDetails,
+            details: { name, source: "user", alreadyLoaded: true } satisfies SkillDetails,
           };
         if (loadedSkills.size >= 8) throw new Error("Skill load budget reached");
         const scopedSignal = toolSignal(signal, 10_000);
-        let instructions: string;
-        let source: SkillDetails["source"];
-        if (name === "imagegen") {
-          source = "builtin";
-          instructions = await readFile(skillPath, { encoding: "utf8", signal: scopedSignal });
-        } else {
-          source = "user";
-          const skill = database
-            .query(
-              "SELECT instructions FROM skills WHERE user_id=? AND enabled=1 AND name=? ORDER BY updated_at DESC LIMIT 1",
-            )
-            .get(context.userId, name) as { instructions: string } | null;
-          if (!skill) throw new Error(`Skill ${name} is not available`);
-          instructions = skill.instructions;
-        }
+        const source = "user" satisfies SkillDetails["source"];
+        const skill = database
+          .query(
+            "SELECT instructions FROM skills WHERE user_id=? AND enabled=1 AND name=? ORDER BY updated_at DESC LIMIT 1",
+          )
+          .get(context.userId, name) as { instructions: string } | null;
+        if (!skill) throw new Error(`Skill ${name} is not available`);
+        const instructions = skill.instructions;
         if (scopedSignal.aborted) throw scopedSignal.reason;
         loadedSkills.add(name);
         return {
@@ -170,7 +152,7 @@ export function createAgentTools(
       name: "generate_image",
       label: "画像生成",
       description:
-        "Generate a new image or edit conversation images. Load the imagegen skill first. For edits, pass only relevant conversation file IDs.",
+        "Generate a new image or edit conversation images. For edits, pass only relevant conversation file IDs.",
       parameters: generateParameters,
       execute: async (_toolCallId, params, signal) => {
         const input = params as { prompt: string; inputFileIds?: string[] };

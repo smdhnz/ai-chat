@@ -16,7 +16,7 @@ ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`
 
 UIコンポーネントは `src/components/ui` のshadcn/uiに統一しています。配色はshadcnのトークン（`--background`、`--card`、`--primary` など）へ既存パレットを割り当てているため、見た目は従来のままです。
 
-`skills/imagegen` のみ `../pi-discord-bot/.pi/skills/imagegen` から移植しています。その他のpiスキルやコーディングエージェント用プロンプトは読み込みません。Web検索は `pi-web-access` と同じ公開 Exa MCP を利用し、ターンプランナーが最新情報・外部根拠・URL調査の必要性を判断した場合だけ実行します。
+組み込みpiスキルやコーディングエージェント用プロンプトは読み込みません。画像生成は専用tool、Web検索は `pi-web-access` と同じ公開 Exa MCPを使用し、Agentが必要性を判断します。
 
 ## セットアップ
 
