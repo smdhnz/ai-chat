@@ -1,5 +1,5 @@
 import { basename, extname, join } from "node:path";
-import { and, desc, eq, gt, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import {
   classifyThinking,
@@ -25,16 +25,27 @@ import { config, storedFilePath } from "./config";
 import { attachmentText } from "./attachments";
 import { cleanupExpired, db, id, now } from "./db";
 import { MESSAGE_PAGE_SIZE, regenerationIndex } from "./messages";
+import {
+  conversationAccess,
+  conversationUserIds,
+  fileAccess,
+  markConversationUnread,
+  projectAccess,
+  projectUserIds,
+  setConversationRead,
+} from "./access";
 import { buildSystemPrompt } from "./prompt";
 import { webSearch } from "./web-search";
 import {
+  conversationReads,
   conversations as conversationsTable,
   files as filesTable,
   oauthStates,
+  projectInvitations,
+  projectMembers,
   projects as projectsTable,
   runs as runsTable,
   sessions,
-  skills as skillsTable,
   users,
 } from "./schema";
 
@@ -107,7 +118,9 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/settings" || url.pathname.startsWith("/settings/"))
         return redirect("/");
       if (/^\/chat\/[\w-]+$/.test(url.pathname))
-        return ownedConversation(url.pathname.slice(6), user.id) ? webApp(request) : redirect("/");
+        return conversationAccess(db, url.pathname.slice(6), user.id)
+          ? webApp(request)
+          : redirect("/");
 
       if (url.pathname === "/api/bootstrap" && request.method === "GET") return bootstrap(user);
       if (url.pathname === "/api/conversations" && request.method === "POST")
@@ -136,13 +149,30 @@ const server = Bun.serve<SocketData>({
       if (projectMatch && request.method === "PUT")
         return saveProject(request, user.id, projectMatch[1]);
       if (projectMatch && request.method === "DELETE")
-        return removeOwned(request, "projects", projectMatch[1], user.id);
-      if (url.pathname === "/api/skills" && request.method === "POST")
-        return saveSkill(request, user.id);
-      const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)$/);
-      if (skillMatch && request.method === "PUT") return saveSkill(request, user.id, skillMatch[1]);
-      if (skillMatch && request.method === "DELETE")
-        return removeOwned(request, "skills", skillMatch[1], user.id);
+        return deleteProject(request, projectMatch[1], user.id);
+      const invitationMatch = url.pathname.match(
+        /^\/api\/projects\/([\w-]+)\/invitations(?:\/([\w-]+))?$/,
+      );
+      if (invitationMatch && request.method === "POST")
+        return inviteProjectMember(request, invitationMatch[1], user.id);
+      if (invitationMatch?.[2] && request.method === "DELETE")
+        return cancelProjectInvitation(request, invitationMatch[1], invitationMatch[2], user.id);
+      const memberMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)\/members\/([\w-]+)$/);
+      if (memberMatch && request.method === "DELETE")
+        return removeProjectMember(request, memberMatch[1], memberMatch[2], user.id);
+      const leaveMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)\/leave$/);
+      if (leaveMatch && request.method === "POST")
+        return leaveProject(request, leaveMatch[1], user.id);
+      const invitationDecision = url.pathname.match(
+        /^\/api\/invitations\/([\w-]+)\/(accept|decline)$/,
+      );
+      if (invitationDecision && request.method === "POST")
+        return decideProjectInvitation(
+          request,
+          invitationDecision[1],
+          user.id,
+          invitationDecision[2] === "accept",
+        );
       const fileMatch = url.pathname.match(/^\/files\/([\w-]+)$/);
       if (fileMatch && request.method === "GET")
         return serveUserFile(fileMatch[1], user.id, url.searchParams.has("download"));
@@ -174,10 +204,15 @@ type User = {
   ctrl_enter_send: number;
   thinking_level: ThinkingLevel;
 };
+type UserSummary = Pick<User, "id" | "username" | "display_name" | "avatar">;
 type ProjectRow = {
   id: string;
+  user_id: string;
   name: string;
   system_prompt: string;
+  language: string;
+  thinking_level: string;
+  shared: number;
   created_at: string;
   updated_at: string;
 };
@@ -190,88 +225,116 @@ type HistoryRow = {
   created_at: string;
 };
 function bootstrap(user: User): Response {
-  const projects = db
-    .select({
-      id: projectsTable.id,
-      name: projectsTable.name,
-      system_prompt: projectsTable.system_prompt,
-      created_at: projectsTable.created_at,
-      updated_at: projectsTable.updated_at,
-    })
-    .from(projectsTable)
-    .where(eq(projectsTable.user_id, user.id))
-    .orderBy(desc(projectsTable.updated_at))
-    .all() satisfies ProjectRow[];
-  const activeRuns = new Map(
-    db
-      .select({ id: runsTable.id, conversation_id: runsTable.conversation_id })
-      .from(runsTable)
-      .innerJoin(conversationsTable, eq(conversationsTable.id, runsTable.conversation_id))
-      .where(
-        and(
-          eq(conversationsTable.user_id, user.id),
-          inArray(runsTable.status, ["queued", "running"]),
-        ),
-      )
-      .orderBy(desc(runsTable.created_at))
-      .all()
-      .reverse()
-      .map((run) => [run.conversation_id, run.id]),
-  );
-  const conversations = db
+  const projectIds = accessibleProjectIds(user.id);
+  const projectViews = projectIds
+    .map((projectId) => projectView(projectId, user.id))
+    .filter((project) => project !== null);
+  const conversationRows = db
     .select({
       id: conversationsTable.id,
       project_id: conversationsTable.project_id,
       title: conversationsTable.title,
       temporary: conversationsTable.temporary,
       generation_status: conversationsTable.generation_status,
-      unread: conversationsTable.unread,
       created_at: conversationsTable.created_at,
       updated_at: conversationsTable.updated_at,
     })
     .from(conversationsTable)
-    .where(eq(conversationsTable.user_id, user.id))
+    .where(
+      or(
+        and(isNull(conversationsTable.project_id), eq(conversationsTable.user_id, user.id)),
+        projectIds.length ? inArray(conversationsTable.project_id, projectIds) : undefined,
+      ),
+    )
     .orderBy(desc(conversationsTable.updated_at))
-    .all()
-    .map((conversation) => ({
-      ...conversation,
-      activeRunId: activeRuns.get(conversation.id) ?? null,
-    }));
+    .all();
+  const conversationIds = conversationRows.map((conversation) => conversation.id);
+  const activeRuns = new Map(
+    conversationIds.length
+      ? db
+          .select({ id: runsTable.id, conversation_id: runsTable.conversation_id })
+          .from(runsTable)
+          .where(
+            and(
+              inArray(runsTable.conversation_id, conversationIds),
+              inArray(runsTable.status, ["queued", "running"]),
+            ),
+          )
+          .orderBy(desc(runsTable.created_at))
+          .all()
+          .reverse()
+          .map((run) => [run.conversation_id, run.id])
+      : [],
+  );
+  const unread = new Map(
+    conversationIds.length
+      ? db
+          .select({
+            conversation_id: conversationReads.conversation_id,
+            unread: conversationReads.unread,
+          })
+          .from(conversationReads)
+          .where(
+            and(
+              eq(conversationReads.user_id, user.id),
+              inArray(conversationReads.conversation_id, conversationIds),
+            ),
+          )
+          .all()
+          .map((read) => [read.conversation_id, read.unread])
+      : [],
+  );
+  const fileIds = [
+    ...new Set([
+      ...db
+        .select({ id: filesTable.id })
+        .from(filesTable)
+        .where(eq(filesTable.user_id, user.id))
+        .all()
+        .map((file) => file.id),
+      ...conversationIds.flatMap((conversationId) => allConversationFileIds(db, conversationId)),
+    ]),
+  ];
   const settings = resolveAiSettings(user.thinking_level);
   return json({
     user: { ...user, thinking_level: settings.thinking },
     supported_thinking_levels: supportedThinkingLevels(chatModel),
     model: { id: chatModel.id, supportedThinkingLevels: supportedThinkingLevels(chatModel) },
-    projects,
-    conversations,
-    files: db
-      .select({
-        id: filesTable.id,
-        name: filesTable.name,
-        mime: filesTable.mime,
-        size: filesTable.size,
-        source: filesTable.source,
-        created_at: filesTable.created_at,
-      })
-      .from(filesTable)
-      .where(eq(filesTable.user_id, user.id))
-      .orderBy(desc(filesTable.created_at))
-      .limit(200)
-      .all(),
-    skills: db
-      .select({
-        id: skillsTable.id,
-        name: skillsTable.name,
-        description: skillsTable.description,
-        instructions: skillsTable.instructions,
-        enabled: skillsTable.enabled,
-        created_at: skillsTable.created_at,
-        updated_at: skillsTable.updated_at,
-      })
-      .from(skillsTable)
-      .where(eq(skillsTable.user_id, user.id))
-      .orderBy(desc(skillsTable.updated_at))
-      .all(),
+    users: projectViews.some((project) => project.is_owner)
+      ? db
+          .select({
+            id: users.id,
+            username: users.username,
+            display_name: users.display_name,
+            avatar: users.avatar,
+          })
+          .from(users)
+          .orderBy(users.display_name)
+          .all()
+      : [],
+    invitations: incomingInvitations(user.id),
+    projects: projectViews,
+    conversations: conversationRows.map((conversation) => ({
+      ...conversation,
+      unread: unread.get(conversation.id) ?? 0,
+      activeRunId: activeRuns.get(conversation.id) ?? null,
+    })),
+    files: fileIds.length
+      ? db
+          .select({
+            id: filesTable.id,
+            name: filesTable.name,
+            mime: filesTable.mime,
+            size: filesTable.size,
+            source: filesTable.source,
+            created_at: filesTable.created_at,
+          })
+          .from(filesTable)
+          .where(inArray(filesTable.id, fileIds))
+          .orderBy(desc(filesTable.created_at))
+          .limit(200)
+          .all()
+      : [],
   });
 }
 
@@ -282,13 +345,8 @@ async function createConversation(request: Request, user: User): Promise<Respons
     title?: string;
     temporary?: boolean;
   };
-  const project =
-    body.projectId &&
-    db
-      .select({ id: projectsTable.id })
-      .from(projectsTable)
-      .where(and(eq(projectsTable.id, body.projectId), eq(projectsTable.user_id, user.id)))
-      .get();
+  const project = body.projectId ? projectAccess(db, body.projectId, user.id) : null;
+  if (body.projectId && !project) return json({ error: "project not found" }, 404);
   const conversation = {
     id: id(),
     project_id: project ? (body.projectId ?? null) : null,
@@ -302,6 +360,9 @@ async function createConversation(request: Request, user: User): Promise<Respons
   db.insert(conversationsTable)
     .values({ ...conversation, user_id: user.id })
     .run();
+  for (const memberId of project ? projectUserIds(db, project.id) : [user.id])
+    setConversationRead(db, conversation.id, memberId);
+  publishSync(project ? projectUserIds(db, project.id) : [user.id], conversation.id);
   return json(conversation, 201);
 }
 
@@ -309,8 +370,118 @@ function userTopic(userId: string): string {
   return `user:${userId}`;
 }
 
-function publishAgentEvent(userId: string, envelope: ChatEventEnvelope): void {
-  server.publish(userTopic(userId), JSON.stringify(envelope));
+function publishAgentEvent(_userId: string, envelope: ChatEventEnvelope): void {
+  const payload = JSON.stringify(envelope);
+  for (const recipient of conversationUserIds(db, envelope.conversationId))
+    server.publish(userTopic(recipient), payload);
+}
+
+function publishSync(userIds: string[], conversationId?: string): void {
+  const payload = JSON.stringify({ type: "sync", conversationId });
+  for (const userId of new Set(userIds)) server.publish(userTopic(userId), payload);
+}
+
+function userSummary(userId: string): UserSummary | null {
+  return (
+    db
+      .select({
+        id: users.id,
+        username: users.username,
+        display_name: users.display_name,
+        avatar: users.avatar,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .get() ?? null
+  );
+}
+
+function accessibleProjectIds(userId: string): string[] {
+  return [
+    ...new Set([
+      ...db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(eq(projectsTable.user_id, userId))
+        .all()
+        .map((project) => project.id),
+      ...db
+        .select({ id: projectMembers.project_id })
+        .from(projectMembers)
+        .where(eq(projectMembers.user_id, userId))
+        .all()
+        .map((project) => project.id),
+    ]),
+  ];
+}
+
+function projectView(projectId: string, userId: string) {
+  const access = projectAccess(db, projectId, userId);
+  if (!access) return null;
+  const project = db
+    .select({
+      id: projectsTable.id,
+      user_id: projectsTable.user_id,
+      name: projectsTable.name,
+      system_prompt: projectsTable.system_prompt,
+      language: projectsTable.language,
+      thinking_level: projectsTable.thinking_level,
+      shared: projectsTable.shared,
+      created_at: projectsTable.created_at,
+      updated_at: projectsTable.updated_at,
+    })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .get() as ProjectRow;
+  const members = db
+    .select({ user_id: projectMembers.user_id })
+    .from(projectMembers)
+    .where(eq(projectMembers.project_id, projectId))
+    .all()
+    .flatMap((member) => {
+      const user = userSummary(member.user_id);
+      return user ? [user] : [];
+    });
+  const pending_invitations = db
+    .select({ user_id: projectInvitations.user_id })
+    .from(projectInvitations)
+    .where(eq(projectInvitations.project_id, projectId))
+    .all()
+    .flatMap((invitation) => {
+      const user = userSummary(invitation.user_id);
+      return user ? [user] : [];
+    });
+  return {
+    ...project,
+    owner: userSummary(project.user_id)!,
+    members,
+    pending_invitations,
+    is_owner: access.isOwner,
+    shared: project.shared === 1,
+  };
+}
+
+function incomingInvitations(userId: string) {
+  return db
+    .select({ project_id: projectInvitations.project_id })
+    .from(projectInvitations)
+    .where(eq(projectInvitations.user_id, userId))
+    .all()
+    .flatMap((invitation) => {
+      const project = db
+        .select({ id: projectsTable.id, name: projectsTable.name, user_id: projectsTable.user_id })
+        .from(projectsTable)
+        .where(eq(projectsTable.id, invitation.project_id))
+        .get();
+      if (!project) return [];
+      return [
+        {
+          project_id: project.id,
+          project_name: project.name,
+          owner: userSummary(project.user_id)!,
+        },
+      ];
+    });
 }
 
 function conversationMessages(
@@ -318,11 +489,9 @@ function conversationMessages(
   userId: string,
   before: string | null,
 ): Response {
-  if (!ownedConversation(conversationId, userId)) return json({ error: "not found" }, 404);
-  db.update(conversationsTable)
-    .set({ unread: 0 })
-    .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, userId)))
-    .run();
+  const access = conversationAccess(db, conversationId, userId);
+  if (!access) return json({ error: "not found" }, 404);
+  setConversationRead(db, conversationId, userId);
   let page;
   try {
     page = pagePublicMessages(db, conversationId, before, MESSAGE_PAGE_SIZE);
@@ -332,9 +501,10 @@ function conversationMessages(
     throw error;
   }
   return json({
-    messages: page.messages.map(({ fileIds, ...message }) => ({
+    messages: page.messages.map(({ fileIds, authorId, ...message }) => ({
       ...message,
-      files: filesByIds(fileIds, userId),
+      author: message.role === "user" ? userSummary(authorId ?? access.creator_id) : undefined,
+      files: filesByIds(fileIds),
     })),
     hasMore: page.hasMore,
   });
@@ -346,8 +516,12 @@ async function deleteConversation(
   userId: string,
 ): Promise<Response> {
   verifyOrigin(request);
+  const access = conversationAccess(db, conversationId, userId);
+  if (!access?.isOwner) return json({ error: "not found" }, 404);
   await conversationRunner.stop(conversationId, userId);
-  await removeConversationData(conversationId, userId);
+  const recipients = conversationUserIds(db, conversationId);
+  await removeConversationData(conversationId);
+  publishSync(recipients);
   return new Response(null, { status: 204 });
 }
 
@@ -363,7 +537,7 @@ async function sendMessage(request: Request, user: User): Promise<Response> {
   if (!content && !uploads.length) return json({ error: "message is empty" }, 400);
   if (uploads.some((file) => !/^image\/(png|jpeg|webp|gif)$/i.test(file.type)))
     return json({ error: "添付できるのは画像のみです" }, 400);
-  const conversation = ownedConversation(conversationId, user.id);
+  const conversation = conversationAccess(db, conversationId, user.id);
   if (!conversation) return json({ error: "conversation not found" }, 404);
   if (
     db
@@ -395,10 +569,17 @@ async function sendMessage(request: Request, user: User): Promise<Response> {
     content,
     fileIds: savedUploads.map((file) => file.id),
     attachmentContext: await attachmentText(savedUploads),
+    authorId: user.id,
     createdAt: timestamp,
   });
+  db.update(conversationsTable)
+    .set({ updated_at: timestamp })
+    .where(eq(conversationsTable.id, conversationId))
+    .run();
+  markConversationUnread(db, conversationId, user.id);
+  publishSync(conversationUserIds(db, conversationId), conversationId);
   await startGeneration(conversationId, user, message.id);
-  return json({ message, status: "running" }, 202);
+  return json({ message: { ...message, author: userSummary(user.id) }, status: "running" }, 202);
 }
 
 async function startGeneration(
@@ -406,7 +587,14 @@ async function startGeneration(
   user: User,
   userEntryId: string,
 ): Promise<void> {
-  const settings = resolveAiSettings(user.thinking_level);
+  const projectSettings = db
+    .select({ language: projectsTable.language, thinking: projectsTable.thinking_level })
+    .from(conversationsTable)
+    .innerJoin(projectsTable, eq(projectsTable.id, conversationsTable.project_id))
+    .where(eq(conversationsTable.id, conversationId))
+    .get();
+  const settings = resolveAiSettings(projectSettings?.thinking ?? user.thinking_level);
+  const language = projectSettings?.language ?? user.language;
   const messages = listLegacyMessages(db, conversationId) as HistoryRow[];
   const latest = messages.at(-1);
   if (!latest || latest.id !== userEntryId || latest.role !== "user")
@@ -434,11 +622,13 @@ async function startGeneration(
         and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, user.id)),
       )
       .run();
+  if (needsTitle && thinking.title)
+    publishSync(conversationUserIds(db, conversationId), conversationId);
   await conversationRunner.start({
     conversationId,
     userId: user.id,
     userEntryId,
-    systemPrompt: buildSystemPrompt(db, conversationId, user.id, user.language),
+    systemPrompt: buildSystemPrompt(db, conversationId, user.id, language),
     requestedThinking: settings.thinking,
     resolvedThinking: thinking.resolved,
   });
@@ -450,16 +640,14 @@ async function stopGeneration(
   userId: string,
 ): Promise<Response> {
   verifyOrigin(request);
-  if (!ownedConversation(conversationId, userId)) return json({ error: "not found" }, 404);
+  if (!conversationAccess(db, conversationId, userId)) return json({ error: "not found" }, 404);
   await conversationRunner.stop(conversationId, userId);
   return new Response(null, { status: 204 });
 }
 
 async function regenerate(request: Request, conversationId: string, user: User): Promise<Response> {
   verifyOrigin(request);
-  const conversation = ownedConversation(conversationId, user.id) as {
-    generation_status: string;
-  } | null;
+  const conversation = conversationAccess(db, conversationId, user.id);
   if (!conversation) return json({ error: "not found" }, 404);
   if (conversation.generation_status === "running")
     return json({ error: "生成を停止してから再実行してください" }, 409);
@@ -481,13 +669,14 @@ async function regenerate(request: Request, conversationId: string, user: User):
   db.transaction(() => {
     rewindConversation(db, conversationId, user.id, userMessage.id, content);
     const retained = new Set(allConversationFileIds(db, conversationId));
-    removedFiles = fileRecords(
-      fileIdsBefore.filter((fileId) => !retained.has(fileId)),
-      user.id,
-    ).filter((file) => file.source === "generated");
-    deleteFileRecords(removedFiles, user.id);
+    removedFiles = fileRecords(fileIdsBefore.filter((fileId) => !retained.has(fileId))).filter(
+      (file) => file.source === "generated",
+    );
+    deleteFileRecords(removedFiles);
   });
   await removeFiles(removedFiles);
+  markConversationUnread(db, conversationId, user.id);
+  publishSync(conversationUserIds(db, conversationId), conversationId);
   await startGeneration(conversationId, user, userMessage.id);
   return json({ status: "running" }, 202);
 }
@@ -526,7 +715,12 @@ async function saveProject(
   projectId: string = id(),
 ): Promise<Response> {
   verifyOrigin(request);
-  const body = (await request.json()) as { name?: string; systemPrompt?: string };
+  const body = (await request.json()) as {
+    name?: string;
+    systemPrompt?: string;
+    language?: string;
+    thinking?: string;
+  };
   const name = clean(body.name, 80);
   const prompt = clean(body.systemPrompt, 30_000);
   if (!name) return json({ error: "name is required" }, 400);
@@ -535,12 +729,28 @@ async function saveProject(
     .from(projectsTable)
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
     .get();
-  if (existing)
+  if (existing) {
+    const language = clean(body.language, 80) || "Japanese";
+    const thinking = clean(body.thinking, 20);
+    if (!supportedThinkingLevels(chatModel).includes(thinking as ThinkingLevel))
+      return json({ error: "invalid thinking level" }, 400);
     db.update(projectsTable)
-      .set({ name, system_prompt: prompt, updated_at: now() })
+      .set({
+        name,
+        system_prompt: prompt,
+        language,
+        thinking_level: thinking,
+        updated_at: now(),
+      })
       .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
       .run();
-  else {
+    publishSync(projectUserIds(db, projectId));
+  } else {
+    const owner = db
+      .select({ language: users.language, thinking: users.thinking_level })
+      .from(users)
+      .where(eq(users.id, userId))
+      .get()!;
     const timestamp = now();
     db.insert(projectsTable)
       .values({
@@ -548,85 +758,151 @@ async function saveProject(
         user_id: userId,
         name,
         system_prompt: prompt,
+        language: owner.language,
+        thinking_level: owner.thinking,
         created_at: timestamp,
         updated_at: timestamp,
       })
       .run();
+    publishSync([userId]);
   }
-  return json(
-    db
-      .select({
-        id: projectsTable.id,
-        name: projectsTable.name,
-        system_prompt: projectsTable.system_prompt,
-        created_at: projectsTable.created_at,
-        updated_at: projectsTable.updated_at,
-      })
-      .from(projectsTable)
-      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
-      .get(),
-    existing ? 200 : 201,
-  );
+  return json(projectView(projectId, userId), existing ? 200 : 201);
 }
 
-async function saveSkill(
+async function inviteProjectMember(
   request: Request,
-  userId: string,
-  skillId: string = id(),
+  projectId: string,
+  ownerId: string,
 ): Promise<Response> {
   verifyOrigin(request);
-  const body = (await request.json()) as {
-    name?: string;
-    description?: string;
-    instructions?: string;
-    enabled?: boolean;
-  };
-  const name = clean(body.name, 80),
-    description = clean(body.description, 500),
-    instructions = clean(body.instructions, 30_000);
-  if (!name || !instructions) return json({ error: "name and instructions are required" }, 400);
-  const enabled = body.enabled === false ? 0 : 1;
-  const existing = db
-    .select({ id: skillsTable.id })
-    .from(skillsTable)
-    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
-    .get();
-  if (existing)
-    db.update(skillsTable)
-      .set({ name, description, instructions, enabled, updated_at: now() })
-      .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
-      .run();
-  else {
-    const timestamp = now();
-    db.insert(skillsTable)
-      .values({
-        id: skillId,
-        user_id: userId,
-        name,
-        description,
-        instructions,
-        enabled,
-        created_at: timestamp,
-        updated_at: timestamp,
-      })
-      .run();
-  }
-  return json(
+  if (!projectAccess(db, projectId, ownerId)?.isOwner) return json({ error: "not found" }, 404);
+  const body = (await request.json()) as { userId?: string };
+  const userId = clean(body.userId, 100);
+  if (!userId || userId === ownerId || !userSummary(userId))
+    return json({ error: "invalid user" }, 400);
+  if (
     db
-      .select({
-        id: skillsTable.id,
-        name: skillsTable.name,
-        description: skillsTable.description,
-        instructions: skillsTable.instructions,
-        enabled: skillsTable.enabled,
-        created_at: skillsTable.created_at,
-        updated_at: skillsTable.updated_at,
-      })
-      .from(skillsTable)
-      .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
-      .get(),
-    existing ? 200 : 201,
-  );
+      .select({ user_id: projectMembers.user_id })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.project_id, projectId), eq(projectMembers.user_id, userId)))
+      .get()
+  )
+    return json({ error: "already a member" }, 409);
+  db.insert(projectInvitations)
+    .values({ project_id: projectId, user_id: userId, created_at: now() })
+    .onConflictDoNothing()
+    .run();
+  publishSync([...projectUserIds(db, projectId), userId]);
+  return json(projectView(projectId, ownerId), 201);
+}
+
+async function cancelProjectInvitation(
+  request: Request,
+  projectId: string,
+  invitedUserId: string,
+  ownerId: string,
+): Promise<Response> {
+  verifyOrigin(request);
+  if (!projectAccess(db, projectId, ownerId)?.isOwner) return json({ error: "not found" }, 404);
+  db.delete(projectInvitations)
+    .where(
+      and(
+        eq(projectInvitations.project_id, projectId),
+        eq(projectInvitations.user_id, invitedUserId),
+      ),
+    )
+    .run();
+  publishSync([...projectUserIds(db, projectId), invitedUserId]);
+  return json(projectView(projectId, ownerId));
+}
+
+async function decideProjectInvitation(
+  request: Request,
+  projectId: string,
+  userId: string,
+  accept: boolean,
+): Promise<Response> {
+  verifyOrigin(request);
+  const invitation = db
+    .select({ project_id: projectInvitations.project_id })
+    .from(projectInvitations)
+    .where(
+      and(eq(projectInvitations.project_id, projectId), eq(projectInvitations.user_id, userId)),
+    )
+    .get();
+  if (!invitation) return json({ error: "not found" }, 404);
+  db.transaction((tx) => {
+    tx.delete(projectInvitations)
+      .where(
+        and(eq(projectInvitations.project_id, projectId), eq(projectInvitations.user_id, userId)),
+      )
+      .run();
+    if (accept) {
+      tx.update(projectsTable).set({ shared: 1 }).where(eq(projectsTable.id, projectId)).run();
+      tx.insert(projectMembers)
+        .values({ project_id: projectId, user_id: userId, created_at: now() })
+        .onConflictDoNothing()
+        .run();
+    }
+  });
+  if (accept)
+    for (const conversation of db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.project_id, projectId))
+      .all())
+      setConversationRead(db, conversation.id, userId);
+  publishSync([...projectUserIds(db, projectId), userId]);
+  return new Response(null, { status: 204 });
+}
+
+async function removeProjectMember(
+  request: Request,
+  projectId: string,
+  memberId: string,
+  ownerId: string,
+): Promise<Response> {
+  verifyOrigin(request);
+  if (!projectAccess(db, projectId, ownerId)?.isOwner) return json({ error: "not found" }, 404);
+  removeMembership(projectId, memberId);
+  publishSync([...projectUserIds(db, projectId), memberId]);
+  return new Response(null, { status: 204 });
+}
+
+async function leaveProject(
+  request: Request,
+  projectId: string,
+  userId: string,
+): Promise<Response> {
+  verifyOrigin(request);
+  const access = projectAccess(db, projectId, userId);
+  if (!access || access.isOwner) return json({ error: "not found" }, 404);
+  removeMembership(projectId, userId);
+  publishSync([...projectUserIds(db, projectId), userId]);
+  return new Response(null, { status: 204 });
+}
+
+function removeMembership(projectId: string, userId: string): void {
+  const conversationIds = db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.project_id, projectId))
+    .all()
+    .map((conversation) => conversation.id);
+  db.transaction((tx) => {
+    tx.delete(projectMembers)
+      .where(and(eq(projectMembers.project_id, projectId), eq(projectMembers.user_id, userId)))
+      .run();
+    if (conversationIds.length)
+      tx.delete(conversationReads)
+        .where(
+          and(
+            eq(conversationReads.user_id, userId),
+            inArray(conversationReads.conversation_id, conversationIds),
+          ),
+        )
+        .run();
+  });
 }
 
 async function cleanupTemporaryConversations(): Promise<void> {
@@ -640,100 +916,145 @@ async function cleanupTemporaryConversations(): Promise<void> {
       ),
     )
     .all();
-  for (const conversation of expired)
-    await removeConversationData(conversation.id, conversation.user_id);
+  for (const conversation of expired) await removeConversationData(conversation.id);
 }
 
-async function removeConversationData(conversationId: string, userId: string): Promise<void> {
-  const files = fileRecords(allConversationFileIds(db, conversationId), userId);
+async function removeConversationData(conversationId: string): Promise<void> {
+  const files = fileRecords(allConversationFileIds(db, conversationId));
   db.transaction((tx) => {
-    tx.delete(conversationsTable)
-      .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, userId)))
-      .run();
-    deleteFileRecords(files, userId);
+    tx.delete(conversationsTable).where(eq(conversationsTable.id, conversationId)).run();
+    deleteFileRecords(files);
   });
   await removeFiles(files);
 }
 
 async function deleteAllData(request: Request, userId: string): Promise<Response> {
   verifyOrigin(request);
-  const files = db
-    .select({ id: filesTable.id, path: filesTable.path })
-    .from(filesTable)
-    .where(eq(filesTable.user_id, userId))
+  const joinedProjectIds = db
+    .select({ id: projectMembers.project_id })
+    .from(projectMembers)
+    .where(eq(projectMembers.user_id, userId))
+    .all()
+    .map((project) => project.id);
+  const ownedProjectRows = db
+    .select({ id: projectsTable.id, shared: projectsTable.shared })
+    .from(projectsTable)
+    .where(eq(projectsTable.user_id, userId))
     .all();
+  const ownedProjects = ownedProjectRows.map((project) => project.id);
+  const protectedProjectIds = new Set([
+    ...joinedProjectIds,
+    ...ownedProjectRows.filter((project) => project.shared === 1).map((project) => project.id),
+  ]);
+  const deletedProjectIds = ownedProjects.filter(
+    (projectId) => !protectedProjectIds.has(projectId),
+  );
+  const conversationRows = db
+    .select({
+      id: conversationsTable.id,
+      user_id: conversationsTable.user_id,
+      project_id: conversationsTable.project_id,
+    })
+    .from(conversationsTable)
+    .all();
+  const deletedConversationIds = conversationRows
+    .filter(
+      (conversation) =>
+        (!conversation.project_id && conversation.user_id === userId) ||
+        (conversation.project_id && deletedProjectIds.includes(conversation.project_id)),
+    )
+    .map((conversation) => conversation.id);
+  const retainedFileIds = new Set(
+    conversationRows
+      .filter((conversation) => !deletedConversationIds.includes(conversation.id))
+      .flatMap((conversation) => allConversationFileIds(db, conversation.id)),
+  );
+  const deletedFileIds = new Set(
+    deletedConversationIds.flatMap((conversationId) => allConversationFileIds(db, conversationId)),
+  );
+  const files = db
+    .select({
+      id: filesTable.id,
+      user_id: filesTable.user_id,
+      path: filesTable.path,
+      source: filesTable.source,
+    })
+    .from(filesTable)
+    .all()
+    .filter(
+      (file) =>
+        !retainedFileIds.has(file.id) && (file.user_id === userId || deletedFileIds.has(file.id)),
+    );
+  for (const conversationId of deletedConversationIds)
+    await conversationRunner.stop(conversationId, userId);
   db.transaction((tx) => {
-    tx.delete(conversationsTable).where(eq(conversationsTable.user_id, userId)).run();
-    tx.delete(projectsTable).where(eq(projectsTable.user_id, userId)).run();
-    deleteFileRecords(files, userId);
+    if (deletedConversationIds.length)
+      tx.delete(conversationsTable)
+        .where(inArray(conversationsTable.id, deletedConversationIds))
+        .run();
+    if (deletedProjectIds.length)
+      tx.delete(projectsTable).where(inArray(projectsTable.id, deletedProjectIds)).run();
+    deleteFileRecords(files);
   });
   await removeFiles(files);
+  publishSync([userId]);
   return new Response(null, { status: 204 });
 }
 
-async function removeOwned(
+async function deleteProject(
   request: Request,
-  table: "projects" | "skills",
-  objectId: string,
+  projectId: string,
   userId: string,
 ): Promise<Response> {
   verifyOrigin(request);
-  const files =
-    table === "projects"
-      ? fileRecords(
-          db
-            .select({ id: conversationsTable.id })
-            .from(conversationsTable)
-            .where(
-              and(
-                eq(conversationsTable.project_id, objectId),
-                eq(conversationsTable.user_id, userId),
-              ),
-            )
-            .all()
-            .flatMap((conversation) => allConversationFileIds(db, conversation.id)),
-          userId,
-        )
-      : [];
+  if (!projectAccess(db, projectId, userId)?.isOwner) return json({ error: "not found" }, 404);
+  const conversationIds = db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.project_id, projectId))
+    .all()
+    .map((conversation) => conversation.id);
+  const files = fileRecords(
+    conversationIds.flatMap((conversationId) => allConversationFileIds(db, conversationId)),
+  );
+  const invited = db
+    .select({ user_id: projectInvitations.user_id })
+    .from(projectInvitations)
+    .where(eq(projectInvitations.project_id, projectId))
+    .all()
+    .map((invitation) => invitation.user_id);
+  const recipients = [...projectUserIds(db, projectId), ...invited];
+  for (const conversationId of conversationIds)
+    await conversationRunner.stop(conversationId, userId);
   db.transaction((tx) => {
-    if (table === "projects")
-      tx.delete(projectsTable)
-        .where(and(eq(projectsTable.id, objectId), eq(projectsTable.user_id, userId)))
-        .run();
-    else
-      tx.delete(skillsTable)
-        .where(and(eq(skillsTable.id, objectId), eq(skillsTable.user_id, userId)))
-        .run();
-    deleteFileRecords(files, userId);
+    tx.delete(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
+      .run();
+    deleteFileRecords(files);
   });
   await removeFiles(files);
+  publishSync(recipients);
   return new Response(null, { status: 204 });
 }
 
-function fileRecords(
-  ids: string[],
-  userId: string,
-): { id: string; path: string; source: string }[] {
+function fileRecords(ids: string[]): { id: string; path: string; source: string }[] {
   const unique = [...new Set(ids)];
   return unique.length
     ? db
         .select({ id: filesTable.id, path: filesTable.path, source: filesTable.source })
         .from(filesTable)
-        .where(and(eq(filesTable.user_id, userId), inArray(filesTable.id, unique)))
+        .where(inArray(filesTable.id, unique))
         .all()
     : [];
 }
 
-function deleteFileRecords(files: { id: string }[], userId: string): void {
+function deleteFileRecords(files: { id: string }[]): void {
   if (files.length)
     db.delete(filesTable)
       .where(
-        and(
-          eq(filesTable.user_id, userId),
-          inArray(
-            filesTable.id,
-            files.map((file) => file.id),
-          ),
+        inArray(
+          filesTable.id,
+          files.map((file) => file.id),
         ),
       )
       .run();
@@ -744,10 +1065,11 @@ async function removeFiles(files: { path: string }[]): Promise<void> {
 }
 
 async function serveUserFile(fileId: string, userId: string, download: boolean): Promise<Response> {
+  if (!fileAccess(db, fileId, userId)) return json({ error: "not found" }, 404);
   const file = db
     .select({ name: filesTable.name, path: filesTable.path, mime: filesTable.mime })
     .from(filesTable)
-    .where(and(eq(filesTable.id, fileId), eq(filesTable.user_id, userId)))
+    .where(eq(filesTable.id, fileId))
     .get();
   if (!file) return json({ error: "not found" }, 404);
   const path = storedFilePath(file.path);
@@ -820,7 +1142,7 @@ function publicFiles(files: StoredFile[]) {
     created_at,
   }));
 }
-function filesByIds(ids: string[], userId: string) {
+function filesByIds(ids: string[]) {
   return ids.length
     ? db
         .select({
@@ -832,7 +1154,7 @@ function filesByIds(ids: string[], userId: string) {
           created_at: filesTable.created_at,
         })
         .from(filesTable)
-        .where(and(eq(filesTable.user_id, userId), inArray(filesTable.id, ids)))
+        .where(inArray(filesTable.id, ids))
         .all()
     : [];
 }
@@ -948,13 +1270,6 @@ function sessionUser(request: Request): User | null {
     .innerJoin(users, eq(users.id, sessions.user_id))
     .where(and(eq(sessions.token_hash, hash(token)), gt(sessions.expires_at, now())))
     .get() ?? null) as User | null;
-}
-function ownedConversation(conversationId: string, userId: string) {
-  return db
-    .select({ id: conversationsTable.id, generation_status: conversationsTable.generation_status })
-    .from(conversationsTable)
-    .where(and(eq(conversationsTable.id, conversationId), eq(conversationsTable.user_id, userId)))
-    .get();
 }
 function clean(value: unknown, max: number): string {
   return typeof value === "string" ? value.replace(/\0/g, "").trim().slice(0, max) : "";

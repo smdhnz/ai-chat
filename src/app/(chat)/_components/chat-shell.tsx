@@ -157,19 +157,22 @@ export function ChatShell() {
     let retry: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
     let connected = false;
-    const refreshAfterReconnect = async () => {
-      const openId = openConversationRef.current;
-      const [fresh, page] = await Promise.all([
-        getBootstrap(),
-        openId ? api<MessagePage>(`/api/conversations/${openId}`) : Promise.resolve(null),
-      ]);
+    const sync = async (targetConversationId?: string) => {
+      const fresh = await getBootstrap();
       if (!active) return;
       setData(fresh);
-      if (openId && page && openConversationRef.current === openId) {
-        setMessages(page.messages);
-        setHasOlderMessages(page.hasMore);
-        dispatchStream({ type: "clear", conversationId: openId });
-      }
+      const openId = openConversationRef.current;
+      if (
+        !openId ||
+        (targetConversationId && targetConversationId !== openId) ||
+        !fresh.conversations.some((conversation) => conversation.id === openId)
+      )
+        return;
+      const page = await api<MessagePage>(`/api/conversations/${openId}`);
+      if (!active || openConversationRef.current !== openId) return;
+      setMessages(page.messages);
+      setHasOlderMessages(page.hasMore);
+      setData((value) => clearUnread(value, openId));
     };
     const finishRun = (event: ChatEventEnvelope) => {
       const current =
@@ -183,6 +186,7 @@ export function ChatShell() {
           if (page && openConversationRef.current === event.conversationId) {
             setMessages(page.messages);
             setHasOlderMessages(page.hasMore);
+            setData((value) => clearUnread(value, event.conversationId));
           }
           dispatchStream({ type: "clear", conversationId: event.conversationId });
         })
@@ -195,13 +199,26 @@ export function ChatShell() {
         const reconnecting = connected;
         connected = true;
         attempts = 0;
-        if (reconnecting) void refreshAfterReconnect().catch(() => undefined);
+        if (reconnecting) void sync().catch(() => undefined);
       };
       socket.onmessage = ({ data: message }) => {
         let event: unknown;
         try {
           event = JSON.parse(String(message));
         } catch {
+          return;
+        }
+        if (
+          typeof event === "object" &&
+          event !== null &&
+          "type" in event &&
+          event.type === "sync"
+        ) {
+          const conversationId =
+            "conversationId" in event && typeof event.conversationId === "string"
+              ? event.conversationId
+              : undefined;
+          void sync(conversationId).catch(() => undefined);
           return;
         }
         if (!isChatEventEnvelope(event)) return;
@@ -275,6 +292,7 @@ export function ChatShell() {
       if (!active) return;
       setMessages(page.messages);
       setHasOlderMessages(page.hasMore);
+      setData((value) => clearUnread(value, resolvedConversationId));
       setConversationId(resolvedConversationId);
       setProjectId(requestedProjectId);
       setTemporary(temporaryParam);
@@ -289,6 +307,7 @@ export function ChatShell() {
     resolvedConversationId,
     temporaryParam,
     router,
+    setData,
   ]);
 
   const refreshChat = useCallback(
@@ -297,7 +316,7 @@ export function ChatShell() {
         getBootstrap(),
         api<MessagePage>(`/api/conversations/${id}`),
       ]);
-      setData(fresh);
+      setData(clearUnread(fresh, id));
       setMessages(page.messages);
       setHasOlderMessages(page.hasMore);
     },
@@ -405,6 +424,12 @@ export function ChatShell() {
         id: crypto.randomUUID(),
         role: "user",
         content: text,
+        author: {
+          id: data!.user.id,
+          username: data!.user.username,
+          display_name: data!.user.display_name,
+          avatar: data!.user.avatar,
+        },
         files: files.map((file) => ({
           id: "",
           name: file.name,
@@ -644,6 +669,7 @@ export function ChatShell() {
                     key={message.id}
                     message={message}
                     disabled={generating}
+                    shared={Boolean(project?.shared)}
                     draft={editingMessageId === message.id ? prompt : undefined}
                     regenerate={() => void regenerate(message.id)}
                     edit={() => {
@@ -677,4 +703,15 @@ export function ChatShell() {
       </motion.main>
     </div>
   );
+}
+
+function clearUnread<T extends { conversations: Conversation[] } | null>(value: T, id: string): T {
+  return value
+    ? ({
+        ...value,
+        conversations: value.conversations.map((conversation) =>
+          conversation.id === id ? { ...conversation, unread: 0 } : conversation,
+        ),
+      } as T)
+    : value;
 }

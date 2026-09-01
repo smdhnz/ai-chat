@@ -412,9 +412,8 @@ describe("public transcript projection", () => {
       id: "skill-call",
       runId: "failed-run",
       status: "failed",
-      skills: ["imagegen"],
+      skills: [],
       activities: [
-        { type: "skill", name: "imagegen", status: "completed" },
         { type: "image_generation", status: "error" },
         {
           type: "tool",
@@ -488,7 +487,7 @@ describe("conversation regeneration", () => {
       .run();
     const filesBefore = allConversationFileIds(db, "conversation");
 
-    rewindConversation(db, "conversation", "user-1", "user-2", "edited second");
+    rewindConversation(db, "conversation", "user-2", "user-2", "edited second");
 
     expect(
       db.$client.query("SELECT id FROM conversation_entries ORDER BY sequence").all() as {
@@ -497,6 +496,13 @@ describe("conversation regeneration", () => {
     ).toEqual([{ id: "user-1" }, { id: "assistant-1" }, { id: "checkpoint" }, { id: "user-2" }]);
     expect(db.$client.query("SELECT id FROM runs ORDER BY id").all()).toEqual([{ id: "run-1" }]);
     expect(listLegacyMessages(db, "conversation").at(-1)?.content).toBe("edited second");
+    expect(
+      decodeStoredEntry(
+        db.$client
+          .query("SELECT kind,payload_json FROM conversation_entries WHERE id='user-2'")
+          .get() as { kind: "user_message"; payload_json: string },
+      ),
+    ).toMatchObject({ authorId: "user-2" });
     expect(
       db.$client
         .query(
@@ -533,7 +539,7 @@ describe("StoredMessage codec", () => {
     ).toThrow("metadata is incomplete");
   });
 
-  test("imageRefを別ユーザーのfile rowから復元しない", async () => {
+  test("conversationに関連しない別ユーザーのimageRefを復元しない", async () => {
     const db = database();
     db.$client
       .query(
@@ -566,7 +572,7 @@ describe("StoredMessage codec", () => {
         },
         "user-1",
       ),
-    ).rejects.toThrow("image ownership mismatch");
+    ).rejects.toThrow("image mismatch");
   });
 
   test("同じユーザーでもconversationに関連しないimageRefをhydrateしない", async () => {
@@ -588,7 +594,7 @@ describe("StoredMessage codec", () => {
         },
         "user-1",
       ),
-    ).rejects.toThrow("image ownership mismatch");
+    ).rejects.toThrow("image mismatch");
   });
 
   test("orphan tool resultを拒否する", () => {

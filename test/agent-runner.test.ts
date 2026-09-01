@@ -52,6 +52,10 @@ function database() {
     CREATE TABLE files (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, path TEXT NOT NULL, mime TEXT NOT NULL
     );
+    CREATE TABLE conversation_reads (
+      conversation_id TEXT NOT NULL, user_id TEXT NOT NULL, unread INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(conversation_id,user_id)
+    );
     CREATE TABLE runs (
       id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), user_entry_id TEXT NOT NULL,
       status TEXT NOT NULL, model TEXT NOT NULL, requested_thinking TEXT NOT NULL, resolved_thinking TEXT NOT NULL,
@@ -66,6 +70,7 @@ function database() {
     INSERT INTO users(id) VALUES('user');
     INSERT INTO conversations(id,user_id,generation_status,updated_at)
       VALUES('conversation','user','idle','2025-01-01T00:00:00.000Z');
+    INSERT INTO conversation_reads VALUES('conversation','user',0);
   `);
   appendLegacyMessage(db, {
     id: "user-entry",

@@ -27,7 +27,18 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL, system_prompt TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  language TEXT NOT NULL DEFAULT 'Japanese', thinking_level TEXT NOT NULL DEFAULT 'low',
+  shared INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_members (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL, PRIMARY KEY(project_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS project_invitations (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL, PRIMARY KEY(project_id, user_id)
 );
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -37,10 +48,10 @@ CREATE TABLE IF NOT EXISTS conversations (
   generation_status TEXT NOT NULL DEFAULT 'idle', unread INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS skills (
-  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS conversation_reads (
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  unread INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(conversation_id, user_id)
 );
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -94,6 +105,20 @@ if (!userColumns.has("thinking_level"))
 const projectColumns = columns("projects");
 if (projectColumns.has("icon")) sqlite.exec("ALTER TABLE projects DROP COLUMN icon");
 if (projectColumns.has("color")) sqlite.exec("ALTER TABLE projects DROP COLUMN color");
+if (!projectColumns.has("language")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese'");
+  sqlite.exec(
+    "UPDATE projects SET language = coalesce((SELECT language FROM users WHERE users.id = projects.user_id), 'Japanese')",
+  );
+}
+if (!projectColumns.has("thinking_level")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low'");
+  sqlite.exec(
+    "UPDATE projects SET thinking_level = coalesce((SELECT thinking_level FROM users WHERE users.id = projects.user_id), 'low')",
+  );
+}
+if (!projectColumns.has("shared"))
+  sqlite.exec("ALTER TABLE projects ADD COLUMN shared INTEGER NOT NULL DEFAULT 0");
 const conversationColumns = columns("conversations");
 if (!conversationColumns.has("context_summary"))
   sqlite.exec("ALTER TABLE conversations ADD COLUMN context_summary TEXT NOT NULL DEFAULT ''");
@@ -114,6 +139,11 @@ if (!messageColumns.has("skills"))
   sqlite.exec("ALTER TABLE messages ADD COLUMN skills TEXT NOT NULL DEFAULT '[]'");
 if (!messageColumns.has("attachment_context"))
   sqlite.exec("ALTER TABLE messages ADD COLUMN attachment_context TEXT NOT NULL DEFAULT ''");
+sqlite.exec(`
+INSERT OR IGNORE INTO conversation_reads(conversation_id, user_id, unread)
+SELECT id, user_id, unread FROM conversations;
+DROP TABLE IF EXISTS skills;
+`);
 
 export const db = createDatabase(sqlite);
 db.update(runs)

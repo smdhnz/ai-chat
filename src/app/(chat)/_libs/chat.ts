@@ -144,9 +144,6 @@ export function streamMessage(stream: ChatStream): Message {
     role: "assistant",
     content: stream.content,
     files: [],
-    skills: stream.activities.flatMap(({ value }) =>
-      value.type === "skill" && value.status === "completed" ? [value.name] : [],
-    ),
     activities: stream.activities.map(({ value }) => value),
     status: stream.status === "failed" || stream.status === "stopped" ? stream.status : "completed",
     created_at: stream.createdAt,
@@ -174,8 +171,6 @@ function runningTool(name: string, args: unknown): PublicActivity {
       sources: [],
       status: "running",
     };
-  if (name === "load_skill")
-    return { type: "skill", name: text(input.name) || "スキル", status: "running" };
   if (name === "generate_image") return { type: "image_generation", status: "running" };
   return { type: "tool", name, summary: "処理中", status: "running" };
 }
@@ -200,12 +195,6 @@ function completedTool(
               : [];
           })
         : [],
-      status,
-    };
-  if (name === "load_skill")
-    return {
-      type: "skill",
-      name: text(details.name) || (current?.type === "skill" ? current.name : "スキル"),
       status,
     };
   if (name === "generate_image")

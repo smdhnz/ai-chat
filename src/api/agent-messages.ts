@@ -35,6 +35,7 @@ export type StoredContent =
 type UserPayload = {
   role: "user";
   content: StoredContent[];
+  authorId?: string;
   attachmentContext?: string;
   skills?: string[];
 };
@@ -77,7 +78,6 @@ type ActivityStatus = "running" | "completed" | "error";
 
 export type PublicActivity =
   | { type: "reasoning"; text: string; redacted?: boolean }
-  | { type: "skill"; name: string; status: ActivityStatus }
   | {
       type: "web_search";
       query: string;
@@ -97,6 +97,7 @@ export type PublicTranscriptMessage = {
   role: "user" | "assistant";
   content: string;
   fileIds: string[];
+  authorId?: string;
   skills: string[];
   activities: PublicActivity[];
   status?: "completed" | "stopped" | "failed";
@@ -131,12 +132,6 @@ function publicToolCall(
   status: "running" | "error",
 ): PublicActivity {
   const details = isRecord(call.arguments) ? call.arguments : {};
-  if (call.name === "load_skill")
-    return {
-      type: "skill",
-      name: typeof details.name === "string" ? details.name.slice(0, 80) : "不明なスキル",
-      status,
-    };
   if (call.name === "web_search")
     return {
       type: "web_search",
@@ -156,12 +151,6 @@ function publicToolCall(
 function publicToolActivity(result: ToolResultPayload): PublicActivity {
   const status = result.isError ? "error" : "completed";
   const details = isRecord(result.details) ? result.details : {};
-  if (result.toolName === "load_skill")
-    return {
-      type: "skill",
-      name: typeof details.name === "string" ? details.name.slice(0, 80) : "不明なスキル",
-      status,
-    };
   if (result.toolName === "web_search")
     return {
       type: "web_search",
@@ -370,6 +359,7 @@ export function pagePublicMessages(
         role: "user",
         content: contentText(user.content),
         fileIds: imageRefs(user.content),
+        authorId: user.authorId,
         skills: user.skills ?? [],
         activities: [],
         created_at: entry.created_at,
@@ -419,6 +409,7 @@ export function pagePublicMessages(
           typeof block.id === "string" &&
           typeof block.name === "string"
         ) {
+          if (block.name === "load_skill") continue;
           const runStatus = entry.run_id ? runMap.get(entry.run_id)?.status : undefined;
           const activityIndex = group.activities.push(
             publicToolCall(
@@ -432,19 +423,13 @@ export function pagePublicMessages(
       continue;
     }
     const result = payload as ToolResultPayload;
+    if (result.toolName === "load_skill") continue;
     group.fileIds.push(...imageRefs(result.content));
     const call = toolCalls.get(`${entry.run_id}:${result.toolCallId}`);
     if (call) {
       call.group.activities[call.activityIndex] = publicToolActivity(result);
       toolCalls.delete(`${entry.run_id}:${result.toolCallId}`);
     } else group.activities.push(publicToolActivity(result));
-    if (
-      result.toolName === "load_skill" &&
-      !result.isError &&
-      isRecord(result.details) &&
-      typeof result.details.name === "string"
-    )
-      group.skills.push(result.details.name);
   }
   for (const message of messages) {
     message.fileIds = [...new Set(message.fileIds)];
@@ -478,6 +463,7 @@ export function appendLegacyMessage(
     fileIds?: string[];
     skills?: string[];
     attachmentContext?: string;
+    authorId?: string;
     createdAt: string;
     model?: string;
     runId?: string;
@@ -500,6 +486,7 @@ export function appendLegacyMessage(
       ? {
           role: "user",
           content,
+          authorId: message.authorId,
           attachmentContext: message.attachmentContext,
           skills: message.skills,
         }
@@ -571,12 +558,12 @@ export function rewindConversation(
       and(
         eq(conversationEntries.id, entryId),
         eq(conversationEntries.conversation_id, conversationId),
-        eq(conversations.user_id, userId),
       ),
     )
     .get();
   if (!entry || entry.kind !== "user_message") throw new Error("user message not found");
   const payload = decodeStoredEntry(entry) as UserPayload;
+  payload.authorId = userId;
   const firstText = payload.content.findIndex((block) => block.type === "text");
   if (firstText < 0) payload.content.unshift({ type: "text", text: content });
   else payload.content[firstText] = { ...payload.content[firstText], type: "text", text: content };
@@ -629,7 +616,7 @@ export function rewindConversation(
       context_tokens: compacted?.tokensBefore ?? 0,
       unread: 0,
     })
-    .where(and(eq(conversations.id, conversationId), eq(conversations.user_id, userId)))
+    .where(eq(conversations.id, conversationId))
     .run();
 }
 
@@ -649,15 +636,16 @@ export function allConversationFileIds(database: Database, conversationId: strin
 export async function hydrateStoredEntry(
   database: Database,
   entry: ConversationEntry,
-  userId: string,
+  _userId: string,
 ): Promise<Message | null> {
+  void _userId;
   if (!new Set(["user_message", "assistant_message", "tool_result"]).has(entry.kind)) return null;
-  const owned = database
+  const conversation = database
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(eq(conversations.id, entry.conversation_id), eq(conversations.user_id, userId)))
+    .where(eq(conversations.id, entry.conversation_id))
     .get();
-  if (!owned) throw new Error("conversation transcript ownership mismatch");
+  if (!conversation) throw new Error("conversation transcript not found");
   const payload = decodeStoredEntry(entry) as UserPayload | AssistantPayload | ToolResultPayload;
   const content: (StoredContent | ImageContent)[] = [];
   for (const block of payload.content) {
@@ -675,14 +663,14 @@ export async function hydrateStoredEntry(
     const file = database
       .select({ path: files.path, mime: files.mime })
       .from(files)
-      .where(and(eq(files.id, block.fileId), eq(files.user_id, userId)))
+      .where(eq(files.id, block.fileId))
       .get();
     if (
       !file ||
       file.mime !== block.mimeType ||
       !isConversationFile(database, entry.conversation_id, block.fileId)
     )
-      throw new Error("conversation transcript image ownership mismatch");
+      throw new Error("conversation transcript image mismatch");
     const bytes = Buffer.from(await readFile(storedFilePath(file.path)));
     if (detectImageMime(bytes) !== file.mime)
       throw new Error("conversation transcript image MIME mismatch");
@@ -782,11 +770,9 @@ export function appendAgentMessage(
     const file = database
       .select({ mime: files.mime })
       .from(files)
-      .innerJoin(conversations, eq(conversations.user_id, files.user_id))
-      .where(and(eq(files.id, fileId), eq(conversations.id, conversationId)))
+      .where(eq(files.id, fileId))
       .get();
-    if (!file || file.mime !== block.mimeType)
-      throw new Error("tool result image ownership mismatch");
+    if (!file || file.mime !== block.mimeType) throw new Error("tool result image mismatch");
     return { type: "imageRef" as const, fileId, mimeType: file.mime };
   });
   const payload = { ...message, content };
@@ -826,6 +812,7 @@ export function migrateCanonicalTranscript(database: Database, model: string): v
     const conversationRows = tx
       .select({
         id: conversations.id,
+        user_id: conversations.user_id,
         context_summary: conversations.context_summary,
         compacted_through_id: conversations.compacted_through_id,
       })
@@ -876,6 +863,7 @@ export function migrateCanonicalTranscript(database: Database, model: string): v
           attachment_context: message.attachment_context,
           created_at: message.created_at,
           conversationId: conversation.id,
+          authorId: message.role === "user" ? conversation.user_id : undefined,
           fileIds: JSON.parse(message.file_ids) as string[],
           skills: JSON.parse(message.skills) as string[],
           sequence: sequence++,
@@ -889,6 +877,7 @@ function appendLegacyMessageAtSequence(
   database: Database,
   message: Omit<LegacyMessageRow, "file_ids" | "skills"> & {
     conversationId: string;
+    authorId?: string;
     fileIds: string[];
     skills: string[];
     sequence: number;
@@ -912,6 +901,7 @@ function appendLegacyMessageAtSequence(
       ? {
           role: "user",
           content,
+          authorId: message.authorId,
           attachmentContext: message.attachment_context,
           skills: message.skills,
         }

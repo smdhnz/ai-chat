@@ -137,7 +137,7 @@ export async function classifyThinking(
   const model = getModel(AUTO_THINKING_MODEL);
   const context: Context = {
     systemPrompt: `Classify the reasoning effort needed for the next assistant response.
-Call submit_classification exactly once. Do not answer the user. Do not decide tools, skills, web search, or image generation.
+Call submit_classification exactly once. Do not answer the user. Do not decide tools, web search, or image generation.
 Use minimal for greetings, simple transformations, and direct replies; low for ordinary questions and short explanations; medium for multi-step analysis, comparison, planning, ambiguity, or image-related reasoning; high for difficult synthesis, high-stakes reasoning, long constrained tasks, or several dependent steps. When uncertain, choose medium.
 Set title to a concise 12-20 character title only when needsTitle is true; otherwise use an empty string.`,
     messages: [{ role: "user", content: JSON.stringify(input), timestamp: Date.now() }],

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ChevronRight, Plus, Settings, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Settings, Trash2, UsersRound } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import { iconButtonClass } from "@/lib/ui";
 
@@ -21,7 +21,7 @@ function ConversationRow({
   active: boolean;
   nested?: boolean;
   select: () => void;
-  remove: () => void;
+  remove?: () => void;
 }) {
   return (
     <li
@@ -37,14 +37,16 @@ function ConversationRow({
           />
         )}
       </button>
-      <button
-        type="button"
-        className="mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-destructive [&_svg]:size-3.5"
-        aria-label={`${item.title}を削除`}
-        onClick={remove}
-      >
-        <Trash2 />
-      </button>
+      {remove ? (
+        <button
+          type="button"
+          className="mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-destructive [&_svg]:size-3.5"
+          aria-label={`${item.title}を削除`}
+          onClick={remove}
+        >
+          <Trash2 />
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -140,6 +142,9 @@ export function ChatSidebar({
                           className={`size-[13px]! transition-transform ${projectOpen ? "rotate-90" : ""}`}
                         />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                        {group.shared ? (
+                          <UsersRound className="size-2.5! text-primary" aria-label="共有中" />
+                        ) : null}
                       </button>
                       <button
                         type="button"
@@ -166,7 +171,9 @@ export function ChatSidebar({
                               active={item.id === conversationId}
                               nested
                               select={() => selectConversation(item)}
-                              remove={() => askDeleteConversation(item)}
+                              remove={
+                                group.is_owner ? () => askDeleteConversation(item) : undefined
+                              }
                             />
                           ))}
                           {projectConversations.length > limit && (

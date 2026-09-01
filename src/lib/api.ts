@@ -7,26 +7,35 @@ export type FileItem = {
   created_at: string;
   preview?: string;
 };
+export type UserSummary = {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar: string | null;
+};
 export type Project = {
   id: string;
+  user_id: string;
   name: string;
   system_prompt: string;
+  language: string;
+  thinking_level: ThinkingLevel;
+  owner: UserSummary;
+  members: UserSummary[];
+  pending_invitations: UserSummary[];
+  is_owner: boolean;
+  shared: boolean;
   created_at: string;
   updated_at: string;
 };
-export type Skill = {
-  id: string;
-  name: string;
-  description: string;
-  instructions: string;
-  enabled: number;
-  created_at: string;
-  updated_at: string;
+export type ProjectInvitation = {
+  project_id: string;
+  project_name: string;
+  owner: UserSummary;
 };
 export type ActivityStatus = "running" | "completed" | "error";
 export type PublicActivity =
   | { type: "reasoning"; text: string; redacted?: boolean }
-  | { type: "skill"; name: string; status: ActivityStatus }
   | {
       type: "web_search";
       query: string;
@@ -56,8 +65,8 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   files: FileItem[];
+  author?: UserSummary | null;
   created_at: string;
-  skills?: string[];
   activities?: PublicActivity[];
   status?: "completed" | "stopped" | "failed";
   runId?: string;
@@ -114,8 +123,9 @@ export type Bootstrap = {
   };
   supported_thinking_levels: ThinkingLevel[];
   model: { id: string; supportedThinkingLevels: ThinkingLevel[] };
+  users: UserSummary[];
+  invitations: ProjectInvitation[];
   projects: Project[];
-  skills: Skill[];
   conversations: Conversation[];
   files: FileItem[];
 };

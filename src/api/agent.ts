@@ -24,7 +24,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { appendAgentMessage, type ConversationEntry } from "./agent-messages";
 import type { ToolContext } from "./agent-tools";
-import { conversationEntries, conversations, runs } from "./schema";
+import { conversationEntries, conversationReads, conversations, runs } from "./schema";
 import {
   compactConversation,
   CompactionCheckpointError,
@@ -126,7 +126,6 @@ export class ConversationRunner {
             eq(conversationEntries.id, input.userEntryId),
             eq(conversationEntries.conversation_id, input.conversationId),
             eq(conversationEntries.kind, "user_message"),
-            eq(conversations.user_id, input.userId),
           ),
         )
         .get();
@@ -287,7 +286,7 @@ export class ConversationRunner {
           .where(eq(runs.id, runId))
           .run();
         tx.update(conversations)
-          .set({ generation_status: "running", unread: 0, updated_at: this.now() })
+          .set({ generation_status: "running", updated_at: this.now() })
           .where(eq(conversations.id, input.conversationId))
           .run();
       });
@@ -307,9 +306,10 @@ export class ConversationRunner {
     }
   }
 
-  async stop(conversationId: string, userId: string): Promise<boolean> {
+  async stop(conversationId: string, _userId?: string): Promise<boolean> {
+    void _userId;
     const active = this.active.get(conversationId);
-    if (!active || active.userId !== userId) return false;
+    if (!active) return false;
     active.stopRequested = true;
     active.agent.abort();
     await active.settlement;
@@ -467,10 +467,13 @@ export class ConversationRunner {
       tx.update(conversations)
         .set({
           generation_status: status === "stopped" ? "stopped" : "idle",
-          unread: 1,
           updated_at: timestamp,
         })
         .where(eq(conversations.id, conversationId))
+        .run();
+      tx.update(conversationReads)
+        .set({ unread: 1 })
+        .where(eq(conversationReads.conversation_id, conversationId))
         .run();
     });
   }

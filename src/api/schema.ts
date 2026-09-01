@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text().primaryKey(),
@@ -33,9 +41,40 @@ export const projects = sqliteTable("projects", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text().notNull(),
   system_prompt: text().notNull().default(""),
+  language: text().notNull().default("Japanese"),
+  thinking_level: text().notNull().default("low"),
+  shared: integer().notNull().default(0),
   created_at: text().notNull(),
   updated_at: text().notNull(),
 });
+
+export const projectMembers = sqliteTable(
+  "project_members",
+  {
+    project_id: text()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    user_id: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    created_at: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.project_id, table.user_id] })],
+);
+
+export const projectInvitations = sqliteTable(
+  "project_invitations",
+  {
+    project_id: text()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    user_id: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    created_at: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.project_id, table.user_id] })],
+);
 
 export const conversations = sqliteTable(
   "conversations",
@@ -57,19 +96,6 @@ export const conversations = sqliteTable(
   },
   (table) => [index("conversations_user_updated").on(table.user_id, table.updated_at)],
 );
-
-export const skills = sqliteTable("skills", {
-  id: text().primaryKey(),
-  user_id: text()
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  name: text().notNull(),
-  description: text().notNull().default(""),
-  instructions: text().notNull(),
-  enabled: integer().notNull().default(1),
-  created_at: text().notNull(),
-  updated_at: text().notNull(),
-});
 
 export const files = sqliteTable(
   "files",
@@ -106,6 +132,20 @@ export const messages = sqliteTable(
     check("messages_role_check", sql`${table.role} in ('user','assistant')`),
     index("messages_conversation_created").on(table.conversation_id, table.created_at),
   ],
+);
+
+export const conversationReads = sqliteTable(
+  "conversation_reads",
+  {
+    conversation_id: text()
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    user_id: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    unread: integer().notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.conversation_id, table.user_id] })],
 );
 
 export const runs = sqliteTable(
@@ -169,8 +209,10 @@ export const schema = {
   sessions,
   oauthStates,
   projects,
+  projectMembers,
+  projectInvitations,
   conversations,
-  skills,
+  conversationReads,
   files,
   messages,
   runs,

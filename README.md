@@ -1,22 +1,23 @@
 # ai-chat
 
-ChatGPT風のプライベートWebチャットです。pi CLIを経由せず、`@earendil-works/pi-ai`からChatGPT Plus/ProのCodex OAuth認証を直接使用します。
+ChatGPT風のWebチャットです。個人チャットに加え、招待制の共有プロジェクトで複数ユーザーが同じ会話へ参加できます。pi CLIを経由せず、`@earendil-works/pi-ai`からChatGPT Plus/ProのCodex OAuth認証を直接使用します。
 
 ## 構成
 
 - Next.js 16 (App Router) / React 19 / shadcn/ui / Tailwind CSS 4 / Motion
 - Bun HTTP API / Drizzle ORM + SQLite
 - Discord OAuth2、DiscordユーザーID許可リスト
-- Codexサブスク認証による会話（モデルは`CODEX_MODEL`で固定、Thinkingは一般設定で選択）
+- オーナー1人と招待参加者によるプロジェクト共有、共同チャット、ユーザー別未読管理
+- Codexサブスク認証による会話（モデルは`CODEX_MODEL`で固定、言語・Thinkingは個人／プロジェクト別に設定）
 - ユーザーの依頼内容に応じた自律Web検索（Exa MCP、APIキー不要）
 - Codex Images APIによる画像生成・画像編集
-- 会話履歴、プロジェクト別システムプロンプト、ユーザー追加スキル
-- ユーザー別ファイル保存・Web閲覧
+- 会話履歴、プロジェクト別システムプロンプト
+- ユーザー別画像保存・共有プロジェクト内での画像閲覧・Web検索
 - `/login`、`/` の2ページ（設定はチャット内のボトムシート）
 
 UIコンポーネントは `src/components/ui` のshadcn/uiに統一しています。配色はshadcnのトークン（`--background`、`--card`、`--primary` など）へ既存パレットを割り当てているため、見た目は従来のままです。
 
-組み込みpiスキルやコーディングエージェント用プロンプトは読み込みません。画像生成は専用tool、Web検索は `pi-web-access` と同じ公開 Exa MCPを使用し、Agentが必要性を判断します。
+スキル機能やコーディングエージェント用プロンプトは読み込みません。画像生成は専用tool、Web検索は `pi-web-access` と同じ公開 Exa MCPを使用し、Agentが必要性を判断します。
 
 ## セットアップ
 
@@ -69,14 +70,14 @@ Bunサーバーが前段に立つことで、セッションcookieの検証、�
 ```text
 data/
 ├── auth.json                  # Codex OAuth認証（0600）
-├── chat.sqlite               # ユーザー、履歴、プロジェクト、スキル、ファイル索引
+├── chat.sqlite               # ユーザー、履歴、共有関係、プロジェクト、画像索引
 └── users/<discord-user-id>/
     └── files/
         ├── YYYY-MM-DD/        # アップロード
         └── generated/         # 生成画像
 ```
 
-ファイルは認証済み本人の `/files/:id` からのみ取得できます。アップロード上限は既定で1リクエスト合計20MBです。
+画像は所有者本人、または画像を含む共有チャットの参加者だけが `/files/:id` から取得できます。アップロード上限は既定で1リクエスト合計20MBです。
 
 DB migration前はアプリを停止し、SQLite本体とWALをまとめて退避します。
 

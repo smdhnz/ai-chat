@@ -14,9 +14,9 @@ import {
   FolderKanban,
   Images,
   LogOut,
+  Mail,
   Pencil,
   Plus,
-  Sparkles,
   Trash2,
   X,
   type LucideIcon,
@@ -28,7 +28,7 @@ import {
   type Bootstrap,
   type FileItem,
   type Project,
-  type Skill,
+  type ProjectInvitation,
   type ThinkingLevel,
 } from "@/lib/api";
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
@@ -37,8 +37,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NativeDialog } from "@/components/native-dialog";
 import { Editor } from "@/app/settings/_components/settings-editor";
 
-type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
-type EditorState = { type: "project" | "skill"; item?: Project | Skill };
+type DeleteTarget = { type: "projects" | "data"; id: string; name: string };
+type EditorState = { item?: Project };
 
 const settingFieldClass = "flex min-h-[58px] items-center justify-between gap-5 px-4";
 const settingLabelClass = "text-[13px] text-foreground";
@@ -124,8 +124,10 @@ export function SettingsShell({
   }
 
   async function refresh(message?: string) {
-    setData(await getBootstrap());
+    const fresh = await getBootstrap();
+    setData(fresh);
     if (message) toast.success(message);
+    return fresh;
   }
 
   async function remove(type: DeleteTarget["type"], objectId: string) {
@@ -155,13 +157,9 @@ export function SettingsShell({
     else setTab(null);
   }
 
-  const viewKey = editor
-    ? `${editor.type}-${editor.item?.id ?? "new"}`
-    : tab
-      ? `tab-${tab}`
-      : "root";
+  const viewKey = editor ? `project-${editor.item?.id ?? "new"}` : tab ? `tab-${tab}` : "root";
   const title = editor
-    ? `${editor.type === "skill" ? "スキル" : "プロジェクト"}${editor.item ? "を編集" : "を作成"}`
+    ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
     : tab
       ? settingsTabLabels[tab]
       : "設定";
@@ -270,8 +268,19 @@ export function SettingsShell({
                     {editor ? (
                       <Editor
                         key={viewKey}
-                        editor={editor}
+                        item={editor.item}
+                        users={data.users}
+                        defaultLanguage={data.user.language}
+                        defaultThinking={data.user.thinking_level}
+                        thinkingLevels={data.supported_thinking_levels}
                         cancel={back}
+                        refresh={async () => {
+                          const fresh = await refresh();
+                          return editor.item
+                            ? (fresh.projects.find((project) => project.id === editor.item?.id) ??
+                                null)
+                            : null;
+                        }}
                         saved={async () => {
                           await refresh("保存しました");
                           back();
@@ -282,6 +291,7 @@ export function SettingsShell({
                         tab={tab}
                         data={data}
                         edit={showEditor}
+                        refresh={refresh}
                         askDelete={(next) => {
                           setDeleteTarget(next);
                           setDeleteOpen(true);
@@ -321,15 +331,13 @@ export function SettingsShell({
         title={
           {
             projects: "プロジェクトを削除",
-            skills: "スキルを削除",
             data: "データを削除",
           }[deleteTarget?.type ?? "data"]
         }
         text={
           {
-            projects: `「${deleteTarget?.name ?? ""}」と中のチャット・ファイルを削除します。`,
-            skills: `「${deleteTarget?.name ?? ""}」を削除します。`,
-            data: "すべてのプロジェクト・チャット・ファイルを削除します。スキルとアカウント設定は残ります。",
+            projects: `「${deleteTarget?.name ?? ""}」と中のチャット・画像を削除します。`,
+            data: "個人プロジェクト・個人チャット・画像を削除します。共有プロジェクトのデータと所属は残ります。",
           }[deleteTarget?.type ?? "data"]
         }
         onConfirm={async () => {
@@ -427,10 +435,10 @@ function SettingsHome({
           onClick={() => showTab("projects")}
         />
         <SettingsLink
-          icon={Sparkles}
-          label="スキル"
-          value={`${data.skills.length}`}
-          onClick={() => showTab("skills")}
+          icon={Mail}
+          label="プロジェクト招待"
+          value={`${data.invitations.length}`}
+          onClick={() => showTab("invitations")}
         />
         <SettingsLink
           icon={Images}
@@ -482,19 +490,21 @@ function SettingsDetail({
   tab,
   data,
   edit,
+  refresh,
   askDelete,
 }: {
   tab: SettingsTab;
   data: Bootstrap;
   edit: (editor: EditorState) => void;
+  refresh: (message?: string) => Promise<Bootstrap>;
   askDelete: (target: DeleteTarget) => void;
 }) {
   if (tab === "projects")
     return (
       <DetailLayout
-        text="会話ごとのシステムプロンプトを設定します。"
+        text="共有メンバーとAIの回答設定を管理します。"
         action="作成"
-        onAction={() => edit({ type: "project" })}
+        onAction={() => edit({})}
       >
         {data.projects.length ? (
           <section className="overflow-hidden rounded-[14px] bg-card">
@@ -503,9 +513,14 @@ function SettingsDetail({
                 key={item.id}
                 icon={<FolderKanban />}
                 title={item.name}
-                text={item.system_prompt || "カスタム指示なし"}
-                edit={() => edit({ type: "project", item })}
-                remove={() => askDelete({ type: "projects", id: item.id, name: item.name })}
+                text={`${item.language} · ${item.thinking_level}`}
+                badge={item.is_owner ? (item.shared ? "共有中" : "オーナー") : "参加中"}
+                edit={() => edit({ item })}
+                remove={
+                  item.is_owner
+                    ? () => askDelete({ type: "projects", id: item.id, name: item.name })
+                    : undefined
+                }
               />
             ))}
           </section>
@@ -515,34 +530,89 @@ function SettingsDetail({
       </DetailLayout>
     );
 
-  if (tab === "skills")
+  if (tab === "invitations")
     return (
-      <DetailLayout
-        text="有効なスキルはすべての会話と画像プロンプトに適用されます。"
-        action="追加"
-        onAction={() => edit({ type: "skill" })}
-      >
-        {data.skills.length ? (
-          <section className="overflow-hidden rounded-[14px] bg-card">
-            {data.skills.map((item) => (
-              <SettingsCard
-                key={item.id}
-                icon={<Sparkles />}
-                title={item.name}
-                text={item.description || item.instructions}
-                badge={item.enabled ? "有効" : "無効"}
-                edit={() => edit({ type: "skill", item })}
-                remove={() => askDelete({ type: "skills", id: item.id, name: item.name })}
-              />
-            ))}
-          </section>
-        ) : (
-          <EmptyText>スキルはありません。</EmptyText>
-        )}
-      </DetailLayout>
+      <ProjectInvitations
+        invitations={data.invitations}
+        decide={async (projectId, decision) => {
+          await api(`/api/invitations/${projectId}/${decision}`, { method: "POST" });
+          await refresh(decision === "accept" ? "参加しました" : "招待を拒否しました");
+        }}
+      />
     );
 
   return <SettingsImages files={data.files} />;
+}
+
+function ProjectInvitations({
+  invitations,
+  decide,
+}: {
+  invitations: ProjectInvitation[];
+  decide: (projectId: string, decision: "accept" | "decline") => Promise<void>;
+}) {
+  const [processing, setProcessing] = useState("");
+  return (
+    <DetailLayout text="プロジェクトへの招待を承認または拒否します。">
+      {invitations.length ? (
+        <section className="overflow-hidden rounded-[14px] bg-card">
+          {invitations.map((invitation) => (
+            <article
+              key={invitation.project_id}
+              className="flex min-h-[72px] items-center gap-3 border-b border-border px-3.5 last:border-b-0"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-bold">
+                {invitation.owner.avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="size-full object-cover" src={invitation.owner.avatar} alt="" />
+                ) : (
+                  invitation.owner.display_name[0]
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <strong className="block truncate text-[13px]">{invitation.project_name}</strong>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {invitation.owner.display_name}からの招待
+                </span>
+              </span>
+              <button
+                type="button"
+                className="h-8 px-2 text-[10px] text-muted-foreground"
+                disabled={Boolean(processing)}
+                onClick={async () => {
+                  setProcessing(invitation.project_id);
+                  try {
+                    await decide(invitation.project_id, "decline");
+                  } finally {
+                    setProcessing("");
+                  }
+                }}
+              >
+                拒否
+              </button>
+              <button
+                type="button"
+                className="h-8 rounded-[9px] bg-primary px-3 text-[10px] font-bold text-primary-foreground disabled:opacity-50"
+                disabled={Boolean(processing)}
+                onClick={async () => {
+                  setProcessing(invitation.project_id);
+                  try {
+                    await decide(invitation.project_id, "accept");
+                  } finally {
+                    setProcessing("");
+                  }
+                }}
+              >
+                承認
+              </button>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <EmptyText>プロジェクト招待はありません。</EmptyText>
+      )}
+    </DetailLayout>
+  );
 }
 
 function SettingsImages({ files }: { files: FileItem[] }) {
@@ -624,7 +694,7 @@ function SettingsCard({
   text: string;
   badge?: string;
   edit: () => void;
-  remove: () => void;
+  remove?: () => void;
 }) {
   return (
     <article className="flex min-h-[78px] items-center gap-3 border-b border-border p-3.5 last:border-b-0">
@@ -646,14 +716,16 @@ function SettingsCard({
       >
         <Pencil />
       </button>
-      <button
-        type="button"
-        className="inline-flex size-8 items-center justify-center text-destructive [&_svg]:size-4"
-        aria-label={`${title}を削除`}
-        onClick={remove}
-      >
-        <Trash2 />
-      </button>
+      {remove ? (
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center text-destructive [&_svg]:size-4"
+          aria-label={`${title}を削除`}
+          onClick={remove}
+        >
+          <Trash2 />
+        </button>
+      ) : null}
     </article>
   );
 }

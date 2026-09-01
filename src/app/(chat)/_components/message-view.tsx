@@ -33,6 +33,7 @@ export function MessageView({
   draft,
   regenerate,
   edit,
+  shared,
   prioritizeImages,
   finishStreaming,
 }: {
@@ -41,6 +42,7 @@ export function MessageView({
   draft?: string;
   regenerate: () => void;
   edit: () => void;
+  shared: boolean;
   prioritizeImages: boolean;
   finishStreaming?: () => void;
 }) {
@@ -48,7 +50,7 @@ export function MessageView({
   const sourceContent = draft === undefined ? message.content : (deferredDraft ?? draft);
   const auth = message.auth ?? parseDeviceAuth(sourceContent);
   const content = auth ? "" : sourceContent;
-  const hasBody = Boolean(content || auth || message.skills?.length || message.activities?.length);
+  const hasBody = Boolean(content || auth || message.activities?.length);
   const isUser = message.role === "user";
   const collapsible = isUser && content.length > 1200;
   const [expanded, setExpanded] = useState(false);
@@ -56,6 +58,11 @@ export function MessageView({
   return (
     <article className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}>
       <div className={`flex min-w-0 max-w-[87%] flex-col ${isUser ? "items-end" : "items-start"}`}>
+        {isUser && shared && message.author ? (
+          <span className="mb-1 px-1 text-[10px] text-muted-foreground">
+            {message.author.display_name}
+          </span>
+        ) : null}
         {isUser && message.files?.length > 0 && (
           <FileBlocks files={message.files} alignEnd prioritizeImages={prioritizeImages} />
         )}
@@ -66,19 +73,6 @@ export function MessageView({
             >
               {!isUser && message.activities && message.activities.length > 0 && (
                 <ActivityPanel activities={message.activities} streaming={streaming} />
-              )}
-              {message.skills && message.skills.length > 0 && (
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] text-primary [&_svg]:w-[13px]">
-                  <Sparkles />
-                  {message.skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="rounded-md bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-[7px] py-[3px] text-[10px] text-primary"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
               )}
               {streaming ? (
                 <StreamingContent content={content} finish={finishStreaming} />
@@ -221,7 +215,6 @@ function ActivityPanel({
 
 function activityLabel(activity: PublicActivity): string {
   if (activity.type === "reasoning") return "思考の要約";
-  if (activity.type === "skill") return `${activity.name}を読み込み`;
   if (activity.type === "web_search")
     return activity.query ? `Web検索: ${activity.query}` : "Web検索";
   if (activity.type === "image_generation")
@@ -239,7 +232,6 @@ function activityStatus(activity: PublicActivity): string {
 
 function activityIcon(activity: PublicActivity) {
   if (activity.type === "reasoning") return <Brain className="size-3.5" aria-hidden="true" />;
-  if (activity.type === "skill") return <Sparkles className="size-3.5" aria-hidden="true" />;
   if (activity.type === "web_search") return <Search className="size-3.5" aria-hidden="true" />;
   if (activity.type === "image_generation")
     return <ImageIcon className="size-3.5" aria-hidden="true" />;

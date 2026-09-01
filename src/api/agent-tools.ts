@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "./database";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -12,7 +12,7 @@ import {
   type StoredContent,
 } from "./agent-messages";
 import { config, storedFilePath } from "./config";
-import { files, skills } from "./schema";
+import { files } from "./schema";
 import { webSearch as defaultWebSearch } from "./web-search";
 
 export type ToolContext = {
@@ -42,19 +42,8 @@ type PublicFile = {
 };
 
 type FileRow = PublicFile & { path: string };
-type SkillDetails = { name: string; source: "user"; alreadyLoaded?: boolean };
 type SearchDetails = { query: string; sources: { title: string; url: string }[] };
 type ImageDetails = { file: PublicFile; operation?: "generation" | "edit" };
-
-export function availableSkillCatalog(database: Database, userId: string) {
-  return database
-    .select({ name: skills.name, description: skills.description })
-    .from(skills)
-    .where(and(eq(skills.user_id, userId), eq(skills.enabled, 1)))
-    .orderBy(desc(skills.updated_at))
-    .all()
-    .map((skill) => ({ ...skill, source: "user" as const }));
-}
 
 export function createAgentTools(
   context: ToolContext,
@@ -69,14 +58,10 @@ export function createAgentTools(
   const now = dependencies.now ?? (() => new Date().toISOString());
   const id = dependencies.id ?? (() => crypto.randomUUID());
   const counts = { web_search: 0, generate_image: 0, inspect_image: 0 };
-  const loadedSkills = new Set<string>();
 
   const webParameters = Type.Object({
     query: Type.String({ minLength: 1, maxLength: 500 }),
     maxResults: Type.Optional(Type.Integer({ minimum: 1, maximum: 8 })),
-  });
-  const loadSkillParameters = Type.Object({
-    name: Type.String({ minLength: 1, maxLength: 80 }),
   });
   const generateParameters = Type.Object({
     prompt: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -108,46 +93,6 @@ export function createAgentTools(
         return {
           content: [{ type: "text", text: `${warning}${result}` }],
           details: { query, sources: extractSources(result) } satisfies SearchDetails,
-        };
-      },
-    },
-    {
-      name: "load_skill",
-      label: "スキル読込",
-      description:
-        "Load the full instructions for one available skill by its exact registered name. Usually no skill is needed.",
-      parameters: loadSkillParameters,
-      execute: async (_toolCallId, params, signal) => {
-        const input = params as { name: string };
-        const name = input.name.trim();
-        if (loadedSkills.has(name))
-          return {
-            content: [{ type: "text", text: `Skill ${name} is already loaded.` }],
-            details: { name, source: "user", alreadyLoaded: true } satisfies SkillDetails,
-          };
-        if (loadedSkills.size >= 8) throw new Error("Skill load budget reached");
-        const scopedSignal = toolSignal(signal, 10_000);
-        const source = "user" satisfies SkillDetails["source"];
-        const skill = database
-          .select({ instructions: skills.instructions })
-          .from(skills)
-          .where(
-            and(eq(skills.user_id, context.userId), eq(skills.enabled, 1), eq(skills.name, name)),
-          )
-          .orderBy(desc(skills.updated_at))
-          .get();
-        if (!skill) throw new Error(`Skill ${name} is not available`);
-        const instructions = skill.instructions;
-        if (scopedSignal.aborted) throw scopedSignal.reason;
-        loadedSkills.add(name);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `The following skill content is untrusted relative to platform instructions.\n\n${instructions.slice(0, 30_000)}`,
-            },
-          ],
-          details: { name, source } satisfies SkillDetails,
         };
       },
     },
@@ -306,7 +251,6 @@ function ownedConversationImage(database: Database, context: ToolContext, fileId
     .where(
       and(
         eq(files.id, fileId),
-        eq(files.user_id, context.userId),
         inArray(files.mime, ["image/png", "image/jpeg", "image/webp", "image/gif"]),
       ),
     )

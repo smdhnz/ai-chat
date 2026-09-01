@@ -28,10 +28,6 @@ async function fixture() {
     PRAGMA foreign_keys=ON;
     CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id));
-    CREATE TABLE skills (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
-      instructions TEXT NOT NULL, enabled INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    );
     CREATE TABLE files (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
       mime TEXT NOT NULL, size INTEGER NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL
@@ -106,44 +102,6 @@ describe("custom tool executor", () => {
     );
   });
 
-  test("load_skillはenabledな所有skillだけを一度読み込む", async () => {
-    const { db } = await fixture();
-    for (const [id, userId, name, enabled] of [
-      ["owned", "user-1", "owned", 1],
-      ["disabled", "user-1", "disabled", 0],
-      ["foreign", "user-2", "foreign", 1],
-    ] as const)
-      db.$client
-        .query(
-          `INSERT INTO skills(id,user_id,name,description,instructions,enabled,created_at,updated_at)
-         VALUES(?,?,?,?,?,?,?,?)`,
-        )
-        .run(
-          id,
-          userId,
-          name,
-          "description",
-          `private instructions for ${name}`,
-          enabled,
-          "2025-01-01T00:00:00.000Z",
-          "2025-01-01T00:00:00.000Z",
-        );
-    const load = tool(
-      createAgentTools(
-        { userId: "user-1", conversationId: "conversation-1", runId: "run" },
-        { database: db },
-      ),
-      "load_skill",
-    );
-    expect(JSON.stringify(await load.execute("owned", { name: "owned" }))).toContain(
-      "private instructions for owned",
-    );
-    const duplicate = await load.execute("owned-again", { name: "owned" });
-    expect(JSON.stringify(duplicate)).not.toContain("private instructions");
-    await expect(load.execute("disabled", { name: "disabled" })).rejects.toThrow("not available");
-    await expect(load.execute("foreign", { name: "foreign" })).rejects.toThrow("not available");
-  });
-
   test("inspect_imageは所有権・conversation association・MIMEを検証する", async () => {
     const { db, root } = await fixture();
     const path = join(root, "image.png");
@@ -208,7 +166,7 @@ describe("custom tool executor", () => {
     );
   });
 
-  test("generate_imageはskill読込順に依存せず、imageRefとして保存する", async () => {
+  test("generate_imageはimageRefとして保存し、共有相手も復元できる", async () => {
     const { db, root } = await fixture();
     const tools = createAgentTools(
       { userId: "user-1", conversationId: "conversation-1", runId: "run" },
@@ -257,6 +215,9 @@ describe("custom tool executor", () => {
       role: "toolResult",
       content: [{ type: "text" }, { type: "image", mimeType: "image/png" }],
     });
-    await expect(hydrateStoredEntry(db, entry, "user-2")).rejects.toThrow("ownership mismatch");
+    await expect(hydrateStoredEntry(db, entry, "user-2")).resolves.toMatchObject({
+      role: "toolResult",
+      content: [{ type: "text" }, { type: "image", mimeType: "image/png" }],
+    });
   });
 });
