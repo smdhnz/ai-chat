@@ -572,7 +572,6 @@ function SettingsDetail({
             {data.projects.map((item) => (
               <SettingsCard
                 key={item.id}
-                icon={<FolderKanban />}
                 title={item.name}
                 text={`${item.language} · ${item.thinking_level}`}
                 badge={item.is_owner ? (item.shared ? "共有中" : "オーナー") : "参加中"}
@@ -602,7 +601,6 @@ function SettingsDetail({
           {data.skills.map((item) => (
             <SettingsCard
               key={item.id}
-              icon={<Sparkles />}
               title={item.name}
               text={item.description || "説明なし"}
               badge={item.source === "builtin" ? "組み込み" : item.enabled ? "有効" : "無効"}
@@ -822,7 +820,6 @@ function SkillToggle({
 }
 
 function SettingsCard({
-  icon,
   title,
   text,
   badge,
@@ -831,7 +828,6 @@ function SettingsCard({
   control,
   showAction = true,
 }: {
-  icon: ReactNode;
   title: string;
   text: string;
   badge?: string;
@@ -842,9 +838,6 @@ function SettingsCard({
 }) {
   return (
     <article className="flex min-h-[78px] items-center gap-3 border-b border-border p-3.5 last:border-b-0">
-      <span className="flex size-9 shrink-0 items-center justify-center text-primary [&_svg]:size-4">
-        {icon}
-      </span>
       <button type="button" className="min-w-0 flex-1 text-left" onClick={edit}>
         <span className="flex items-center gap-2">
           <strong className="truncate text-[13px] font-semibold">{title}</strong>
