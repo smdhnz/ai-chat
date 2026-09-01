@@ -34,6 +34,7 @@ import {
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
 import { shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
 import { Editor } from "@/app/settings/_components/settings-editor";
 
@@ -616,29 +617,42 @@ function ProjectInvitations({
 }
 
 function SettingsImages({ files }: { files: FileItem[] }) {
+  const [preview, setPreview] = useState<FileItem | null>(null);
+
   return (
-    <DetailLayout text="アップロード・生成した画像です。">
-      {files.length ? (
-        <div className="grid grid-cols-2 gap-3">
-          {files.map((file) => (
-            <div
-              className="aspect-[4/3] min-w-0 overflow-hidden rounded-[14px] bg-card shadow-[0_12px_30px_rgba(0,0,0,0.16)]"
-              key={file.id}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="size-full object-cover"
-                src={`/files/${file.id}`}
-                alt={file.name}
-                loading="lazy"
-              />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyText>画像はありません。</EmptyText>
-      )}
-    </DetailLayout>
+    <>
+      <DetailLayout text="アップロード・生成した画像です。">
+        {files.length ? (
+          <div className="grid grid-cols-2 gap-3">
+            {files.map((file) => (
+              <button
+                type="button"
+                className="aspect-[4/3] min-w-0 cursor-zoom-in overflow-hidden rounded-[14px] bg-card p-0 shadow-[0_12px_30px_rgba(0,0,0,0.16)]"
+                key={file.id}
+                aria-label={`${file.name}を表示`}
+                onClick={() => setPreview(file)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="size-full object-cover transition-transform duration-300 active:scale-[0.97]"
+                  src={`/files/${file.id}`}
+                  alt=""
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyText>画像はありません。</EmptyText>
+        )}
+      </DetailLayout>
+      <ImageDialog
+        open={Boolean(preview)}
+        onOpenChange={(open) => !open && setPreview(null)}
+        src={preview ? `/files/${preview.id}` : ""}
+        name={preview?.name ?? "image"}
+      />
+    </>
   );
 }
 

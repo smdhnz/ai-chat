@@ -25,6 +25,7 @@ import {
   type PublicActivity,
 } from "@/lib/api";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
+import { ImageDialog } from "@/components/image-dialog";
 import { LoadingWave } from "@/components/loading-wave";
 
 export function MessageView({
@@ -333,24 +334,35 @@ export function AuthCard({ auth }: { auth: DeviceAuth }) {
   );
 }
 
-function ChatImage({ file, priority }: { file: FileItem; priority: boolean }) {
+function ChatImage({
+  file,
+  priority,
+  open,
+}: {
+  file: FileItem;
+  priority: boolean;
+  open: () => void;
+}) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <div
-      className={`shrink-0 overflow-hidden rounded-[14px] border border-border shadow-[0_24px_70px_#1a1a1e1f] dark:shadow-[0_28px_80px_#00000066] ${loaded ? "bg-transparent" : "min-h-24 min-w-32 animate-pulse bg-muted"}`}
+    <button
+      type="button"
+      className={`shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border p-0 ${loaded ? "bg-transparent" : "min-h-24 min-w-32 animate-pulse bg-muted"}`}
+      aria-label={`${file.name}を表示`}
       aria-busy={!loaded}
+      onClick={open}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className={`block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         src={file.preview || `/files/${file.id}`}
-        alt={file.name}
+        alt=""
         loading={priority ? "eager" : "lazy"}
         fetchPriority={priority ? "high" : "low"}
         onLoad={() => setLoaded(true)}
         onError={() => setLoaded(true)}
       />
-    </div>
+    </button>
   );
 }
 
@@ -363,29 +375,44 @@ export function FileBlocks({
   alignEnd?: boolean;
   prioritizeImages: boolean;
 }) {
+  const [preview, setPreview] = useState<FileItem | null>(null);
+  const previewUrl = preview?.preview || (preview?.id ? `/files/${preview.id}` : "");
   return (
-    <div
-      className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
-    >
-      <div className="flex w-max flex-nowrap items-start gap-[9px]">
-        {files.map((file) =>
-          file.mime.startsWith("image/") && (file.id || file.preview) ? (
-            <ChatImage key={file.id || file.name} file={file} priority={prioritizeImages} />
-          ) : (
-            <a
-              key={file.id || file.name}
-              href={file.id ? `/files/${file.id}` : undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-auto shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-[9px] [&_svg]:size-4 [&_svg]:text-primary"
-            >
-              <File />
-              <span>{file.name}</span>
-            </a>
-          ),
-        )}
+    <>
+      <div
+        className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
+      >
+        <div className="flex w-max flex-nowrap items-start gap-[9px]">
+          {files.map((file) =>
+            file.mime.startsWith("image/") && (file.id || file.preview) ? (
+              <ChatImage
+                key={file.id || file.name}
+                file={file}
+                priority={prioritizeImages}
+                open={() => setPreview(file)}
+              />
+            ) : (
+              <a
+                key={file.id || file.name}
+                href={file.id ? `/files/${file.id}` : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-auto shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-[9px] [&_svg]:size-4 [&_svg]:text-primary"
+              >
+                <File />
+                <span>{file.name}</span>
+              </a>
+            ),
+          )}
+        </div>
       </div>
-    </div>
+      <ImageDialog
+        open={Boolean(preview)}
+        onOpenChange={(open) => !open && setPreview(null)}
+        src={previewUrl}
+        name={preview?.name ?? "image"}
+      />
+    </>
   );
 }
 
