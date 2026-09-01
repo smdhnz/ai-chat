@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import type { Database } from "./database";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Context, Message, Usage } from "@earendil-works/pi-ai";
@@ -179,11 +179,12 @@ export async function compactConversation(input: {
   };
   try {
     input.database.transaction((tx) => {
-      const sequence = tx
-        .select({ sequence: sql<number>`coalesce(max(${conversationEntries.sequence}), 0) + 1` })
+      const currentSequence = tx
+        .select({ sequence: max(conversationEntries.sequence) })
         .from(conversationEntries)
         .where(eq(conversationEntries.conversation_id, input.conversationId))
-        .get()!.sequence;
+        .get()?.sequence;
+      const sequence = (currentSequence ?? 0) + 1;
       tx.insert(conversationEntries)
         .values({
           id: (input.id ?? (() => crypto.randomUUID()))(),

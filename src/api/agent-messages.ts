@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, max } from "drizzle-orm";
 import type { Database } from "./database";
 import { readFile } from "node:fs/promises";
 import type {
@@ -12,7 +12,7 @@ import type {
   Usage,
 } from "@earendil-works/pi-ai";
 import { storedFilePath } from "./config";
-import { conversationEntries, conversations, files, messages, runs } from "./schema";
+import { conversationEntries, conversations, files, runs } from "./schema";
 
 export type StoredContent =
   | { type: "text"; text: string; textSignature?: string }
@@ -500,11 +500,12 @@ export function appendLegacyMessage(
           stopReason: "stop",
           skills: message.skills,
         };
-  const sequence = database
-    .select({ sequence: sql<number>`coalesce(max(${conversationEntries.sequence}), 0) + 1` })
+  const currentSequence = database
+    .select({ sequence: max(conversationEntries.sequence) })
     .from(conversationEntries)
     .where(eq(conversationEntries.conversation_id, message.conversationId))
-    .get()!.sequence;
+    .get()?.sequence;
+  const sequence = (currentSequence ?? 0) + 1;
   database
     .insert(conversationEntries)
     .values({
@@ -787,11 +788,12 @@ export function appendAgentMessage(
     created_at: new Date(message.timestamp).toISOString(),
   };
   database.transaction((tx) => {
-    entry.sequence = tx
-      .select({ sequence: sql<number>`coalesce(max(${conversationEntries.sequence}), 0) + 1` })
+    const currentSequence = tx
+      .select({ sequence: max(conversationEntries.sequence) })
       .from(conversationEntries)
       .where(eq(conversationEntries.conversation_id, conversationId))
-      .get()!.sequence;
+      .get()?.sequence;
+    entry.sequence = (currentSequence ?? 0) + 1;
     tx.insert(conversationEntries).values(entry).run();
   });
   return entry;
@@ -805,125 +807,4 @@ export function validateToolResultLinks(messages: readonly Message[]): void {
     if (message.role === "toolResult" && !pending.delete(message.toolCallId))
       throw new Error(`orphan tool result: ${message.toolCallId}`);
   }
-}
-
-export function migrateCanonicalTranscript(database: Database, model: string): void {
-  database.transaction((tx) => {
-    const conversationRows = tx
-      .select({
-        id: conversations.id,
-        user_id: conversations.user_id,
-        context_summary: conversations.context_summary,
-        compacted_through_id: conversations.compacted_through_id,
-      })
-      .from(conversations)
-      .orderBy(asc(conversations.created_at), asc(conversations.id))
-      .all();
-    for (const conversation of conversationRows) {
-      const existing = tx
-        .select({ count: count() })
-        .from(conversationEntries)
-        .where(eq(conversationEntries.conversation_id, conversation.id))
-        .get()!;
-      if (existing.count) continue;
-      let sequence = 0;
-      if (conversation.context_summary)
-        tx.insert(conversationEntries)
-          .values({
-            id: crypto.randomUUID(),
-            conversation_id: conversation.id,
-            sequence: sequence++,
-            kind: "compaction",
-            payload_json: JSON.stringify({
-              summary: conversation.context_summary,
-              compactedThroughId: conversation.compacted_through_id ?? undefined,
-            }),
-            created_at: new Date(0).toISOString(),
-          })
-          .run();
-      const legacyMessages = tx
-        .select({
-          id: messages.id,
-          role: messages.role,
-          content: messages.content,
-          file_ids: messages.file_ids,
-          skills: messages.skills,
-          attachment_context: messages.attachment_context,
-          created_at: messages.created_at,
-        })
-        .from(messages)
-        .where(eq(messages.conversation_id, conversation.id))
-        .orderBy(asc(messages.created_at), asc(messages.id))
-        .all();
-      for (const message of legacyMessages)
-        appendLegacyMessageAtSequence(database, {
-          id: message.id,
-          role: message.role,
-          content: message.content,
-          attachment_context: message.attachment_context,
-          created_at: message.created_at,
-          conversationId: conversation.id,
-          authorId: message.role === "user" ? conversation.user_id : undefined,
-          fileIds: JSON.parse(message.file_ids) as string[],
-          skills: JSON.parse(message.skills) as string[],
-          sequence: sequence++,
-          model,
-        });
-    }
-  });
-}
-
-function appendLegacyMessageAtSequence(
-  database: Database,
-  message: Omit<LegacyMessageRow, "file_ids" | "skills"> & {
-    conversationId: string;
-    authorId?: string;
-    fileIds: string[];
-    skills: string[];
-    sequence: number;
-    model: string;
-  },
-): void {
-  const content: StoredContent[] = [
-    ...(message.content ? [{ type: "text" as const, text: message.content }] : []),
-    ...message.fileIds.map((fileId) => {
-      const file = database
-        .select({ mime: files.mime })
-        .from(files)
-        .where(eq(files.id, fileId))
-        .get();
-      if (!file) throw new Error(`missing transcript file: ${fileId}`);
-      return { type: "imageRef" as const, fileId, mimeType: file.mime };
-    }),
-  ];
-  const payload: UserPayload | AssistantPayload =
-    message.role === "user"
-      ? {
-          role: "user",
-          content,
-          authorId: message.authorId,
-          attachmentContext: message.attachment_context,
-          skills: message.skills,
-        }
-      : {
-          role: "assistant",
-          content,
-          api: "openai-responses",
-          provider: "openai-codex",
-          model: message.model,
-          usage: zeroUsage,
-          stopReason: "stop",
-          skills: message.skills,
-        };
-  database
-    .insert(conversationEntries)
-    .values({
-      id: message.id,
-      conversation_id: message.conversationId,
-      sequence: message.sequence,
-      kind: `${message.role}_message`,
-      payload_json: JSON.stringify(payload),
-      created_at: message.created_at,
-    })
-    .run();
 }

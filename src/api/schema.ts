@@ -114,26 +114,6 @@ export const files = sqliteTable(
   (table) => [index("files_user_created").on(table.user_id, table.created_at)],
 );
 
-export const messages = sqliteTable(
-  "messages",
-  {
-    id: text().primaryKey(),
-    conversation_id: text()
-      .notNull()
-      .references(() => conversations.id, { onDelete: "cascade" }),
-    role: text().$type<"user" | "assistant">().notNull(),
-    content: text().notNull(),
-    file_ids: text().notNull().default("[]"),
-    skills: text().notNull().default("[]"),
-    attachment_context: text().notNull().default(""),
-    created_at: text().notNull(),
-  },
-  (table) => [
-    check("messages_role_check", sql`${table.role} in ('user','assistant')`),
-    index("messages_conversation_created").on(table.conversation_id, table.created_at),
-  ],
-);
-
 export const conversationReads = sqliteTable(
   "conversation_reads",
   {
@@ -214,7 +194,6 @@ export const schema = {
   conversations,
   conversationReads,
   files,
-  messages,
   runs,
   conversationEntries,
 };

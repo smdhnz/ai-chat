@@ -1,0 +1,107 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const directories: string[] = [];
+const root = join(import.meta.dir, "..");
+
+function dataDirectory(): string {
+  const directory = mkdtempSync(join(tmpdir(), "ai-chat-migration-"));
+  directories.push(directory);
+  return directory;
+}
+
+function migrate(directory: string): void {
+  execFileSync(process.execPath, ["-e", 'await import("./src/api/db.ts")'], {
+    cwd: root,
+    env: {
+      ...process.env,
+      DATA_DIR: directory,
+      DISCORD_CLIENT_ID: "test",
+      DISCORD_CLIENT_SECRET: "test",
+      ALLOWED_DISCORD_USER_IDS: "user",
+    },
+    stdio: "pipe",
+  });
+}
+
+afterEach(() => {
+  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true });
+});
+
+describe("database migration", () => {
+  test("新規DBを現行schemaから一括作成する", () => {
+    const directory = dataDirectory();
+    migrate(directory);
+    const sqlite = new Database(join(directory, "chat.sqlite"), { readonly: true });
+
+    expect(
+      sqlite
+        .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        .all()
+        .map((row) => (row as { name: string }).name),
+    ).toEqual([
+      "__drizzle_migrations",
+      "conversation_entries",
+      "conversation_reads",
+      "conversations",
+      "files",
+      "oauth_states",
+      "project_invitations",
+      "project_members",
+      "projects",
+      "runs",
+      "sessions",
+      "users",
+    ]);
+    expect(sqlite.query("PRAGMA foreign_key_check").all()).toEqual([]);
+  });
+
+  test("既存データを保ったままbaseline化し、旧schemaだけ削除する", () => {
+    const directory = dataDirectory();
+    migrate(directory);
+    const path = join(directory, "chat.sqlite");
+    const sqlite = new Database(path);
+    sqlite.exec(`
+      ALTER TABLE users ADD COLUMN model TEXT;
+      INSERT INTO users VALUES ('user','name','User',NULL,'Japanese',0,'low','2025','2025','old-model');
+      INSERT INTO conversations VALUES ('conversation','user',NULL,'Chat','',NULL,0,0,'idle',0,'2025','2025');
+      INSERT INTO conversation_entries VALUES ('message','conversation',NULL,0,'user_message','{}','2025');
+      CREATE TABLE messages (id TEXT PRIMARY KEY);
+      INSERT INTO messages VALUES ('message');
+      DROP TABLE __drizzle_migrations;
+    `);
+    sqlite.close();
+
+    migrate(directory);
+    const migrated = new Database(path, { readonly: true });
+    expect(migrated.query("SELECT id FROM users").all()).toEqual([{ id: "user" }]);
+    expect(
+      migrated.query("SELECT name FROM pragma_table_info('users') WHERE name='model'").get(),
+    ).toBeNull();
+    expect(
+      migrated.query("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'").get(),
+    ).toBeNull();
+    expect(migrated.query("PRAGMA foreign_key_check").all()).toEqual([]);
+  });
+
+  test("未移行の旧messageがあれば削除せず停止する", () => {
+    const directory = dataDirectory();
+    migrate(directory);
+    const path = join(directory, "chat.sqlite");
+    const sqlite = new Database(path);
+    sqlite.exec(`
+      CREATE TABLE messages (id TEXT PRIMARY KEY);
+      INSERT INTO messages VALUES ('unmigrated');
+      DROP TABLE __drizzle_migrations;
+    `);
+    sqlite.close();
+
+    expect(() => migrate(directory)).toThrow();
+    const unchanged = new Database(path, { readonly: true });
+    expect(unchanged.query("SELECT id FROM messages").all()).toEqual([{ id: "unmigrated" }]);
+  });
+});

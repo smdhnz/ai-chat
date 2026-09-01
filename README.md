@@ -79,7 +79,13 @@ data/
 
 画像は所有者本人、または画像を含む共有チャットの参加者だけが `/files/:id` から取得できます。アップロード上限は既定で1リクエスト合計20MBです。
 
-DB migration前はアプリを停止し、SQLite本体とWALをまとめて退避します。
+DB migrationはAPI起動時に自動適用されます。スキーマ変更時は `src/api/schema.ts` を編集し、migrationを生成します。
+
+```bash
+bun run db:generate
+```
+
+デプロイ前はアプリを停止し、SQLite本体とWALをまとめて退避します。
 
 ```bash
 docker compose down

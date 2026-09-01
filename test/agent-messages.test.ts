@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
-import { createDatabase, type Database } from "../src/api/database";
+import { createDatabase } from "../src/api/database";
 import type { Message } from "@earendil-works/pi-ai";
 import {
   allConversationFileIds,
@@ -8,8 +8,6 @@ import {
   decodeStoredEntry,
   hydrateStoredEntry,
   listLegacyMessages,
-  migrateCanonicalTranscript,
-  pageLegacyMessages,
   pagePublicMessages,
   rewindConversation,
   validateToolResultLinks,
@@ -28,11 +26,6 @@ function database() {
     CREATE TABLE files (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), name TEXT NOT NULL, path TEXT NOT NULL,
       mime TEXT NOT NULL, size INTEGER NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL
-    );
-    CREATE TABLE messages (
-      id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id),
-      role TEXT NOT NULL, content TEXT NOT NULL, file_ids TEXT NOT NULL DEFAULT '[]',
-      skills TEXT NOT NULL DEFAULT '[]', attachment_context TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
     );
     CREATE TABLE runs (
       id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), user_entry_id TEXT NOT NULL,
@@ -64,97 +57,6 @@ function database() {
       .run(id, user, `${id}.png`, `/tmp/${id}.png`, mime, 1, source, "2025-01-01T00:00:00.000Z");
   return db;
 }
-
-function oldMessage(
-  db: Database,
-  id: string,
-  role: "user" | "assistant",
-  content: string,
-  fileIds: string[] = [],
-  skills: string[] = [],
-  createdAt = "2025-01-01T00:00:00.000Z",
-) {
-  db.$client
-    .query(
-      `INSERT INTO messages(id,conversation_id,role,content,file_ids,skills,created_at)
-     VALUES(?,?,?,?,?,?,?)`,
-    )
-    .run(
-      id,
-      "conversation",
-      role,
-      content,
-      JSON.stringify(fileIds),
-      JSON.stringify(skills),
-      createdAt,
-    );
-}
-
-describe("canonical transcript migration", () => {
-  test("visible text・画像・skill・要約・順序・paginationを維持する", () => {
-    const db = database();
-    oldMessage(db, "old-user", "user", "画像を見て", ["upload"]);
-    oldMessage(db, "old-assistant", "assistant", "生成しました", ["generated"], ["imagegen"]);
-    for (let index = 0; index < 51; index++)
-      oldMessage(
-        db,
-        `tail-${String(index).padStart(2, "0")}`,
-        index % 2 ? "assistant" : "user",
-        `tail ${index}`,
-        [],
-        [],
-        "2025-01-02T00:00:00.000Z",
-      );
-
-    migrateCanonicalTranscript(db, "model");
-    migrateCanonicalTranscript(db, "model");
-
-    const all = listLegacyMessages(db, "conversation");
-    expect(all.map(({ id }) => id)).toEqual([
-      "old-assistant",
-      "old-user",
-      ...Array.from({ length: 51 }, (_, index) => `tail-${String(index).padStart(2, "0")}`),
-    ]);
-    expect(all[0]).toMatchObject({
-      content: "生成しました",
-      file_ids: '["generated"]',
-      skills: '["imagegen"]',
-    });
-    expect(all[1]).toMatchObject({ content: "画像を見て", file_ids: '["upload"]' });
-    expect(
-      db.$client
-        .query("SELECT COUNT(*) AS count FROM conversation_entries WHERE kind='compaction'")
-        .get(),
-    ).toEqual({ count: 1 });
-    const page = pageLegacyMessages(db, "conversation", null, 50);
-    expect(page.hasMore).toBe(true);
-    expect(page.messages).toHaveLength(50);
-    expect(page.messages.at(-1)?.id).toBe("tail-50");
-    expect(pageLegacyMessages(db, "conversation", page.messages[0].id, 50).messages).toHaveLength(
-      3,
-    );
-    expect(pagePublicMessages(db, "conversation", null, 100).messages[0]).toMatchObject({
-      content: "生成しました",
-      fileIds: ["generated"],
-      skills: ["imagegen"],
-    });
-    expect(db.$client.query("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 53 });
-  });
-
-  test("新規writeは旧messagesへdual writeしない", () => {
-    const db = database();
-    migrateCanonicalTranscript(db, "model");
-    appendLegacyMessage(db, {
-      id: "new",
-      conversationId: "conversation",
-      role: "user",
-      content: "new text",
-      createdAt: "2025-01-03T00:00:00.000Z",
-    });
-    expect(listLegacyMessages(db, "conversation").map(({ id }) => id)).toEqual(["new"]);
-    expect(db.$client.query("SELECT COUNT(*) AS count FROM messages").get()).toEqual({ count: 0 });
-  });
-});
 
 describe("public transcript projection", () => {
   test("同じrunのreasoning・tool・final textを1件へまとめてsecretを公開しない", () => {

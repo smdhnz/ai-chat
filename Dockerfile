@@ -20,6 +20,7 @@ ENV NODE_ENV=production PORT=3000 WEB_ORIGIN=http://127.0.0.1:3002 DATA_DIR=/app
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY package.json next.config.mjs ./
+COPY drizzle ./drizzle
 COPY public ./public
 COPY src ./src
 RUN mkdir -p /app/data
