@@ -404,7 +404,11 @@ function SettingsHome({
               id="response-thinking"
               className={`${settingControlClass} w-auto!`}
               value={thinking}
-              onChange={(event) => saveThinking(event.target.value as ThinkingLevel)}
+              onChange={(event) => {
+                saveThinking(event.target.value as ThinkingLevel);
+                const select = event.currentTarget;
+                requestAnimationFrame(() => select.blur());
+              }}
             >
               {data.supported_thinking_levels.map((level) => (
                 <option key={level} value={level}>
