@@ -688,7 +688,7 @@ async function saveSettings(request: Request, userId: string): Promise<Response>
     ctrlEnterSend?: boolean;
     thinking?: string;
   };
-  const language = clean(body.language, 80) || "Japanese";
+  const language = clean(body.language, 80);
   const ctrlEnterSend = body.ctrlEnterSend === true ? 1 : 0;
   const thinking = clean(body.thinking, 20);
   if (!["auto", "minimal", "low", "medium", "high", "xhigh", "max"].includes(thinking))
@@ -730,7 +730,7 @@ async function saveProject(
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
     .get();
   if (existing) {
-    const language = clean(body.language, 80) || "Japanese";
+    const language = clean(body.language, 80);
     const thinking = clean(body.thinking, 20);
     if (!supportedThinkingLevels(chatModel).includes(thinking as ThinkingLevel))
       return json({ error: "invalid thinking level" }, 400);
@@ -747,7 +747,7 @@ async function saveProject(
     publishSync(projectUserIds(db, projectId));
   } else {
     const owner = db
-      .select({ language: users.language, thinking: users.thinking_level })
+      .select({ thinking: users.thinking_level })
       .from(users)
       .where(eq(users.id, userId))
       .get()!;
@@ -758,7 +758,7 @@ async function saveProject(
         user_id: userId,
         name,
         system_prompt: prompt,
-        language: owner.language,
+        language: clean(body.language, 80),
         thinking_level: owner.thinking,
         created_at: timestamp,
         updated_at: timestamp,

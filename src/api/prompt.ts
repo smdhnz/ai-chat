@@ -137,7 +137,7 @@ export function buildSystemPrompt(
   const runtimeContext = [
     "# Runtime context",
     `Current date: ${date.toISOString().slice(0, 10)}`,
-    `Preferred response language: ${language}`,
+    `Preferred response language: ${language || "Japanese"}`,
   ].join("\n");
 
   return [BASE_SYSTEM_PROMPT, runtimeContext, projectInstructions, imageManifest]

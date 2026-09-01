@@ -33,7 +33,7 @@ export function Editor({
   const [project, setProject] = useState(item);
   const [name, setName] = useState(item?.name || "");
   const [instructions, setInstructions] = useState(item?.system_prompt || "");
-  const [language, setLanguage] = useState(item?.language || defaultLanguage);
+  const [language, setLanguage] = useState(item?.language ?? defaultLanguage);
   const [thinking, setThinking] = useState<ThinkingLevel>(item?.thinking_level || defaultThinking);
   const [saving, setSaving] = useState(false);
   const editable = !project || project.is_owner;
@@ -95,7 +95,7 @@ export function Editor({
           value={language}
           onChange={(event) => setLanguage(event.target.value)}
           maxLength={80}
-          required
+          placeholder="Japanese"
           disabled={!editable}
         />
       </label>

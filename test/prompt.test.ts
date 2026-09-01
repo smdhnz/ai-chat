@@ -87,6 +87,12 @@ describe("system prompt assembly", () => {
       expect(prompt).not.toContain(secret);
   });
 
+  test("回答言語が空ならJapaneseを使用する", () => {
+    expect(buildSystemPrompt(fixture(), "conversation-1", "user-1", "")).toContain(
+      "Preferred response language: Japanese",
+    );
+  });
+
   test("認可済みの共有conversationでは作成者に依存せずpromptを構築する", () => {
     expect(buildSystemPrompt(fixture(), "conversation-2", "user-1", "Japanese")).toContain(
       "FOREIGN PROJECT INSTRUCTION",
