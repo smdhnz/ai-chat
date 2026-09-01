@@ -5,17 +5,14 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  Brain,
   Check,
   ChevronDown,
+  CircleX,
   Copy,
   File,
-  ImageIcon,
+  LoaderCircle,
   Pencil,
   RotateCcw,
-  Search,
-  Sparkles,
-  Wrench,
 } from "lucide-react";
 import {
   parseDeviceAuth,
@@ -135,27 +132,25 @@ function ActivityPanel({
   const reducedMotion = useReducedMotion();
   const latest = activities.at(-1);
   return (
-    <div className="mb-3 w-fit min-w-[min(180px,78vw)] max-w-[min(280px,78vw)] rounded-[13px] border border-border bg-[color-mix(in_srgb,var(--muted)_62%,transparent)] text-xs">
+    <div className="mb-3 w-fit max-w-[min(280px,78vw)]">
       <button
         type="button"
-        className="flex h-auto w-full items-center gap-2 px-3 py-2.5 text-left text-muted-foreground"
+        className="flex min-h-11 max-w-full items-center gap-2 text-left text-[9px] text-muted-foreground"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >
-        {streaming && latest && latest.type !== "reasoning" ? (
-          <LoadingWave className="shrink-0 text-sm" />
-        ) : (
-          <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
-        )}
-        <span className="min-w-0 flex-1 truncate">
+        {streaming && latest ? <LoadingWave className="shrink-0 text-sm text-primary" /> : null}
+        <span
+          className={`min-w-0 flex-1 break-words ${streaming && latest ? "activity-shimmer" : "opacity-70"}`}
+        >
           {streaming && latest ? activityLabel(latest) : `${activities.length}件の処理`}
         </span>
         <motion.span
-          className="shrink-0"
+          className="shrink-0 opacity-50"
           animate={{ rotate: expanded ? 180 : 0 }}
           transition={{ duration: reducedMotion ? 0 : 0.18 }}
         >
-          <ChevronDown className="size-3.5" aria-hidden="true" />
+          <ChevronDown className="size-3" aria-hidden="true" />
         </motion.span>
       </button>
       <AnimatePresence initial={false}>
@@ -168,42 +163,27 @@ function ActivityPanel({
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: reducedMotion ? 0 : 0.2, ease: "easeOut" }}
           >
-            <div className="border-t border-border px-3 py-1.5">
+            <div className="space-y-2 pt-1 pl-[1.85rem] text-[10px] leading-[1.55] text-muted-foreground/60">
               {activities.map((activity, index) => (
-                <div
-                  key={`${activity.type}-${index}`}
-                  className="flex gap-2 border-b border-border/60 py-2.5 last:border-b-0"
-                >
-                  <span className="mt-0.5 text-muted-foreground">{activityIcon(activity)}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="min-w-0 break-words font-medium text-foreground">
-                        {activityLabel(activity)}
-                      </span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {activityStatus(activity)}
-                      </span>
-                    </div>
-                    {activity.type === "reasoning" && (
-                      <p className="mt-1 break-words whitespace-pre-wrap text-muted-foreground">
+                <div key={`${activity.type}-${index}`}>
+                  <div className="flex items-start gap-2">
+                    <span
+                      className={
+                        activity.type === "reasoning" ? "shrink-0" : "min-w-0 flex-1 break-words"
+                      }
+                    >
+                      {activityLabel(activity)}
+                    </span>
+                    {activity.type === "reasoning" ? (
+                      <span className="min-w-0 flex-1 break-words whitespace-normal">
                         {activity.text}
-                      </p>
-                    )}
-                    {activity.type === "web_search" && activity.sources.length > 0 && (
-                      <ul className="mt-1 space-y-1">
-                        {activity.sources.map((source) => (
-                          <li key={source.url} className="break-words">
-                            <a href={source.url} target="_blank" rel="noopener noreferrer">
-                              {source.title || source.url}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {activity.type === "tool" && (
-                      <p className="mt-1 break-words text-muted-foreground">{activity.summary}</p>
-                    )}
+                      </span>
+                    ) : null}
+                    <ActivityStatusIcon activity={activity} />
                   </div>
+                  {activity.type === "tool" && (
+                    <p className="mt-0.5 break-words">{activity.summary}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -215,9 +195,9 @@ function ActivityPanel({
 }
 
 function activityLabel(activity: PublicActivity): string {
-  if (activity.type === "reasoning") return "思考の要約";
+  if (activity.type === "reasoning") return "思考";
   if (activity.type === "web_search")
-    return activity.query ? `Web検索: ${activity.query}` : "Web検索";
+    return `${activity.query ? `Web検索: ${activity.query}` : "Web検索"} · 参照${activity.sources.length}件`;
   if (activity.type === "image_generation")
     return activity.operation === "edit" ? "画像を編集" : "画像を生成";
   if (activity.name === "context_compaction") return "会話履歴を整理";
@@ -225,18 +205,28 @@ function activityLabel(activity: PublicActivity): string {
   return activity.name === "inspect_image" ? "画像を確認" : activity.name;
 }
 
-function activityStatus(activity: PublicActivity): string {
-  if (activity.type === "reasoning") return "記録済み";
-  if (activity.status === "running") return "処理中";
-  return activity.status === "error" ? "失敗" : "完了";
-}
-
-function activityIcon(activity: PublicActivity) {
-  if (activity.type === "reasoning") return <Brain className="size-3.5" aria-hidden="true" />;
-  if (activity.type === "web_search") return <Search className="size-3.5" aria-hidden="true" />;
-  if (activity.type === "image_generation")
-    return <ImageIcon className="size-3.5" aria-hidden="true" />;
-  return <Wrench className="size-3.5" aria-hidden="true" />;
+function ActivityStatusIcon({ activity }: { activity: PublicActivity }) {
+  if (activity.type === "reasoning" || activity.status === "completed")
+    return (
+      <span
+        className="shrink-0 opacity-70"
+        role="img"
+        aria-label={activity.type === "reasoning" ? "記録済み" : "完了"}
+      >
+        <Check className="size-3" aria-hidden="true" />
+      </span>
+    );
+  if (activity.status === "running")
+    return (
+      <span className="shrink-0 opacity-70" role="img" aria-label="処理中">
+        <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
+      </span>
+    );
+  return (
+    <span className="shrink-0 text-destructive/70" role="img" aria-label="失敗">
+      <CircleX className="size-3" aria-hidden="true" />
+    </span>
+  );
 }
 
 export function CodeBlock(markdownProps: ComponentProps<"pre"> & MarkdownNode) {

@@ -190,6 +190,22 @@ a {
     animation-delay: 0.24s;
   }
 
+  .activity-shimmer {
+    color: transparent;
+    opacity: 0.76;
+    background: linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--primary) 20%, var(--muted-foreground)) 35%,
+      color-mix(in srgb, var(--primary) 78%, white) 48%,
+      color-mix(in srgb, var(--primary) 42%, var(--muted-foreground)) 52%,
+      color-mix(in srgb, var(--primary) 20%, var(--muted-foreground)) 65%
+    );
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: activity-shimmer 1.6s linear infinite;
+  }
+
   .liquid-glass-field:focus-within {
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow:
@@ -210,6 +226,15 @@ a {
   50% {
     transform: scaleY(1);
     opacity: 1;
+  }
+}
+
+@keyframes activity-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
   }
 }
 

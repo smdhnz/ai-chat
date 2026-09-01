@@ -338,7 +338,7 @@ export function ChatShell() {
     activeStream?.status === "queued" ||
     activeStream?.status === "running";
   const editing = editingMessageId !== null;
-  const streaming = Boolean(streamedMessage?.content);
+  const waitingForResponse = !streamedMessage?.content && !streamedMessage?.activities?.length;
   const newestImageMessageId = displayedMessages.reduceRight<string | undefined>(
     (id, message) =>
       id ?? (message.files.some((file) => file.mime.startsWith("image/")) ? message.id : undefined),
@@ -680,7 +680,7 @@ export function ChatShell() {
                     prioritizeImages={message.id === newestImageMessageId}
                   />
                 ))}
-                {generating && !streaming && <Thinking />}
+                {generating && waitingForResponse && <Thinking />}
               </motion.div>
             </div>
           )}
