@@ -28,6 +28,17 @@ export type Project = {
   created_at: string;
   updated_at: string;
 };
+export type Skill = {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  enabled: number;
+  source: "builtin" | "user";
+  editable: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
 export type ProjectInvitation = {
   project_id: string;
   project_name: string;
@@ -47,6 +58,7 @@ export type PublicActivity =
       operation?: "generation" | "edit";
       status: ActivityStatus;
     }
+  | { type: "skill"; name: string; status: ActivityStatus }
   | { type: "tool"; name: string; summary: string; status: ActivityStatus };
 
 export type Conversation = {
@@ -126,6 +138,7 @@ export type Bootstrap = {
   users: UserSummary[];
   invitations: ProjectInvitation[];
   projects: Project[];
+  skills: Skill[];
   conversations: Conversation[];
   files: FileItem[];
 };

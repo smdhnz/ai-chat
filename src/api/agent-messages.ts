@@ -89,6 +89,7 @@ export type PublicActivity =
       operation?: "generation" | "edit";
       status: ActivityStatus;
     }
+  | { type: "skill"; name: string; status: ActivityStatus }
   | { type: "tool"; name: string; summary: string; status: ActivityStatus };
 
 export type PublicTranscriptMessage = {
@@ -140,6 +141,12 @@ function publicToolCall(
       status,
     };
   if (call.name === "generate_image") return { type: "image_generation", status };
+  if (call.name === "load_skill")
+    return {
+      type: "skill",
+      name: typeof details.name === "string" ? details.name.slice(0, 80) : "unknown",
+      status,
+    };
   return {
     type: "tool",
     name: call.name.slice(0, 100),
@@ -148,7 +155,7 @@ function publicToolCall(
   };
 }
 
-function publicToolActivity(result: ToolResultPayload): PublicActivity {
+function publicToolActivity(result: ToolResultPayload, previous?: PublicActivity): PublicActivity {
   const status = result.isError ? "error" : "completed";
   const details = isRecord(result.details) ? result.details : {};
   if (result.toolName === "web_search")
@@ -170,6 +177,17 @@ function publicToolActivity(result: ToolResultPayload): PublicActivity {
               : [],
           )
         : [],
+      status,
+    };
+  if (result.toolName === "load_skill")
+    return {
+      type: "skill",
+      name:
+        typeof details.name === "string"
+          ? details.name.slice(0, 80)
+          : previous?.type === "skill"
+            ? previous.name
+            : "unknown",
       status,
     };
   if (result.toolName === "generate_image")
@@ -409,7 +427,6 @@ export function pagePublicMessages(
           typeof block.id === "string" &&
           typeof block.name === "string"
         ) {
-          if (block.name === "load_skill") continue;
           const runStatus = entry.run_id ? runMap.get(entry.run_id)?.status : undefined;
           const activityIndex = group.activities.push(
             publicToolCall(
@@ -423,11 +440,13 @@ export function pagePublicMessages(
       continue;
     }
     const result = payload as ToolResultPayload;
-    if (result.toolName === "load_skill") continue;
     group.fileIds.push(...imageRefs(result.content));
     const call = toolCalls.get(`${entry.run_id}:${result.toolCallId}`);
     if (call) {
-      call.group.activities[call.activityIndex] = publicToolActivity(result);
+      call.group.activities[call.activityIndex] = publicToolActivity(
+        result,
+        call.group.activities[call.activityIndex],
+      );
       toolCalls.delete(`${entry.run_id}:${result.toolCallId}`);
     } else group.activities.push(publicToolActivity(result));
   }

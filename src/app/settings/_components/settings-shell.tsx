@@ -17,6 +17,7 @@ import {
   Mail,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
   X,
   type LucideIcon,
@@ -29,6 +30,7 @@ import {
   type FileItem,
   type Project,
   type ProjectInvitation,
+  type Skill,
   type ThinkingLevel,
 } from "@/lib/api";
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
@@ -36,10 +38,10 @@ import { shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
-import { Editor } from "@/app/settings/_components/settings-editor";
+import { Editor, SkillEditor } from "@/app/settings/_components/settings-editor";
 
-type DeleteTarget = { type: "projects" | "data"; id: string; name: string };
-type EditorState = { item?: Project };
+type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
+type EditorState = { type: "project"; item?: Project } | { type: "skill"; item?: Skill };
 
 const settingFieldClass = "flex min-h-[58px] items-center justify-between gap-5 px-4";
 const settingLabelClass = "text-[13px] text-foreground";
@@ -136,6 +138,7 @@ export function SettingsShell({
       method: "DELETE",
     });
     await refresh("削除しました");
+    if (type === "skills") setEditor(null);
   }
 
   function close() {
@@ -158,9 +161,15 @@ export function SettingsShell({
     else setTab(null);
   }
 
-  const viewKey = editor ? `project-${editor.item?.id ?? "new"}` : tab ? `tab-${tab}` : "root";
+  const viewKey = editor
+    ? `${editor.type}-${editor.item?.id ?? "new"}`
+    : tab
+      ? `tab-${tab}`
+      : "root";
   const title = editor
-    ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
+    ? editor.type === "project"
+      ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
+      : `スキル${editor.item ? (editor.item.editable ? "を編集" : "の詳細") : "を作成"}`
     : tab
       ? settingsTabLabels[tab]
       : "設定";
@@ -267,26 +276,47 @@ export function SettingsShell({
                   </header>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     {editor ? (
-                      <Editor
-                        key={viewKey}
-                        item={editor.item}
-                        users={data.users}
-                        defaultLanguage={data.user.language}
-                        defaultThinking={data.user.thinking_level}
-                        thinkingLevels={data.supported_thinking_levels}
-                        cancel={back}
-                        refresh={async () => {
-                          const fresh = await refresh();
-                          return editor.item
-                            ? (fresh.projects.find((project) => project.id === editor.item?.id) ??
-                                null)
-                            : null;
-                        }}
-                        saved={async () => {
-                          await refresh("保存しました");
-                          back();
-                        }}
-                      />
+                      editor.type === "project" ? (
+                        <Editor
+                          key={viewKey}
+                          item={editor.item}
+                          users={data.users}
+                          defaultLanguage={data.user.language}
+                          defaultThinking={data.user.thinking_level}
+                          thinkingLevels={data.supported_thinking_levels}
+                          cancel={back}
+                          refresh={async () => {
+                            const fresh = await refresh();
+                            return editor.item
+                              ? (fresh.projects.find((project) => project.id === editor.item?.id) ??
+                                  null)
+                              : null;
+                          }}
+                          saved={async () => {
+                            await refresh("保存しました");
+                            back();
+                          }}
+                        />
+                      ) : (
+                        <SkillEditor
+                          key={viewKey}
+                          item={editor.item}
+                          cancel={back}
+                          remove={() => {
+                            if (!editor.item?.editable) return;
+                            setDeleteTarget({
+                              type: "skills",
+                              id: editor.item.id,
+                              name: editor.item.name,
+                            });
+                            setDeleteOpen(true);
+                          }}
+                          saved={async () => {
+                            await refresh("保存しました");
+                            back();
+                          }}
+                        />
+                      )
                     ) : tab ? (
                       <SettingsDetail
                         tab={tab}
@@ -332,12 +362,14 @@ export function SettingsShell({
         title={
           {
             projects: "プロジェクトを削除",
+            skills: "スキルを削除",
             data: "データを削除",
           }[deleteTarget?.type ?? "data"]
         }
         text={
           {
             projects: `「${deleteTarget?.name ?? ""}」と中のチャット・画像を削除します。`,
+            skills: `「${deleteTarget?.name ?? ""}」を削除します。`,
             data: "個人プロジェクト・個人チャット・画像を削除します。共有プロジェクトのデータと所属は残ります。",
           }[deleteTarget?.type ?? "data"]
         }
@@ -442,6 +474,12 @@ function SettingsHome({
           onClick={() => showTab("invitations")}
         />
         <SettingsLink
+          icon={Sparkles}
+          label="スキル"
+          value={`${data.skills.length}`}
+          onClick={() => showTab("skills")}
+        />
+        <SettingsLink
           icon={Images}
           label="画像"
           value={`${data.files.length}`}
@@ -500,12 +538,34 @@ function SettingsDetail({
   refresh: (message?: string) => Promise<Bootstrap>;
   askDelete: (target: DeleteTarget) => void;
 }) {
+  const [savingSkill, setSavingSkill] = useState("");
+
+  async function toggleSkill(item: Skill) {
+    setSavingSkill(item.id);
+    try {
+      await api(`/api/skills/${item.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: item.name,
+          description: item.description,
+          instructions: item.instructions,
+          enabled: item.enabled === 0,
+        }),
+      });
+      await refresh("自動保存しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存できませんでした");
+    } finally {
+      setSavingSkill("");
+    }
+  }
+
   if (tab === "projects")
     return (
       <DetailLayout
         text="共有メンバーとAIの回答設定を管理します。"
         action="作成"
-        onAction={() => edit({})}
+        onAction={() => edit({ type: "project" })}
       >
         {data.projects.length ? (
           <section className="overflow-hidden rounded-[14px] bg-card">
@@ -516,7 +576,7 @@ function SettingsDetail({
                 title={item.name}
                 text={`${item.language} · ${item.thinking_level}`}
                 badge={item.is_owner ? (item.shared ? "共有中" : "オーナー") : "参加中"}
-                edit={() => edit({ item })}
+                edit={() => edit({ type: "project", item })}
                 remove={
                   item.is_owner
                     ? () => askDelete({ type: "projects", id: item.id, name: item.name })
@@ -528,6 +588,44 @@ function SettingsDetail({
         ) : (
           <EmptyText>プロジェクトはありません。</EmptyText>
         )}
+      </DetailLayout>
+    );
+
+  if (tab === "skills")
+    return (
+      <DetailLayout
+        text="必要な手順だけを会話中に読み込みます。"
+        action="作成"
+        onAction={() => edit({ type: "skill" })}
+      >
+        <section className="overflow-hidden rounded-[14px] bg-card">
+          {data.skills.map((item) => (
+            <SettingsCard
+              key={item.id}
+              icon={<Sparkles />}
+              title={item.name}
+              text={item.description || "説明なし"}
+              badge={item.source === "builtin" ? "組み込み" : item.enabled ? "有効" : "無効"}
+              edit={() => edit({ type: "skill", item })}
+              showAction={item.editable}
+              control={
+                item.editable ? (
+                  <SkillToggle
+                    name={item.name}
+                    enabled={item.enabled !== 0}
+                    disabled={Boolean(savingSkill)}
+                    toggle={() => void toggleSkill(item)}
+                  />
+                ) : undefined
+              }
+              remove={
+                item.editable
+                  ? () => askDelete({ type: "skills", id: item.id, name: item.name })
+                  : undefined
+              }
+            />
+          ))}
+        </section>
       </DetailLayout>
     );
 
@@ -695,6 +793,34 @@ function capitalize(value: string): string {
   return value[0].toUpperCase() + value.slice(1);
 }
 
+function SkillToggle({
+  name,
+  enabled,
+  disabled,
+  toggle,
+}: {
+  name: string;
+  enabled: boolean;
+  disabled: boolean;
+  toggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={`${name}を${enabled ? "無効化" : "有効化"}`}
+      disabled={disabled}
+      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:opacity-50 ${enabled ? "bg-primary" : "bg-muted"}`}
+      onClick={toggle}
+    >
+      <span
+        className={`absolute top-1 size-4 rounded-full bg-white shadow-sm transition-[left] ${enabled ? "left-5" : "left-1"}`}
+      />
+    </button>
+  );
+}
+
 function SettingsCard({
   icon,
   title,
@@ -702,6 +828,8 @@ function SettingsCard({
   badge,
   edit,
   remove,
+  control,
+  showAction = true,
 }: {
   icon: ReactNode;
   title: string;
@@ -709,6 +837,8 @@ function SettingsCard({
   badge?: string;
   edit: () => void;
   remove?: () => void;
+  control?: ReactNode;
+  showAction?: boolean;
 }) {
   return (
     <article className="flex min-h-[78px] items-center gap-3 border-b border-border p-3.5 last:border-b-0">
@@ -722,14 +852,17 @@ function SettingsCard({
         </span>
         <span className="mt-1 block truncate text-[10px] text-muted-foreground">{text}</span>
       </button>
-      <button
-        type="button"
-        className="inline-flex size-8 items-center justify-center text-muted-foreground [&_svg]:size-4"
-        aria-label={`${title}を編集`}
-        onClick={edit}
-      >
-        <Pencil />
-      </button>
+      {control}
+      {showAction ? (
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center text-muted-foreground [&_svg]:size-4"
+          aria-label={`${title}を編集`}
+          onClick={edit}
+        >
+          <Pencil />
+        </button>
+      ) : null}
       {remove ? (
         <button
           type="button"

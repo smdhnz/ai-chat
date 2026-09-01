@@ -28,6 +28,11 @@ async function fixture() {
     PRAGMA foreign_keys=ON;
     CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id));
+    CREATE TABLE skills (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(user_id,name)
+    );
     CREATE TABLE files (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
       mime TEXT NOT NULL, size INTEGER NOT NULL, source TEXT NOT NULL, created_at TEXT NOT NULL
@@ -166,6 +171,76 @@ describe("custom tool executor", () => {
     );
   });
 
+  test("load_skillは本人の有効スキルだけをrun内で読み込み、画像APIをgateする", async () => {
+    const { db } = await fixture();
+    db.$client.exec(`
+      INSERT INTO skills VALUES('own','user-1','own-skill','', 'OWN SECRET',1,'2025','2025');
+      INSERT INTO skills VALUES('disabled','user-1','disabled-skill','', 'DISABLED SECRET',0,'2025','2025');
+      INSERT INTO skills VALUES('foreign','user-2','foreign-skill','', 'FOREIGN SECRET',1,'2025','2025');
+    `);
+    let imageCalls = 0;
+    const tools = createAgentTools(
+      { userId: "user-1", conversationId: "conversation-1", runId: "run" },
+      {
+        database: db,
+        generateImage: async () => {
+          imageCalls += 1;
+          return png;
+        },
+      },
+    );
+    const load = tool(tools, "load_skill");
+    await expect(
+      tool(tools, "generate_image").execute("blocked", { prompt: "image" }),
+    ).rejects.toThrow("Load the imagegen skill first");
+    expect(imageCalls).toBe(0);
+    await expect(load.execute("disabled", { name: "disabled-skill" })).rejects.toThrow(
+      "not available",
+    );
+    await expect(load.execute("foreign", { name: "foreign-skill" })).rejects.toThrow(
+      "not available",
+    );
+    const own = await load.execute("own", { name: "own-skill" });
+    expect(own.content).toEqual([
+      {
+        type: "text",
+        text: expect.stringContaining("OWN SECRET"),
+      },
+    ]);
+    expect(await load.execute("own-again", { name: "own-skill" })).toMatchObject({
+      details: { name: "own-skill", source: "user", alreadyLoaded: true },
+    });
+    expect(await load.execute("builtin", { name: "imagegen" })).toMatchObject({
+      details: { name: "imagegen", source: "builtin" },
+    });
+
+    for (let index = 0; index < 9; index++)
+      db.$client
+        .query("INSERT INTO skills VALUES(?,?,?,?,?,?,?,?)")
+        .run(
+          `limit-${index}`,
+          "user-1",
+          `limit-${index}`,
+          "",
+          "instructions",
+          1,
+          "2025",
+          `2025-${index}`,
+        );
+    const limited = tool(
+      createAgentTools(
+        { userId: "user-1", conversationId: "conversation-1", runId: "run" },
+        { database: db },
+      ),
+      "load_skill",
+    );
+    for (let index = 0; index < 8; index++)
+      await limited.execute(`limit-${index}`, { name: `limit-${index}` });
+    await expect(limited.execute("over", { name: "limit-8" })).rejects.toThrow(
+      "Skill load budget reached",
+    );
+  });
+
   test("generate_imageはimageRefとして保存し、共有相手も復元できる", async () => {
     const { db, root } = await fixture();
     const tools = createAgentTools(
@@ -178,6 +253,7 @@ describe("custom tool executor", () => {
         now: () => "2025-01-02T00:00:00.000Z",
       },
     );
+    await tool(tools, "load_skill").execute("load", { name: "imagegen" });
     const generated = await tool(tools, "generate_image").execute("generate", {
       prompt: "a simple image",
     });

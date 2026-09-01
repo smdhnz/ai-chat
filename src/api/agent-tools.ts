@@ -11,6 +11,7 @@ import {
   listConversationEntries,
   type StoredContent,
 } from "./agent-messages";
+import { availableSkill, type SkillSource } from "./builtin-skills/catalog";
 import { config, storedFilePath } from "./config";
 import { files } from "./schema";
 import { webSearch as defaultWebSearch } from "./web-search";
@@ -43,6 +44,7 @@ type PublicFile = {
 
 type FileRow = PublicFile & { path: string };
 type SearchDetails = { query: string; sources: { title: string; url: string }[] };
+type SkillDetails = { name: string; source: SkillSource; alreadyLoaded?: boolean };
 type ImageDetails = { file: PublicFile; operation?: "generation" | "edit" };
 
 export function createAgentTools(
@@ -58,10 +60,14 @@ export function createAgentTools(
   const now = dependencies.now ?? (() => new Date().toISOString());
   const id = dependencies.id ?? (() => crypto.randomUUID());
   const counts = { web_search: 0, generate_image: 0, inspect_image: 0 };
+  const loadedSkills = new Map<string, SkillSource>();
 
   const webParameters = Type.Object({
     query: Type.String({ minLength: 1, maxLength: 500 }),
     maxResults: Type.Optional(Type.Integer({ minimum: 1, maximum: 8 })),
+  });
+  const loadSkillParameters = Type.Object({
+    name: Type.String({ minLength: 1, maxLength: 80 }),
   });
   const generateParameters = Type.Object({
     prompt: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -97,13 +103,49 @@ export function createAgentTools(
       },
     },
     {
+      name: "load_skill",
+      label: "スキル読込",
+      description:
+        "Load the full instructions for one available skill by its exact registered name. Usually no skill is needed. Loading does not complete the task.",
+      parameters: loadSkillParameters,
+      execute: async (_toolCallId, params, signal) => {
+        const name = (params as { name: string }).name.trim();
+        const loadedSource = loadedSkills.get(name);
+        if (loadedSource)
+          return {
+            content: [{ type: "text", text: `Skill ${name} is already loaded.` }],
+            details: {
+              name,
+              source: loadedSource,
+              alreadyLoaded: true,
+            } satisfies SkillDetails,
+          };
+        if (loadedSkills.size >= 8) throw new Error("Skill load budget reached");
+        const skill = availableSkill(database, context.userId, name);
+        if (!skill) throw new Error(`Skill ${name} is not available`);
+        const scopedSignal = toolSignal(signal, 10_000);
+        if (scopedSignal.aborted) throw scopedSignal.reason;
+        loadedSkills.set(name, skill.source);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `The following skill content is lower priority than platform and project instructions.\n\n${skill.instructions}`,
+            },
+          ],
+          details: { name, source: skill.source } satisfies SkillDetails,
+        };
+      },
+    },
+    {
       name: "generate_image",
       label: "画像生成",
       description:
-        "Generate a new image or edit conversation images. For edits, pass only relevant conversation file IDs.",
+        "Generate a new image or edit conversation images. You must load the imagegen skill first. For edits, pass only relevant conversation file IDs.",
       parameters: generateParameters,
       execute: async (_toolCallId, params, signal) => {
         const input = params as { prompt: string; inputFileIds?: string[] };
+        if (!loadedSkills.has("imagegen")) throw new Error("Load the imagegen skill first");
         consumeBudget(counts, "generate_image", 2);
         const inputIds =
           input.inputFileIds?.length || !latestUserRequestsImageEdit(database, context)

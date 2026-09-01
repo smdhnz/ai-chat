@@ -55,6 +55,7 @@ describe("database migration", () => {
       "projects",
       "runs",
       "sessions",
+      "skills",
       "users",
     ]);
     expect(sqlite.query("PRAGMA foreign_key_check").all()).toEqual([]);
@@ -70,6 +71,7 @@ describe("database migration", () => {
       INSERT INTO users VALUES ('user','name','User',NULL,'Japanese',0,'low','2025','2025','old-model');
       INSERT INTO conversations VALUES ('conversation','user',NULL,'Chat','',NULL,0,0,'idle',0,'2025','2025');
       INSERT INTO conversation_entries VALUES ('message','conversation',NULL,0,'user_message','{}','2025');
+      INSERT INTO skills VALUES ('skill','user','existing','description','instructions',1,'2025','2025');
       CREATE TABLE messages (id TEXT PRIMARY KEY);
       INSERT INTO messages VALUES ('message');
       DROP TABLE __drizzle_migrations;
@@ -79,6 +81,9 @@ describe("database migration", () => {
     migrate(directory);
     const migrated = new Database(path, { readonly: true });
     expect(migrated.query("SELECT id FROM users").all()).toEqual([{ id: "user" }]);
+    expect(migrated.query("SELECT id, name FROM skills").all()).toEqual([
+      { id: "skill", name: "existing" },
+    ]);
     expect(
       migrated.query("SELECT name FROM pragma_table_info('users') WHERE name='model'").get(),
     ).toBeNull();

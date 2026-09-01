@@ -200,6 +200,7 @@ function activityLabel(activity: PublicActivity): string {
     return `${activity.query ? `Web検索: ${activity.query}` : "Web検索"} · 参照${activity.sources.length}件`;
   if (activity.type === "image_generation")
     return activity.operation === "edit" ? "画像を編集" : "画像を生成";
+  if (activity.type === "skill") return `${activity.name}を読み込み`;
   if (activity.name === "context_compaction") return "会話履歴を整理";
   if (activity.name === "run") return "応答処理";
   return activity.name === "inspect_image" ? "画像を確認" : activity.name;

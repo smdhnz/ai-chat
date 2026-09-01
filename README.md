@@ -10,6 +10,7 @@ ChatGPT風のWebチャットです。個人チャットに加え、招待制の�
 - オーナー1人と招待参加者によるプロジェクト共有、共同チャット、ユーザー別未読管理
 - Codexサブスク認証による会話（モデルは`CODEX_MODEL`で固定、言語・Thinkingは個人／プロジェクト別に設定）
 - ユーザーの依頼内容に応じた自律Web検索（Exa MCP、APIキー不要）
+- オンデマンド読込するユーザースキルと、組み込み`imagegen`スキル
 - Codex Images APIによる画像生成・画像編集
 - 会話履歴、プロジェクト別システムプロンプト
 - ユーザー別画像保存・共有プロジェクト内での画像閲覧・Web検索
@@ -17,7 +18,7 @@ ChatGPT風のWebチャットです。個人チャットに加え、招待制の�
 
 UIコンポーネントは `src/components/ui` のshadcn/uiに統一しています。配色はshadcnのトークン（`--background`、`--card`、`--primary` など）へ既存パレットを割り当てているため、見た目は従来のままです。
 
-スキル機能やコーディングエージェント用プロンプトは読み込みません。画像生成は専用tool、Web検索は `pi-web-access` と同じ公開 Exa MCPを使用し、Agentが必要性を判断します。
+スキルは名前と説明だけを通常のsystem promptへ載せ、本文は必要時に`load_skill`で読み込みます。ユーザースキルはDiscordユーザーIDごとに分離し、組み込み`imagegen`は画像生成・編集前に必ず読み込みます。`imagegen`の設計原則は[awesome-gpt-image-2](https://github.com/freestylefly/awesome-gpt-image-2)を参考にしていますが、事例集やstyle libraryは同梱しません。Web検索は `pi-web-access` と同じ公開 Exa MCPを使用します。
 
 ## セットアップ
 
@@ -70,7 +71,7 @@ Bunサーバーが前段に立つことで、セッションcookieの検証、�
 ```text
 data/
 ├── auth.json                  # Codex OAuth認証（0600）
-├── chat.sqlite               # ユーザー、履歴、共有関係、プロジェクト、画像索引
+├── chat.sqlite               # ユーザー、履歴、共有関係、プロジェクト、スキル、画像索引
 └── users/<discord-user-id>/
     └── files/
         ├── YYYY-MM-DD/        # アップロード

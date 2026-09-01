@@ -1,5 +1,5 @@
 import { basename, extname, join } from "node:path";
-import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import {
   classifyThinking,
@@ -35,6 +35,7 @@ import {
   setConversationRead,
 } from "./access";
 import { buildSystemPrompt } from "./prompt";
+import { builtinSkill, builtinSkills, readBuiltinSkill } from "./builtin-skills/catalog";
 import { webSearch } from "./web-search";
 import {
   conversationReads,
@@ -46,6 +47,7 @@ import {
   projects as projectsTable,
   runs as runsTable,
   sessions,
+  skills as skillsTable,
   users,
 } from "./schema";
 
@@ -143,6 +145,12 @@ const server = Bun.serve<SocketData>({
         return saveSettings(request, user.id);
       if (url.pathname === "/api/data" && request.method === "DELETE")
         return deleteAllData(request, user.id);
+      if (url.pathname === "/api/skills" && request.method === "POST")
+        return saveSkill(request, user.id);
+      const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)$/);
+      if (skillMatch && request.method === "PUT") return saveSkill(request, user.id, skillMatch[1]);
+      if (skillMatch && request.method === "DELETE")
+        return deleteSkill(request, skillMatch[1], user.id);
       if (url.pathname === "/api/projects" && request.method === "POST")
         return saveProject(request, user.id);
       const projectMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)$/);
@@ -314,6 +322,34 @@ function bootstrap(user: User): Response {
       : [],
     invitations: incomingInvitations(user.id),
     projects: projectViews,
+    skills: [
+      ...builtinSkills.map((skill) => ({
+        id: `builtin:${skill.name}`,
+        name: skill.name,
+        description: skill.description,
+        instructions: readBuiltinSkill(skill),
+        enabled: 1,
+        source: "builtin" as const,
+        editable: false,
+        created_at: null,
+        updated_at: null,
+      })),
+      ...db
+        .select({
+          id: skillsTable.id,
+          name: skillsTable.name,
+          description: skillsTable.description,
+          instructions: skillsTable.instructions,
+          enabled: skillsTable.enabled,
+          created_at: skillsTable.created_at,
+          updated_at: skillsTable.updated_at,
+        })
+        .from(skillsTable)
+        .where(eq(skillsTable.user_id, user.id))
+        .orderBy(desc(skillsTable.updated_at))
+        .all()
+        .map((skill) => ({ ...skill, source: "user" as const, editable: true })),
+    ],
     conversations: conversationRows.map((conversation) => ({
       ...conversation,
       unread: unread.get(conversation.id) ?? 0,
@@ -707,6 +743,117 @@ async function saveSettings(request: Request, userId: string): Promise<Response>
     ctrl_enter_send: ctrlEnterSend,
     thinking_level: thinking,
   });
+}
+
+type SkillInput = {
+  name: string;
+  description: string;
+  instructions: string;
+  enabled: number;
+};
+
+async function saveSkill(request: Request, userId: string, skillId?: string): Promise<Response> {
+  verifyOrigin(request);
+  const body = await request.json().catch(() => null);
+  const input = skillInput(body);
+  if (!input) return json({ error: "invalid skill" }, 400);
+  if (builtinSkill(input.name)) return json({ error: "skill name is reserved" }, 409);
+
+  const existing = skillId
+    ? db
+        .select({ id: skillsTable.id })
+        .from(skillsTable)
+        .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+        .get()
+    : undefined;
+  if (skillId && !existing) return json({ error: "skill not found" }, 404);
+  const duplicate = db
+    .select({ id: skillsTable.id })
+    .from(skillsTable)
+    .where(
+      and(
+        eq(skillsTable.user_id, userId),
+        eq(skillsTable.name, input.name),
+        skillId ? ne(skillsTable.id, skillId) : undefined,
+      ),
+    )
+    .get();
+  if (duplicate) return json({ error: "skill name already exists" }, 409);
+
+  const timestamp = now();
+  const targetId = skillId ?? id();
+  if (existing)
+    db.update(skillsTable)
+      .set({ ...input, updated_at: timestamp })
+      .where(and(eq(skillsTable.id, targetId), eq(skillsTable.user_id, userId)))
+      .run();
+  else
+    db.insert(skillsTable)
+      .values({
+        id: targetId,
+        user_id: userId,
+        ...input,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .run();
+
+  return json(userSkill(targetId, userId), existing ? 200 : 201);
+}
+
+function deleteSkill(request: Request, skillId: string, userId: string): Response {
+  verifyOrigin(request);
+  const existing = db
+    .select({ id: skillsTable.id })
+    .from(skillsTable)
+    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+    .get();
+  if (!existing) return json({ error: "skill not found" }, 404);
+  db.delete(skillsTable)
+    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+    .run();
+  return new Response(null, { status: 204 });
+}
+
+function skillInput(value: unknown): SkillInput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  if (
+    typeof body.name !== "string" ||
+    typeof body.description !== "string" ||
+    typeof body.instructions !== "string" ||
+    typeof body.enabled !== "boolean"
+  )
+    return null;
+  const name = body.name.replace(/\0/g, "").trim();
+  const description = body.description.replace(/\0/g, "").trim();
+  const instructions = body.instructions.replace(/\0/g, "").trim();
+  if (
+    !name ||
+    name.length > 80 ||
+    description.length > 500 ||
+    !instructions ||
+    instructions.length > 30_000
+  )
+    return null;
+  return { name, description, instructions, enabled: body.enabled ? 1 : 0 };
+}
+
+function userSkill(skillId: string, userId: string) {
+  const skill = db
+    .select({
+      id: skillsTable.id,
+      name: skillsTable.name,
+      description: skillsTable.description,
+      instructions: skillsTable.instructions,
+      enabled: skillsTable.enabled,
+      created_at: skillsTable.created_at,
+      updated_at: skillsTable.updated_at,
+    })
+    .from(skillsTable)
+    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+    .get();
+  return skill ? { ...skill, source: "user" as const, editable: true } : null;
 }
 
 async function saveProject(

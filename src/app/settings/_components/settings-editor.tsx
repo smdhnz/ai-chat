@@ -4,7 +4,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { UserMinus, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingWave } from "@/components/loading-wave";
-import { api, type Project, type ThinkingLevel, type UserSummary } from "@/lib/api";
+import { api, type Project, type Skill, type ThinkingLevel, type UserSummary } from "@/lib/api";
 
 const fieldLabelClass = "text-[10px] font-bold text-muted-foreground";
 const controlClass =
@@ -225,6 +225,119 @@ export function Editor({
       ) : null}
 
       <footer className="flex justify-end gap-2 pt-[7px] pb-[max(0px,env(safe-area-inset-bottom))]">
+        <button
+          type="button"
+          className="h-[39px] px-3 text-[11px] text-muted-foreground"
+          disabled={saving}
+          onClick={cancel}
+        >
+          {editable ? "キャンセル" : "閉じる"}
+        </button>
+        {editable ? (
+          <button
+            className="inline-flex h-[39px] items-center gap-1.5 rounded-xl bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-[15px] text-[11px] font-bold text-primary-foreground shadow-[0_8px_20px_color-mix(in_srgb,#9f7ab8_25%,transparent)] disabled:opacity-50"
+            disabled={saving}
+          >
+            {saving ? <LoadingWave className="text-sm" /> : null}
+            {saving ? "保存中" : "保存"}
+          </button>
+        ) : null}
+      </footer>
+    </form>
+  );
+}
+
+export function SkillEditor({
+  item,
+  saved,
+  cancel,
+  remove,
+}: {
+  item?: Skill;
+  saved: () => Promise<void>;
+  cancel: () => void;
+  remove: () => void;
+}) {
+  const id = useId();
+  const [name, setName] = useState(item?.name ?? "");
+  const [description, setDescription] = useState(item?.description ?? "");
+  const [instructions, setInstructions] = useState(item?.instructions ?? "");
+  const enabled = item?.enabled !== 0;
+  const [saving, setSaving] = useState(false);
+  const editable = item?.editable ?? true;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!editable) return;
+    setSaving(true);
+    try {
+      await api(`/api/skills${item ? `/${item.id}` : ""}`, {
+        method: item ? "PUT" : "POST",
+        body: JSON.stringify({ name, description, instructions, enabled }),
+      });
+      await saved();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存できませんでした");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="flex flex-col gap-[15px] p-5 pb-8" onSubmit={submit}>
+      {!editable ? (
+        <p className="rounded-[11px] bg-card px-3 py-2.5 text-[11px] text-muted-foreground">
+          組み込みスキルは編集・削除できません。
+        </p>
+      ) : null}
+      <label className="flex flex-col gap-[7px]" htmlFor={`${id}-skill-name`}>
+        <span className={fieldLabelClass}>名前</span>
+        <input
+          id={`${id}-skill-name`}
+          className={controlClass}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          maxLength={80}
+          required
+          readOnly={!editable}
+        />
+      </label>
+      <label className="flex flex-col gap-[7px]" htmlFor={`${id}-skill-description`}>
+        <span className={fieldLabelClass}>説明</span>
+        <textarea
+          id={`${id}-skill-description`}
+          className={`${controlClass} min-h-20 resize-y`}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          rows={3}
+          maxLength={500}
+          readOnly={!editable}
+        />
+      </label>
+      <label className="flex flex-col gap-[7px]" htmlFor={`${id}-skill-instructions`}>
+        <span className={fieldLabelClass}>スキル指示</span>
+        <textarea
+          id={`${id}-skill-instructions`}
+          className={`${controlClass} min-h-[240px] resize-y`}
+          value={instructions}
+          onChange={(event) => setInstructions(event.target.value)}
+          rows={14}
+          maxLength={30000}
+          required
+          readOnly={!editable}
+        />
+      </label>
+      <footer className="flex items-center justify-end gap-2 pt-[7px] pb-[max(0px,env(safe-area-inset-bottom))]">
+        {item?.editable ? (
+          <button
+            type="button"
+            className="mr-auto h-[39px] px-2 text-[11px] text-destructive"
+            disabled={saving}
+            onClick={remove}
+          >
+            削除
+          </button>
+        ) : null}
         <button
           type="button"
           className="h-[39px] px-3 text-[11px] text-muted-foreground"

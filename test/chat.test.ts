@@ -47,11 +47,24 @@ describe("chat stream reducer", () => {
     });
     state = apply(state, 2, {
       type: "tool.start",
+      id: "skill",
+      name: "load_skill",
+      args: { name: "imagegen" },
+    });
+    state = apply(state, 3, {
+      type: "tool.end",
+      id: "skill",
+      name: "load_skill",
+      isError: false,
+      result: { name: "imagegen", source: "builtin" },
+    });
+    state = apply(state, 4, {
+      type: "tool.start",
       id: "search",
       name: "web_search",
       args: { query: "current fact" },
     });
-    state = apply(state, 3, {
+    state = apply(state, 5, {
       type: "tool.end",
       id: "search",
       name: "web_search",
@@ -64,6 +77,7 @@ describe("chat stream reducer", () => {
     const message = streamMessage(state.conversation);
     expect(message.activities).toEqual([
       { type: "reasoning", text: "要約" },
+      { type: "skill", name: "imagegen", status: "completed" },
       {
         type: "web_search",
         query: "current fact",

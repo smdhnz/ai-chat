@@ -172,6 +172,8 @@ function runningTool(name: string, args: unknown): PublicActivity {
       status: "running",
     };
   if (name === "generate_image") return { type: "image_generation", status: "running" };
+  if (name === "load_skill")
+    return { type: "skill", name: text(input.name) || "unknown", status: "running" };
   return { type: "tool", name, summary: "処理中", status: "running" };
 }
 
@@ -195,6 +197,12 @@ function completedTool(
               : [];
           })
         : [],
+      status,
+    };
+  if (name === "load_skill")
+    return {
+      type: "skill",
+      name: text(details.name) || (current?.type === "skill" ? current.name : "unknown"),
       status,
     };
   if (name === "generate_image")

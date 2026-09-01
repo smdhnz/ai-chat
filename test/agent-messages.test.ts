@@ -316,6 +316,7 @@ describe("public transcript projection", () => {
       status: "failed",
       skills: [],
       activities: [
+        { type: "skill", name: "imagegen", status: "completed" },
         { type: "image_generation", status: "error" },
         {
           type: "tool",
