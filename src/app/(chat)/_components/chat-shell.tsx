@@ -610,8 +610,9 @@ export function ChatShell() {
               width={96}
               height={96}
               alt=""
-              className="m-auto size-24"
+              className="pointer-events-none m-auto size-24 [-webkit-touch-callout:none] [-webkit-user-drag:none]"
               loading="eager"
+              draggable={false}
               unoptimized
             />
           )}

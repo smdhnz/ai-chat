@@ -25,7 +25,6 @@ import {
   type PublicActivity,
 } from "@/lib/api";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
-import { ImageDialog } from "@/components/image-dialog";
 import { LoadingWave } from "@/components/loading-wave";
 
 export function MessageView({
@@ -342,21 +341,11 @@ export function AuthCard({ auth }: { auth: DeviceAuth }) {
   );
 }
 
-function ChatImage({
-  file,
-  priority,
-  open,
-}: {
-  file: FileItem;
-  priority: boolean;
-  open: () => void;
-}) {
+function ChatImage({ file, priority }: { file: FileItem; priority: boolean }) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <button
-      className={`shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border p-0 shadow-[0_24px_70px_#1a1a1e1f] dark:shadow-[0_28px_80px_#00000066] ${loaded ? "bg-transparent" : "min-h-24 min-w-32 animate-pulse bg-muted"}`}
-      onClick={open}
-      aria-label={`${file.name}を拡大表示`}
+    <div
+      className={`shrink-0 overflow-hidden rounded-[14px] border border-border shadow-[0_24px_70px_#1a1a1e1f] dark:shadow-[0_28px_80px_#00000066] ${loaded ? "bg-transparent" : "min-h-24 min-w-32 animate-pulse bg-muted"}`}
       aria-busy={!loaded}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -369,7 +358,7 @@ function ChatImage({
         onLoad={() => setLoaded(true)}
         onError={() => setLoaded(true)}
       />
-    </button>
+    </div>
   );
 }
 
@@ -382,45 +371,29 @@ export function FileBlocks({
   alignEnd?: boolean;
   prioritizeImages: boolean;
 }) {
-  const [preview, setPreview] = useState<FileItem | null>(null);
-  const previewUrl = preview?.preview || (preview?.id ? `/files/${preview.id}` : "");
   return (
-    <>
-      <div
-        className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
-      >
-        <div className="flex w-max flex-nowrap items-start gap-[9px]">
-          {files.map((file) =>
-            file.mime.startsWith("image/") && (file.id || file.preview) ? (
-              <ChatImage
-                key={file.id || file.name}
-                file={file}
-                priority={prioritizeImages}
-                open={() => setPreview(file)}
-              />
-            ) : (
-              <a
-                key={file.id || file.name}
-                href={file.id ? `/files/${file.id}` : undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-auto shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-[9px] [&_svg]:size-4 [&_svg]:text-primary"
-              >
-                <File />
-                <span>{file.name}</span>
-              </a>
-            ),
-          )}
-        </div>
+    <div
+      className={`max-w-full overflow-x-auto overscroll-x-contain ${alignEnd ? "mb-2" : "mt-3"}`}
+    >
+      <div className="flex w-max flex-nowrap items-start gap-[9px]">
+        {files.map((file) =>
+          file.mime.startsWith("image/") && (file.id || file.preview) ? (
+            <ChatImage key={file.id || file.name} file={file} priority={prioritizeImages} />
+          ) : (
+            <a
+              key={file.id || file.name}
+              href={file.id ? `/files/${file.id}` : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-auto shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-[9px] [&_svg]:size-4 [&_svg]:text-primary"
+            >
+              <File />
+              <span>{file.name}</span>
+            </a>
+          ),
+        )}
       </div>
-      <ImageDialog
-        open={Boolean(preview)}
-        onOpenChange={(open) => !open && setPreview(null)}
-        src={previewUrl}
-        name={preview?.name ?? "image"}
-        downloadUrl={preview?.id ? `/files/${preview.id}?download=1` : previewUrl}
-      />
-    </>
+    </div>
   );
 }
 
