@@ -305,9 +305,11 @@ function StreamingContent({ content, finish }: { content: string; finish?: () =>
 
 const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-      {content}
-    </ReactMarkdown>
+    <div className="message-text">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 });
 

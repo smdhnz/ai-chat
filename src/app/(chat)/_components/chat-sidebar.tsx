@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ChevronRight, Plus, Settings, Trash2 } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
-import { ProjectIcon } from "@/components/project-icon";
 import { iconButtonClass } from "@/lib/ui";
 
 const rowButtonClass =
@@ -71,6 +71,7 @@ export function ChatSidebar({
   const [conversationLimit, setConversationLimit] = useState(10);
   const [projectLimits, setProjectLimits] = useState<Record<string, number>>({});
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     try {
@@ -138,7 +139,6 @@ export function ChatSidebar({
                         <ChevronRight
                           className={`size-[13px]! transition-transform ${projectOpen ? "rotate-90" : ""}`}
                         />
-                        <ProjectIcon className="size-[22px]" />
                         <span className="min-w-0 flex-1 truncate">{group.name}</span>
                       </button>
                       <button
@@ -150,36 +150,44 @@ export function ChatSidebar({
                         <Plus />
                       </button>
                     </div>
-                    {projectOpen && (
-                      <ul>
-                        {projectConversations.slice(0, limit).map((item) => (
-                          <ConversationRow
-                            key={item.id}
-                            item={item}
-                            active={item.id === conversationId}
-                            nested
-                            select={() => selectConversation(item)}
-                            remove={() => askDeleteConversation(item)}
-                          />
-                        ))}
-                        {projectConversations.length > limit && (
-                          <li className="pl-5">
-                            <button
-                              type="button"
-                              className="h-8 w-full px-[11px] text-left text-[11px] text-muted-foreground"
-                              onClick={() =>
-                                setProjectLimits((current) => ({
-                                  ...current,
-                                  [group.id]: limit + 5,
-                                }))
-                              }
-                            >
-                              もっと見る
-                            </button>
-                          </li>
-                        )}
-                      </ul>
-                    )}
+                    <AnimatePresence initial={false}>
+                      {projectOpen && (
+                        <motion.ul
+                          className="overflow-hidden"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
+                        >
+                          {projectConversations.slice(0, limit).map((item) => (
+                            <ConversationRow
+                              key={item.id}
+                              item={item}
+                              active={item.id === conversationId}
+                              nested
+                              select={() => selectConversation(item)}
+                              remove={() => askDeleteConversation(item)}
+                            />
+                          ))}
+                          {projectConversations.length > limit && (
+                            <li className="pl-5">
+                              <button
+                                type="button"
+                                className="h-8 w-full px-[11px] text-left text-[11px] text-muted-foreground"
+                                onClick={() =>
+                                  setProjectLimits((current) => ({
+                                    ...current,
+                                    [group.id]: limit + 5,
+                                  }))
+                                }
+                              >
+                                もっと見る
+                              </button>
+                            </li>
+                          )}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
                   </li>
                 );
               })}

@@ -88,12 +88,20 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  user-select: none;
 }
 
 button,
 input,
 textarea {
   font: inherit;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.message-text {
+  user-select: text;
 }
 
 button,

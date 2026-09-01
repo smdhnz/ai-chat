@@ -36,7 +36,6 @@ import { shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { NativeDialog } from "@/components/native-dialog";
 import { ImageDialog } from "@/components/image-dialog";
-import { ProjectIcon } from "@/components/project-icon";
 import { Editor } from "@/app/settings/_components/settings-editor";
 
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
@@ -404,7 +403,7 @@ function SettingsHome({
             <span className={settingLabelClass}>Thinking</span>
             <select
               id="response-thinking"
-              className={settingControlClass}
+              className={`${settingControlClass} [direction:rtl]`}
               value={thinking}
               onChange={(event) => saveThinking(event.target.value as ThinkingLevel)}
             >
@@ -466,7 +465,7 @@ function SettingsLink({
       className="flex min-h-[54px] w-full items-center gap-3 border-b border-border px-3.5 text-left last:border-b-0"
       onClick={onClick}
     >
-      <span className="flex size-8 items-center justify-center rounded-[8px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] text-primary-foreground [&_svg]:size-[17px]">
+      <span className="flex size-8 items-center justify-center text-primary [&_svg]:size-[17px]">
         <Icon />
       </span>
       <span className="flex-1 text-[14px]">{label}</span>
@@ -499,7 +498,7 @@ function SettingsDetail({
             {data.projects.map((item) => (
               <SettingsCard
                 key={item.id}
-                icon={<ProjectIcon />}
+                icon={<FolderKanban />}
                 title={item.name}
                 text={item.system_prompt || "カスタム指示なし"}
                 edit={() => edit({ type: "project", item })}
@@ -640,7 +639,7 @@ function SettingsCard({
 }) {
   return (
     <article className="flex min-h-[78px] items-center gap-3 border-b border-border p-3.5 last:border-b-0">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] text-primary-foreground [&_svg]:size-4">
+      <span className="flex size-9 shrink-0 items-center justify-center text-primary [&_svg]:size-4">
         {icon}
       </span>
       <button type="button" className="min-w-0 flex-1 text-left" onClick={edit}>

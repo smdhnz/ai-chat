@@ -34,7 +34,6 @@ import {
 } from "@/app/(chat)/_libs/chat";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
-import { ProjectIcon } from "@/components/project-icon";
 import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
 import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
@@ -580,8 +579,7 @@ export function ChatShell() {
             </div>
           )}
           {project && (
-            <div className="absolute left-1/2 flex h-10 min-w-0 max-w-[calc(100%-132px)] -translate-x-1/2 items-center gap-2 px-2 text-[13px] font-semibold">
-              <ProjectIcon className="size-[26px]" />
+            <div className="absolute left-1/2 flex h-10 min-w-0 max-w-[calc(100%-132px)] -translate-x-1/2 items-center px-2 text-[13px] font-semibold">
               <span className="truncate">{project.name}</span>
             </div>
           )}
@@ -605,7 +603,7 @@ export function ChatShell() {
             </button>
           )}
         </header>
-        <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-none">
+        <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-y-auto">
           {!conversationId && (
             <Image
               src="/favicon.svg?v=3"
