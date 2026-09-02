@@ -349,11 +349,7 @@ function SettingsHome({
         </form>
       </section>
       <section className="overflow-hidden rounded-[14px] bg-card">
-        <SettingsLink
-          icon={MessageSquareText}
-          label="標準チャット"
-          onClick={() => showTab("chat")}
-        />
+        <SettingsLink icon={MessageSquareText} label="一般" onClick={() => showTab("chat")} />
         <SettingsLink
           icon={FolderKanban}
           label="プロジェクト"
