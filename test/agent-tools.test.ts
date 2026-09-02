@@ -5,6 +5,7 @@ import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import sharp from "sharp";
 import {
   appendAgentMessage,
   appendLegacyMessage,
@@ -14,7 +15,11 @@ import {
 import { createAgentTools } from "../src/api/agent-tools";
 
 const directories: string[] = [];
-const png = Buffer.from("89504e470d0a1a0a", "hex");
+const png = await sharp({
+  create: { width: 32, height: 24, channels: 4, background: "#785028" },
+})
+  .png()
+  .toBuffer();
 
 afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true })));
@@ -362,9 +367,10 @@ describe("custom tool executor", () => {
       operation: "generation",
     });
     const generatedRow = db.$client
-      .query("SELECT path FROM files WHERE id='generated-file'")
+      .query("SELECT path, mime FROM files WHERE id='generated-file'")
       .get() as {
       path: string;
+      mime: string;
     };
     const stablePath = join(root, "generated.png");
     await rename(generatedRow.path, stablePath);
@@ -384,16 +390,16 @@ describe("custom tool executor", () => {
     expect(stored).toMatchObject({
       content: [
         { type: "text", text: "Image generated." },
-        { type: "imageRef", fileId: "generated-file", mimeType: "image/png" },
+        { type: "imageRef", fileId: "generated-file", mimeType: generatedRow.mime },
       ],
     });
     await expect(hydrateStoredEntry(db, entry, "user-1")).resolves.toMatchObject({
       role: "toolResult",
-      content: [{ type: "text" }, { type: "image", mimeType: "image/png" }],
+      content: [{ type: "text" }, { type: "image", mimeType: generatedRow.mime }],
     });
     await expect(hydrateStoredEntry(db, entry, "user-2")).resolves.toMatchObject({
       role: "toolResult",
-      content: [{ type: "text" }, { type: "image", mimeType: "image/png" }],
+      content: [{ type: "text" }, { type: "image", mimeType: generatedRow.mime }],
     });
   });
 });

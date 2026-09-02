@@ -202,30 +202,16 @@ export function ChatShell() {
 
   useEffect(() => {
     if (!conversationId || !messageListReady || readyConversationId === conversationId) return;
-    const list = messageListRef.current;
-    if (!list) return;
-    let active = true;
-    let frame = 0;
-    void Promise.all([...list.querySelectorAll("img")].map(waitForImage)).then(() => {
-      if (!active) return;
-      frame = requestAnimationFrame(() => {
-        const viewport = messageViewportRef.current;
-        if (viewport) {
-          followLatestRef.current = true;
-          viewport.scrollTop = viewport.scrollHeight;
-          setShowScrollToLatest(false);
-        }
-        frame = requestAnimationFrame(() => {
-          if (!active) return;
-          if (viewport) viewport.scrollTop = viewport.scrollHeight;
-          setReadyConversationId(conversationId);
-        });
-      });
+    const frame = requestAnimationFrame(() => {
+      const viewport = messageViewportRef.current;
+      if (viewport) {
+        followLatestRef.current = true;
+        viewport.scrollTop = viewport.scrollHeight;
+        setShowScrollToLatest(false);
+      }
+      setReadyConversationId(conversationId);
     });
-    return () => {
-      active = false;
-      cancelAnimationFrame(frame);
-    };
+    return () => cancelAnimationFrame(frame);
   }, [conversationId, messageListReady, readyConversationId]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -238,7 +224,6 @@ export function ChatShell() {
       const page = await api<MessagePage>(
         `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
       );
-      await preloadMessageImages(page.messages);
       if (openConversationRef.current !== currentConversationId) return;
       const viewport = messageViewportRef.current;
       if (viewport)
@@ -854,38 +839,6 @@ export function ChatShell() {
       </motion.main>
     </div>
   );
-}
-
-function preloadMessageImages(messages: readonly Message[]): Promise<void[]> {
-  return Promise.all(
-    messages.flatMap((message) =>
-      message.files
-        .filter((file) => file.mime.startsWith("image/") && (file.id || file.preview))
-        .map((file) => {
-          const image = new window.Image();
-          image.src = file.preview || `/files/${file.id}`;
-          return waitForImage(image);
-        }),
-    ),
-  );
-}
-
-function waitForImage(image: HTMLImageElement): Promise<void> {
-  if (image.complete) return image.decode().catch(() => undefined);
-  return new Promise((resolve) => {
-    image.addEventListener(
-      "load",
-      () =>
-        void image
-          .decode()
-          .catch(() => undefined)
-          .then(resolve),
-      {
-        once: true,
-      },
-    );
-    image.addEventListener("error", () => resolve(), { once: true });
-  });
 }
 
 function clearUnread<T extends { conversations: Conversation[] } | null>(value: T, id: string): T {

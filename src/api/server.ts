@@ -22,6 +22,7 @@ import {
 import { config, storedFilePath } from "./config";
 import { attachmentText } from "./attachments";
 import { cleanupExpired, db, id, now } from "./db";
+import { createImagePreview, imagePreviewPath, prepareImage } from "./images";
 import { MESSAGE_PAGE_SIZE, regenerationIndex } from "./messages";
 import {
   conversationAccess,
@@ -181,7 +182,12 @@ const server = Bun.serve<SocketData>({
         );
       const fileMatch = url.pathname.match(/^\/files\/([\w-]+)$/);
       if (fileMatch && request.method === "GET")
-        return serveUserFile(fileMatch[1], user.id, url.searchParams.has("download"));
+        return serveUserFile(
+          fileMatch[1],
+          user.id,
+          url.searchParams.has("download"),
+          url.searchParams.has("preview"),
+        );
       if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))
         return json({ error: "not found" }, 404);
       return webApp(request);
@@ -1150,10 +1156,20 @@ function deleteFileRecords(files: { id: string }[]): void {
 }
 
 async function removeFiles(files: { path: string }[]): Promise<void> {
-  await Promise.all(files.map((file) => unlink(storedFilePath(file.path)).catch(() => undefined)));
+  await Promise.all(
+    files.flatMap((file) => {
+      const path = storedFilePath(file.path);
+      return [path, imagePreviewPath(path)].map((target) => unlink(target).catch(() => undefined));
+    }),
+  );
 }
 
-async function serveUserFile(fileId: string, userId: string, download: boolean): Promise<Response> {
+async function serveUserFile(
+  fileId: string,
+  userId: string,
+  download: boolean,
+  preview: boolean,
+): Promise<Response> {
   if (!fileAccess(db, fileId, userId)) return json({ error: "not found" }, 404);
   const file = db
     .select({ name: filesTable.name, path: filesTable.path, mime: filesTable.mime })
@@ -1161,12 +1177,19 @@ async function serveUserFile(fileId: string, userId: string, download: boolean):
     .where(eq(filesTable.id, fileId))
     .get();
   if (!file) return json({ error: "not found" }, 404);
-  const path = storedFilePath(file.path);
-  if (!(await Bun.file(path).exists())) return json({ error: "not found" }, 404);
+  const originalPath = storedFilePath(file.path);
+  if (!(await Bun.file(originalPath).exists())) return json({ error: "not found" }, 404);
+  const path = preview ? imagePreviewPath(originalPath) : originalPath;
+  if (preview && !(await Bun.file(path).exists()))
+    await writeFile(
+      path,
+      await createImagePreview(Buffer.from(await Bun.file(originalPath).arrayBuffer()), file.mime),
+    );
   return new Response(Bun.file(path), {
     headers: {
-      "Content-Type": file.mime,
+      "Content-Type": preview ? "image/webp" : file.mime,
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      "Cache-Control": "private, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -1180,8 +1203,14 @@ async function saveUploads(entries: FormDataEntryValue[], userId: string): Promi
     total += entry.size;
     if (entry.size > config.maxUploadBytes || total > config.maxUploadBytes)
       throw new Error(`ファイルは合計${Math.floor(config.maxUploadBytes / 1024 / 1024)}MBまでです`);
-    const fileId = id(),
-      name = clean(basename(entry.name), 255) || "file";
+    const fileId = id();
+    const originalName = clean(basename(entry.name), 255) || "file";
+    const image = await prepareImage(Buffer.from(await entry.arrayBuffer()), entry.type);
+    const originalExtension = extname(originalName);
+    const name =
+      image.mime === entry.type
+        ? originalName
+        : `${originalExtension ? originalName.slice(0, -originalExtension.length) : originalName}${image.extension}`;
     const directory = join(
       config.dataDir,
       "users",
@@ -1190,14 +1219,17 @@ async function saveUploads(entries: FormDataEntryValue[], userId: string): Promi
       new Date().toISOString().slice(0, 10),
     );
     await mkdir(directory, { recursive: true });
-    const path = join(directory, `${fileId}${extname(name).slice(0, 12)}`);
-    await writeFile(path, Buffer.from(await entry.arrayBuffer()));
+    const path = join(directory, `${fileId}${image.extension}`);
+    await Promise.all([
+      writeFile(path, image.bytes),
+      writeFile(imagePreviewPath(path), image.preview),
+    ]);
     const file = {
       id: fileId,
       name,
       path,
-      mime: entry.type || "application/octet-stream",
-      size: entry.size,
+      mime: image.mime,
+      size: image.bytes.length,
       source: "upload",
       created_at: now(),
     };

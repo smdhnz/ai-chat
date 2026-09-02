@@ -15,6 +15,7 @@ import {
 import { availableSkill, type SkillSource } from "./builtin-skills/catalog";
 import { activeConversationState } from "./context";
 import { config, storedFilePath } from "./config";
+import { imagePreviewPath, prepareImage } from "./images";
 import { files } from "./schema";
 import { webSearch as defaultWebSearch } from "./web-search";
 
@@ -198,17 +199,20 @@ export function createAgentTools(
         if (detectImageMime(bytes) !== "image/png")
           throw new Error("Image generator returned invalid PNG data");
 
+        const image = await prepareImage(bytes, "image/png");
         const fileId = id();
         const createdAt = now();
-        const name = `generated-${createdAt.replace(/[:.]/g, "-")}.png`;
+        const name = `generated-${createdAt.replace(/[:.]/g, "-")}${image.extension}`;
         const directory = join(dataDir, "users", context.userId, "files", "generated");
-        const path = join(directory, `${fileId}.png`);
+        const path = join(directory, `${fileId}${image.extension}`);
+        const previewPath = imagePreviewPath(path);
         const temporary = `${path}.tmp`;
         let saved = false;
         try {
           await mkdir(directory, { recursive: true });
-          await writeFile(temporary, bytes, { signal: scopedSignal });
+          await writeFile(temporary, image.bytes, { signal: scopedSignal });
           await rename(temporary, path);
+          await writeFile(previewPath, image.preview, { signal: scopedSignal });
           if (scopedSignal.aborted) throw scopedSignal.reason;
           database
             .insert(files)
@@ -217,8 +221,8 @@ export function createAgentTools(
               user_id: context.userId,
               name,
               path,
-              mime: "image/png",
-              size: bytes.length,
+              mime: image.mime,
+              size: image.bytes.length,
               source: "generated",
               created_at: createdAt,
             })
@@ -229,15 +233,15 @@ export function createAgentTools(
           const file: PublicFile = {
             id: fileId,
             name,
-            mime: "image/png",
-            size: bytes.length,
+            mime: image.mime,
+            size: image.bytes.length,
             source: "generated",
             created_at: createdAt,
           };
           return {
             content: [
               { type: "text", text: inputs.length ? "Image edited." : "Image generated." },
-              { type: "image", mimeType: "image/png", data: bytes.toString("base64") },
+              { type: "image", mimeType: image.mime, data: image.bytes.toString("base64") },
             ],
             details: {
               file,
@@ -253,6 +257,7 @@ export function createAgentTools(
             await Promise.all([
               unlink(temporary).catch(() => undefined),
               unlink(path).catch(() => undefined),
+              unlink(previewPath).catch(() => undefined),
             ]);
           }
         }

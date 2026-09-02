@@ -351,20 +351,31 @@ function ChatImage({
   priority: boolean;
   open: () => void;
 }) {
+  const [loaded, setLoaded] = useState(Boolean(file.preview));
+  const source = file.preview || `/files/${file.id}`;
   return (
     <button
       type="button"
-      className="shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border bg-transparent p-0"
+      className="relative shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border bg-transparent p-0"
       aria-label={`${file.name}を表示`}
       onClick={open}
     >
+      {!file.preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover"
+          src={`/files/${file.id}?preview`}
+          alt=""
+        />
+      ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        className="block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover"
-        src={file.preview || `/files/${file.id}`}
+        className={`${file.preview ? "block" : "absolute inset-0 size-full"} rounded-[13px] object-cover transition-opacity duration-300 motion-reduce:transition-none ${loaded ? "opacity-100" : "opacity-0"}`}
+        src={source}
         alt=""
-        loading="eager"
+        loading="lazy"
         fetchPriority={priority ? "high" : "low"}
+        onLoad={() => setLoaded(true)}
       />
     </button>
   );
