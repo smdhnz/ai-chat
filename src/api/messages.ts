@@ -1,4 +1,4 @@
-export const MESSAGE_PAGE_SIZE = 50;
+export const MESSAGE_PAGE_SIZE = 15;
 
 export function regenerationIndex(
   messages: readonly { id: string; role: string }[],

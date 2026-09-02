@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { regenerationIndex } from "../src/api/messages";
+import { MESSAGE_PAGE_SIZE, regenerationIndex } from "../src/api/messages";
+
+test("履歴は15件ずつ取得する", () => {
+  expect(MESSAGE_PAGE_SIZE).toBe(15);
+});
 
 describe("regenerationIndex", () => {
   test("未指定時は最後のuser messageを再生成対象にする", () => {

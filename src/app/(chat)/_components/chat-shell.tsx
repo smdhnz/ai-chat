@@ -44,6 +44,7 @@ import {
 } from "@/app/(chat)/_libs/chat";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingScreen } from "@/components/loading-screen";
+import { LoadingWave } from "@/components/loading-wave";
 import { ChatSidebar } from "@/app/(chat)/_components/chat-sidebar";
 import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
@@ -87,6 +88,8 @@ export function ChatShell() {
   const shellRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const olderMessagesSentinelRef = useRef<HTMLDivElement>(null);
+  const loadingOlderMessagesRef = useRef(false);
   const followLatestRef = useRef(true);
   openConversationRef.current = conversationId;
 
@@ -207,6 +210,60 @@ export function ChatShell() {
       active = false;
     };
   }, [conversationId, messageListReady, readyConversationId]);
+
+  const loadOlderMessages = useCallback(async () => {
+    const oldest = messages[0];
+    const currentConversationId = conversationId;
+    if (!oldest || !currentConversationId || loadingOlderMessagesRef.current) return;
+    loadingOlderMessagesRef.current = true;
+    setLoadingOlderMessages(true);
+    const viewport = messageViewportRef.current;
+    const previousScrollHeight = viewport?.scrollHeight ?? 0;
+    const previousScrollTop = viewport?.scrollTop ?? 0;
+    try {
+      const page = await api<MessagePage>(
+        `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
+      );
+      await preloadMessageImages(page.messages);
+      if (openConversationRef.current !== currentConversationId) return;
+      setMessages((value) => [...page.messages, ...value]);
+      setHasOlderMessages(page.hasMore);
+      requestAnimationFrame(() => {
+        if (viewport)
+          viewport.scrollTop = previousScrollTop + viewport.scrollHeight - previousScrollHeight;
+      });
+    } finally {
+      loadingOlderMessagesRef.current = false;
+      setLoadingOlderMessages(false);
+    }
+  }, [conversationId, messages]);
+
+  useEffect(() => {
+    const root = messageViewportRef.current;
+    const sentinel = olderMessagesSentinelRef.current;
+    if (
+      !root ||
+      !sentinel ||
+      !hasOlderMessages ||
+      loadingOlderMessages ||
+      readyConversationId !== conversationId
+    )
+      return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void loadOlderMessages();
+      },
+      { root, rootMargin: "320px 0px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    conversationId,
+    hasOlderMessages,
+    loadOlderMessages,
+    loadingOlderMessages,
+    readyConversationId,
+  ]);
 
   useEffect(() => {
     if (sidebarDragging) return;
@@ -529,22 +586,6 @@ export function ChatShell() {
       setSending(false);
     }
   }
-  async function loadOlderMessages() {
-    const oldest = messages[0];
-    const currentConversationId = conversationId;
-    if (!oldest || !currentConversationId || loadingOlderMessages) return;
-    setLoadingOlderMessages(true);
-    try {
-      const page = await api<MessagePage>(
-        `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
-      );
-      if (openConversationRef.current !== currentConversationId) return;
-      setMessages((value) => [...page.messages, ...value]);
-      setHasOlderMessages(page.hasMore);
-    } finally {
-      setLoadingOlderMessages(false);
-    }
-  }
   async function stop() {
     if (!conversationId) return;
     try {
@@ -732,14 +773,15 @@ export function ChatShell() {
                 transition={{ duration: reduceMotion ? 0 : 0.2 }}
               >
                 {hasOlderMessages && (
-                  <button
-                    type="button"
-                    className="mx-auto mb-8 flex h-auto rounded-[10px] border border-border bg-card px-3.5 py-2 text-[11px] text-muted-foreground disabled:opacity-50"
-                    disabled={loadingOlderMessages}
-                    onClick={() => void loadOlderMessages()}
+                  <div
+                    ref={olderMessagesSentinelRef}
+                    className="mb-4 flex h-8 items-center justify-center"
+                    role="status"
                   >
-                    {loadingOlderMessages ? "読み込み中" : "以前のメッセージを表示"}
-                  </button>
+                    {loadingOlderMessages ? (
+                      <LoadingWave className="text-sm text-muted-foreground" label="読み込み中" />
+                    ) : null}
+                  </div>
                 )}
                 {displayedMessages.map((message) => (
                   <MessageView
@@ -795,6 +837,20 @@ export function ChatShell() {
         />
       </motion.main>
     </div>
+  );
+}
+
+function preloadMessageImages(messages: readonly Message[]): Promise<void[]> {
+  return Promise.all(
+    messages.flatMap((message) =>
+      message.files
+        .filter((file) => file.mime.startsWith("image/") && (file.id || file.preview))
+        .map((file) => {
+          const image = new window.Image();
+          image.src = file.preview || `/files/${file.id}`;
+          return waitForImage(image);
+        }),
+    ),
   );
 }
 
