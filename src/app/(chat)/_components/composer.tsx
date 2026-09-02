@@ -69,7 +69,7 @@ export function Composer(props: {
   return (
     <footer className="absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[var(--composer-bottom-padding,max(15px,env(safe-area-inset-bottom)))]">
       <form
-        className="liquid-glass-field relative mx-auto w-[calc(100%-80px)] overflow-hidden rounded-[25px] border border-white/20 transition-[width] has-[textarea:focus]:w-[calc(100%-34px)]"
+        className="liquid-glass-field relative mx-auto w-[calc(100%-80px)] overflow-hidden rounded-[25px] transition-[width] has-[textarea:focus]:w-[calc(100%-34px)]"
         onSubmit={props.send}
       >
         {props.temporary && (

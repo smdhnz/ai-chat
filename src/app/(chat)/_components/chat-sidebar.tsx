@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Settings, SquarePen, Trash2, UsersRound } from "lucide-react";
+import { Check, Settings, SquarePen, Trash2, UsersRound } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import { iconButtonClass } from "@/lib/ui";
 
@@ -103,14 +103,47 @@ export function ChatSidebar({
               unoptimized
             />
           </div>
-          <div className="flex h-8 shrink-0 items-center gap-1.5 px-6 text-[11px] font-semibold text-muted-foreground">
-            <span className="truncate">{project?.name ?? "最近のチャット"}</span>
-            {project?.shared ? (
-              <span className="inline-flex shrink-0 items-center gap-1 text-primary">
-                <UsersRound className="size-3" />
-                共有
-              </span>
-            ) : null}
+          <section className="shrink-0 px-3.5 pb-3" aria-labelledby="project-list-title">
+            <h2
+              id="project-list-title"
+              className="px-[11px] pb-1.5 text-[10px] font-semibold text-muted-foreground"
+            >
+              プロジェクト
+            </h2>
+            <div className="max-h-36 overflow-y-auto">
+              <button
+                type="button"
+                aria-pressed={!project}
+                className={`flex h-10 w-full items-center gap-2 rounded-[11px] px-[11px] text-left text-xs transition-colors ${!project ? "bg-sidebar-accent text-sidebar-foreground" : "text-muted-foreground"}`}
+                onClick={() => newChat("")}
+              >
+                <span className="min-w-0 flex-1 truncate">標準チャット</span>
+                {!project ? <Check className="size-3.5 shrink-0 text-primary" /> : null}
+              </button>
+              {data.projects.map((item) => (
+                <button
+                  type="button"
+                  aria-pressed={item.id === projectId}
+                  key={item.id}
+                  className={`flex h-10 w-full items-center gap-2 rounded-[11px] px-[11px] text-left text-xs transition-colors ${item.id === projectId ? "bg-sidebar-accent text-sidebar-foreground" : "text-muted-foreground"}`}
+                  onClick={() => newChat(item.id)}
+                >
+                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                  {item.shared ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[9px] text-primary">
+                      <UsersRound className="size-3" />
+                      共有
+                    </span>
+                  ) : null}
+                  {item.id === projectId ? (
+                    <Check className="size-3.5 shrink-0 text-primary" />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </section>
+          <div className="flex h-8 shrink-0 items-center px-6 text-[11px] font-semibold text-muted-foreground">
+            チャット
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto px-3.5" aria-label="チャット一覧">
             <ul className="flex flex-col">

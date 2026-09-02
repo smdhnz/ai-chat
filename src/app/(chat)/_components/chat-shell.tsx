@@ -12,7 +12,6 @@ import {
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  AnimatePresence,
   animate,
   motion,
   useMotionValue,
@@ -20,7 +19,7 @@ import {
   useTransform,
   type PanInfo,
 } from "motion/react";
-import { ArrowDown, Check, ChevronDown, Menu, SquarePen, UsersRound } from "lucide-react";
+import { ArrowDown, Menu, SquarePen } from "lucide-react";
 import {
   api,
   getBootstrap,
@@ -85,7 +84,6 @@ export function ChatShell() {
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   const shellRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
@@ -95,13 +93,6 @@ export function ChatShell() {
   const prependScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const followLatestRef = useRef(true);
   openConversationRef.current = conversationId;
-
-  useEffect(() => {
-    if (!projectPickerOpen) return;
-    const close = (event: KeyboardEvent) => event.key === "Escape" && setProjectPickerOpen(false);
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [projectPickerOpen]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -509,7 +500,6 @@ export function ChatShell() {
     setTemporary(isTemporary);
     setMessages([]);
     router.replace(chatUrl("/", isTemporary, targetProjectId));
-    setProjectPickerOpen(false);
     setMobileSidebar(false);
   }
   async function removeConversation(item: Conversation) {
@@ -720,23 +710,12 @@ export function ChatShell() {
             onClick={() => setMobileSidebar(false)}
           />
         )}
-        {projectPickerOpen ? (
-          <button
-            type="button"
-            className="absolute inset-0 z-[9]"
-            aria-label="プロジェクト選択を閉じる"
-            onClick={() => setProjectPickerOpen(false)}
-          />
-        ) : null}
         <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-[18px] pt-2.5">
           <button
             type="button"
             className={`${iconButtonClass} inline-flex items-center justify-center`}
             aria-label="サイドバーを開閉"
-            onClick={() => {
-              setProjectPickerOpen(false);
-              setMobileSidebar(true);
-            }}
+            onClick={() => setMobileSidebar(true)}
           >
             <Menu />
           </button>
@@ -748,78 +727,9 @@ export function ChatShell() {
               再接続中
             </div>
           )}
-          <div className="absolute left-1/2 min-w-0 max-w-[calc(100%-132px)] -translate-x-1/2">
-            <button
-              type="button"
-              className="liquid-glass liquid-glass-control flex h-11 min-w-0 max-w-full items-center gap-1.5 rounded-full px-3.5 text-[12px] font-semibold"
-              aria-label={
-                project
-                  ? `現在のプロジェクトは${project.name}。プロジェクトを変更`
-                  : "プロジェクトを選択"
-              }
-              aria-expanded={projectPickerOpen}
-              aria-controls="project-selector"
-              onClick={() => setProjectPickerOpen((open) => !open)}
-            >
-              <span className="truncate">{project?.name ?? "プロジェクト選択"}</span>
-              {project?.shared ? (
-                <UsersRound className="size-3.5 shrink-0 text-primary" aria-label="共有中" />
-              ) : null}
-              <ChevronDown
-                className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${projectPickerOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-            <AnimatePresence>
-              {projectPickerOpen ? (
-                <motion.div
-                  id="project-selector"
-                  role="menu"
-                  aria-label="プロジェクトを選択"
-                  className="liquid-glass absolute top-[52px] left-1/2 max-h-[min(52dvh,360px)] w-[min(76vw,320px)] origin-top -translate-x-1/2 overflow-y-auto rounded-[22px] p-1.5"
-                  initial={{ opacity: 0, y: -8, scaleY: 0.75 }}
-                  animate={{ opacity: 1, y: 0, scaleY: 1 }}
-                  exit={{ opacity: 0, y: -8, scaleY: 0.75 }}
-                  transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
-                >
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={!project}
-                    className="flex min-h-11 w-full items-center gap-3 rounded-[16px] px-3 text-left text-[12px] active:bg-muted"
-                    onClick={() => {
-                      setProjectPickerOpen(false);
-                      newChat("");
-                    }}
-                  >
-                    <span className="flex-1">使用しない</span>
-                    {!project && <Check className="size-4 text-primary" />}
-                  </button>
-                  {data.projects.map((item) => (
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={item.id === projectId}
-                      key={item.id}
-                      className="flex min-h-11 w-full items-center gap-2 rounded-[16px] px-3 text-left text-[12px] active:bg-muted"
-                      onClick={() => {
-                        setProjectPickerOpen(false);
-                        newChat(item.id);
-                      }}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                      {item.shared ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 text-[9px] text-primary">
-                          <UsersRound className="size-3" />
-                          共有
-                        </span>
-                      ) : null}
-                      {item.id === projectId && <Check className="size-4 shrink-0 text-primary" />}
-                    </button>
-                  ))}
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
-          </div>
+          <p className="absolute left-1/2 max-w-[calc(100%-132px)] -translate-x-1/2 truncate pt-3 text-[12px] font-semibold">
+            {project?.name ?? ""}
+          </p>
           <button
             type="button"
             className={`${iconButtonClass} ml-auto inline-flex items-center justify-center`}
