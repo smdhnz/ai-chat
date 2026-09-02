@@ -33,7 +33,7 @@ import {
   type Skill,
 } from "@/lib/api";
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
-import { shouldCompleteSwipe } from "@/lib/swipe";
+import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
@@ -180,6 +180,10 @@ export function SettingsShell({
                   drag={tab ? "x" : false}
                   dragControls={backDragControls}
                   dragListener={false}
+                  onPointerDownCapture={(event) => {
+                    if (tab && canStartSwipe(false, event.clientX, window.innerWidth))
+                      backDragControls.start(event);
+                  }}
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={{ left: 0, right: 1 }}
                   onDragEnd={(_, info: PanInfo) => {
@@ -191,13 +195,6 @@ export function SettingsShell({
                   }}
                   className="absolute inset-0 flex touch-pan-y flex-col bg-background"
                 >
-                  {tab && (
-                    <div
-                      className="absolute inset-y-0 left-0 z-20 w-[10vw] touch-none"
-                      aria-hidden="true"
-                      onPointerDown={(event) => backDragControls.start(event)}
-                    />
-                  )}
                   <header className={pageHeaderClass}>
                     {tab && (
                       <button
