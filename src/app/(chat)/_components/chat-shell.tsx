@@ -164,11 +164,11 @@ export function ChatShell() {
   const messageListReady =
     messages.length > 0 || Boolean(conversationId && streams[conversationId]);
   useLayoutEffect(() => {
+    followLatestRef.current = true;
+    setShowScrollToLatest(false);
     const viewport = messageViewportRef.current;
     const list = messageListRef.current;
     if (!viewport || !list) return;
-    followLatestRef.current = true;
-    setShowScrollToLatest(false);
     viewport.scrollTop = viewport.scrollHeight;
     const trackPosition = () => {
       followLatestRef.current = isNearChatBottom(
