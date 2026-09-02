@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `default_system_prompt` text DEFAULT '' NOT NULL;

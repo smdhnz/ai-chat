@@ -1,31 +1,28 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ChevronRight, Plus, Settings, Trash2, UsersRound } from "lucide-react";
+import { Settings, SquarePen, Trash2, UsersRound } from "lucide-react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import { iconButtonClass } from "@/lib/ui";
 
 const rowButtonClass =
   "flex h-[41px] min-w-0 flex-1 items-center gap-2.5 rounded-[11px] px-[11px] text-left text-xs text-muted-foreground transition duration-200 hover:text-foreground [&>svg]:size-[15px] [&>svg]:shrink-0";
-const openProjectsKey = "ai-chat:open-projects:v1";
 
 function ConversationRow({
   item,
   active,
-  nested = false,
   select,
   remove,
 }: {
   item: Conversation;
   active: boolean;
-  nested?: boolean;
   select: () => void;
   remove?: () => void;
 }) {
   return (
     <li
-      className={`flex items-center rounded-[11px] hover:bg-sidebar-accent ${nested ? "pl-5" : ""} ${active ? "bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-foreground" : ""}`}
+      className={`flex items-center rounded-[11px] hover:bg-sidebar-accent ${active ? "bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-foreground" : ""}`}
     >
       <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
         <span className="truncate">{item.title}</span>
@@ -56,6 +53,7 @@ export function ChatSidebar({
   onOpenChange,
   data,
   conversationId,
+  projectId,
   newChat,
   selectConversation,
   askDeleteConversation,
@@ -65,25 +63,13 @@ export function ChatSidebar({
   onOpenChange: (open: boolean) => void;
   data: Bootstrap;
   conversationId: string | null;
-  newChat: (projectId?: string) => void;
+  projectId: string;
+  newChat: (projectId: string, temporary?: boolean) => void;
   selectConversation: (item: Conversation) => void;
   askDeleteConversation: (item: Conversation) => void;
   openSettings: () => void;
 }) {
   const [conversationLimit, setConversationLimit] = useState(10);
-  const [projectLimits, setProjectLimits] = useState<Record<string, number>>({});
-  const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
-  const reduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(openProjectsKey) || "[]") as unknown;
-      if (Array.isArray(saved))
-        setOpenProjects(new Set(saved.filter((id): id is string => typeof id === "string")));
-    } catch {
-      localStorage.removeItem(openProjectsKey);
-    }
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -92,17 +78,12 @@ export function ChatSidebar({
     return () => window.removeEventListener("keydown", close);
   }, [open, onOpenChange]);
 
-  function setProjectOpen(id: string, projectOpen: boolean) {
-    setOpenProjects((current) => {
-      const next = new Set(current);
-      if (projectOpen) next.add(id);
-      else next.delete(id);
-      localStorage.setItem(openProjectsKey, JSON.stringify([...next]));
-      return next;
-    });
-  }
-
-  const conversations = data.conversations.filter((item) => !item.temporary && !item.project_id);
+  const project = data.projects.find((item) => item.id === projectId);
+  const conversations = data.conversations.filter(
+    (item) =>
+      !item.temporary && (projectId ? item.project_id === projectId : item.project_id === null),
+  );
+  const canDelete = project ? project.is_owner : true;
 
   return (
     <div
@@ -111,100 +92,35 @@ export function ChatSidebar({
     >
       <div className="size-full">
         <aside className="flex h-full w-[86vw] flex-col bg-sidebar text-sidebar-foreground">
-          <div className="shrink-0 px-3.5 pt-[18px] pb-3">
-            <button
-              type="button"
-              className="liquid-glass liquid-glass-control inline-flex h-11 w-full items-center justify-center gap-2 rounded-full text-xs font-semibold [&_svg]:size-4"
-              onClick={() => newChat()}
-            >
-              <Plus />
-              新規チャット
-            </button>
+          <div className="flex h-[92px] shrink-0 items-center justify-center">
+            <Image
+              src="/favicon.svg?v=3"
+              width={48}
+              height={48}
+              alt=""
+              className="pointer-events-none size-12 [-webkit-touch-callout:none] [-webkit-user-drag:none]"
+              draggable={false}
+              unoptimized
+            />
+          </div>
+          <div className="flex h-8 shrink-0 items-center gap-1.5 px-6 text-[11px] font-semibold text-muted-foreground">
+            <span className="truncate">{project?.name ?? "最近のチャット"}</span>
+            {project?.shared ? (
+              <span className="inline-flex shrink-0 items-center gap-1 text-primary">
+                <UsersRound className="size-3" />
+                共有
+              </span>
+            ) : null}
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto px-3.5" aria-label="チャット一覧">
             <ul className="flex flex-col">
-              {data.projects.map((group) => {
-                const projectConversations = data.conversations.filter(
-                  (item) => !item.temporary && item.project_id === group.id,
-                );
-                const limit = projectLimits[group.id] ?? 5;
-                const projectOpen = openProjects.has(group.id);
-                return (
-                  <li key={group.id} className="mb-[5px]">
-                    <div className="flex items-center rounded-[11px] hover:bg-sidebar-accent">
-                      <button
-                        type="button"
-                        className={`${rowButtonClass} h-[39px] px-2.5 font-semibold`}
-                        aria-expanded={projectOpen}
-                        onClick={() => setProjectOpen(group.id, !projectOpen)}
-                      >
-                        <ChevronRight
-                          className={`size-[13px]! transition-transform ${projectOpen ? "rotate-90" : ""}`}
-                        />
-                        <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                        {group.shared ? (
-                          <UsersRound className="size-2.5! text-primary" aria-label="共有中" />
-                        ) : null}
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-[11px] text-muted-foreground [&_svg]:size-3.5"
-                        aria-label={`${group.name}で新しいチャット`}
-                        onClick={() => newChat(group.id)}
-                      >
-                        <Plus />
-                      </button>
-                    </div>
-                    <AnimatePresence initial={false}>
-                      {projectOpen && (
-                        <motion.ul
-                          className="overflow-hidden"
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
-                        >
-                          {projectConversations.slice(0, limit).map((item) => (
-                            <ConversationRow
-                              key={item.id}
-                              item={item}
-                              active={item.id === conversationId}
-                              nested
-                              select={() => selectConversation(item)}
-                              remove={
-                                group.is_owner ? () => askDeleteConversation(item) : undefined
-                              }
-                            />
-                          ))}
-                          {projectConversations.length > limit && (
-                            <li className="pl-5">
-                              <button
-                                type="button"
-                                className="h-8 w-full px-[11px] text-left text-[11px] text-muted-foreground"
-                                onClick={() =>
-                                  setProjectLimits((current) => ({
-                                    ...current,
-                                    [group.id]: limit + 5,
-                                  }))
-                                }
-                              >
-                                もっと見る
-                              </button>
-                            </li>
-                          )}
-                        </motion.ul>
-                      )}
-                    </AnimatePresence>
-                  </li>
-                );
-              })}
               {conversations.slice(0, conversationLimit).map((item) => (
                 <ConversationRow
                   key={item.id}
                   item={item}
                   active={item.id === conversationId}
                   select={() => selectConversation(item)}
-                  remove={() => askDeleteConversation(item)}
+                  remove={canDelete ? () => askDeleteConversation(item) : undefined}
                 />
               ))}
               {conversations.length > conversationLimit && (
@@ -220,7 +136,15 @@ export function ChatSidebar({
               )}
             </ul>
           </nav>
-          <footer className="flex justify-start pt-2.5 pb-10 pl-10">
+          <footer className="flex justify-between px-10 pt-2.5 pb-10">
+            <button
+              type="button"
+              className={`${iconButtonClass} inline-flex items-center justify-center`}
+              aria-label={project ? `${project.name}で新しいチャット` : "新しいチャット"}
+              onClick={() => newChat(projectId)}
+            >
+              <SquarePen />
+            </button>
             <button
               type="button"
               className={`${iconButtonClass} inline-flex items-center justify-center`}

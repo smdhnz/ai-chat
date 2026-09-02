@@ -30,7 +30,9 @@ if (!hasMigration && tables.some((table) => existingTables.has(getTableName(tabl
         ({ name }) => name,
       ),
     );
-    const missing = Object.keys(getTableColumns(table)).filter((column) => !columns.has(column));
+    const missing = Object.keys(getTableColumns(table)).filter(
+      (column) => !columns.has(column) && !(name === "users" && column === "default_system_prompt"),
+    );
     if (missing.length) throw new Error(`database schema mismatch: ${name}.${missing.join(",")}`);
   }
 

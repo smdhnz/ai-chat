@@ -26,11 +26,14 @@ export function conversationAccess(database: Database, conversationId: string, u
       creator_id: conversations.user_id,
       project_id: conversations.project_id,
       generation_status: conversations.generation_status,
+      temporary: conversations.temporary,
     })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .get();
   if (!conversation) return null;
+  if (conversation.temporary === 1)
+    return conversation.creator_id === userId ? { ...conversation, isOwner: true } : null;
   if (!conversation.project_id)
     return conversation.creator_id === userId ? { ...conversation, isOwner: true } : null;
   const access = projectAccess(database, conversation.project_id, userId);
@@ -57,14 +60,18 @@ export function projectUserIds(database: Database, projectId: string): string[] 
 
 export function conversationUserIds(database: Database, conversationId: string): string[] {
   const conversation = database
-    .select({ user_id: conversations.user_id, project_id: conversations.project_id })
+    .select({
+      user_id: conversations.user_id,
+      project_id: conversations.project_id,
+      temporary: conversations.temporary,
+    })
     .from(conversations)
     .where(eq(conversations.id, conversationId))
     .get();
   if (!conversation) return [];
-  return conversation.project_id
-    ? projectUserIds(database, conversation.project_id)
-    : [conversation.user_id];
+  return conversation.temporary === 1 || !conversation.project_id
+    ? [conversation.user_id]
+    : projectUserIds(database, conversation.project_id);
 }
 
 export function setConversationRead(

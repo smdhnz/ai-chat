@@ -19,6 +19,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  MessageSquareText,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -349,6 +350,11 @@ function SettingsHome({
       </section>
       <section className="overflow-hidden rounded-[14px] bg-card">
         <SettingsLink
+          icon={MessageSquareText}
+          label="標準チャット"
+          onClick={() => showTab("chat")}
+        />
+        <SettingsLink
           icon={FolderKanban}
           label="プロジェクト"
           value={`${data.projects.length}`}
@@ -447,6 +453,14 @@ function SettingsDetail({
     }
   }
 
+  if (tab === "chat")
+    return (
+      <StandardChatSettings
+        value={data.user.default_system_prompt}
+        saved={() => refresh("保存しました")}
+      />
+    );
+
   if (tab === "projects")
     return (
       <DetailLayout
@@ -526,6 +540,59 @@ function SettingsDetail({
     );
 
   return <SettingsImages files={data.files} />;
+}
+
+function StandardChatSettings({
+  value,
+  saved,
+}: {
+  value: string;
+  saved: () => Promise<Bootstrap>;
+}) {
+  const [prompt, setPrompt] = useState(value);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <DetailLayout text="プロジェクトを使用しない通常・一時チャットに適用されます。">
+      <form
+        className="flex flex-col gap-4 rounded-[14px] bg-card p-3.5"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setSaving(true);
+          try {
+            await api("/api/settings", {
+              method: "PUT",
+              body: JSON.stringify({ defaultSystemPrompt: prompt }),
+            });
+            await saved();
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "保存できませんでした");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <label className="flex flex-col gap-2" htmlFor="default-system-prompt">
+          <span className="text-[12px] font-semibold">システムプロンプト</span>
+          <textarea
+            id="default-system-prompt"
+            className="min-h-[240px] resize-y rounded-[12px] border border-input bg-background px-3 py-2.5 text-base leading-relaxed outline-none focus:border-ring"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            maxLength={30000}
+            rows={14}
+          />
+        </label>
+        <button
+          type="submit"
+          className="inline-flex h-11 items-center justify-center self-end rounded-full bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-6 text-xs font-bold text-primary-foreground disabled:opacity-50"
+          disabled={saving}
+        >
+          {saving ? "保存中" : "保存"}
+        </button>
+      </form>
+    </DetailLayout>
+  );
 }
 
 function ProjectInvitations({

@@ -67,6 +67,7 @@ describe("database migration", () => {
     const path = join(directory, "chat.sqlite");
     const sqlite = new Database(path);
     sqlite.exec(`
+      ALTER TABLE users DROP COLUMN default_system_prompt;
       ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese';
       ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low';
       ALTER TABLE users ADD COLUMN model TEXT;

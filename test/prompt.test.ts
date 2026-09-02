@@ -6,6 +6,9 @@ import { BASE_SYSTEM_PROMPT, buildSystemPrompt } from "../src/api/prompt";
 function fixture() {
   const db = createDatabase(new SQLiteDatabase(":memory:"));
   db.$client.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY, default_system_prompt TEXT NOT NULL
+    );
     CREATE TABLE projects (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, system_prompt TEXT NOT NULL);
     CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT);
     CREATE TABLE skills (
@@ -20,10 +23,14 @@ function fixture() {
       id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, run_id TEXT, sequence INTEGER NOT NULL,
       kind TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
     );
+    INSERT INTO users VALUES('user-1','STANDARD INSTRUCTION'),('user-2','FOREIGN STANDARD');
     INSERT INTO projects VALUES('project-1','user-1','OWNER PROJECT INSTRUCTION');
     INSERT INTO projects VALUES('project-2','user-2','FOREIGN PROJECT INSTRUCTION');
+    INSERT INTO projects VALUES('project-3','user-1','');
     INSERT INTO conversations VALUES('conversation-1','user-1','project-1');
     INSERT INTO conversations VALUES('conversation-2','user-2','project-2');
+    INSERT INTO conversations VALUES('conversation-3','user-1',NULL);
+    INSERT INTO conversations VALUES('conversation-4','user-1','project-3');
     INSERT INTO skills VALUES('own','user-1','own<skill','Own & useful','SECRET OWN INSTRUCTIONS',1,'2025-02');
     INSERT INTO skills VALUES('disabled','user-1','disabled','Hidden','SECRET DISABLED',0,'2025-03');
     INSERT INTO skills VALUES('foreign','user-2','foreign','Foreign','SECRET FOREIGN',1,'2025-04');
@@ -105,6 +112,18 @@ describe("system prompt assembly", () => {
       "web search result",
     ])
       expect(prompt).not.toContain(secret);
+  });
+
+  test("標準指示はプロジェクト未選択時だけ適用する", () => {
+    expect(buildSystemPrompt(fixture(), "conversation-3", "user-1")).toContain(
+      "<standard_chat_instructions>\nSTANDARD INSTRUCTION\n</standard_chat_instructions>",
+    );
+    expect(buildSystemPrompt(fixture(), "conversation-1", "user-1")).not.toContain(
+      "STANDARD INSTRUCTION",
+    );
+    expect(buildSystemPrompt(fixture(), "conversation-4", "user-1")).not.toContain(
+      "STANDARD INSTRUCTION",
+    );
   });
 
   test("回答言語をJapaneseに固定する", () => {

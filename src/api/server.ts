@@ -213,6 +213,7 @@ type User = {
   display_name: string;
   avatar: string | null;
   ctrl_enter_send: number;
+  default_system_prompt: string;
 };
 type UserSummary = Pick<User, "id" | "username" | "display_name" | "avatar">;
 type ProjectRow = {
@@ -251,7 +252,12 @@ function bootstrap(user: User): Response {
     .where(
       or(
         and(isNull(conversationsTable.project_id), eq(conversationsTable.user_id, user.id)),
-        projectIds.length ? inArray(conversationsTable.project_id, projectIds) : undefined,
+        projectIds.length
+          ? and(
+              inArray(conversationsTable.project_id, projectIds),
+              or(eq(conversationsTable.temporary, 0), eq(conversationsTable.user_id, user.id)),
+            )
+          : undefined,
       ),
     )
     .orderBy(desc(conversationsTable.updated_at))
@@ -393,9 +399,9 @@ async function createConversation(request: Request, user: User): Promise<Respons
   db.insert(conversationsTable)
     .values({ ...conversation, user_id: user.id })
     .run();
-  for (const memberId of project ? projectUserIds(db, project.id) : [user.id])
-    setConversationRead(db, conversation.id, memberId);
-  publishSync(project ? projectUserIds(db, project.id) : [user.id], conversation.id);
+  const recipients = conversationUserIds(db, conversation.id);
+  for (const memberId of recipients) setConversationRead(db, conversation.id, memberId);
+  publishSync(recipients, conversation.id);
   return json(conversation, 201);
 }
 
@@ -706,13 +712,22 @@ async function regenerate(request: Request, conversationId: string, user: User):
 
 async function saveSettings(request: Request, userId: string): Promise<Response> {
   verifyOrigin(request);
-  const body = (await request.json()) as { ctrlEnterSend?: boolean };
-  const ctrlEnterSend = body.ctrlEnterSend === true ? 1 : 0;
-  db.update(users)
-    .set({ ctrl_enter_send: ctrlEnterSend, updated_at: now() })
-    .where(eq(users.id, userId))
-    .run();
-  return json({ ctrl_enter_send: ctrlEnterSend });
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (
+    !body ||
+    (typeof body.ctrlEnterSend !== "boolean" && typeof body.defaultSystemPrompt !== "string") ||
+    (typeof body.defaultSystemPrompt === "string" && body.defaultSystemPrompt.length > 30_000)
+  )
+    return json({ error: "invalid settings" }, 400);
+  const updates: { ctrl_enter_send?: number; default_system_prompt?: string; updated_at: string } =
+    {
+      updated_at: now(),
+    };
+  if (typeof body.ctrlEnterSend === "boolean") updates.ctrl_enter_send = body.ctrlEnterSend ? 1 : 0;
+  if (typeof body.defaultSystemPrompt === "string")
+    updates.default_system_prompt = clean(body.defaultSystemPrompt, 30_000);
+  db.update(users).set(updates).where(eq(users.id, userId)).run();
+  return json(updates);
 }
 
 type SkillInput = {
@@ -1384,6 +1399,7 @@ function sessionUser(request: Request): User | null {
       display_name: users.display_name,
       avatar: users.avatar,
       ctrl_enter_send: users.ctrl_enter_send,
+      default_system_prompt: users.default_system_prompt,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.user_id))

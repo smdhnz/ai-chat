@@ -3,6 +3,7 @@ import { Database as SQLiteDatabase } from "bun:sqlite";
 import { createDatabase } from "../src/api/database";
 import {
   conversationAccess,
+  conversationUserIds,
   fileAccess,
   markConversationUnread,
   projectAccess,
@@ -22,7 +23,7 @@ function fixture() {
     );
     CREATE TABLE conversations (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), project_id TEXT,
-      generation_status TEXT NOT NULL
+      generation_status TEXT NOT NULL, temporary INTEGER NOT NULL
     );
     CREATE TABLE conversation_reads (
       conversation_id TEXT NOT NULL REFERENCES conversations(id), user_id TEXT NOT NULL REFERENCES users(id),
@@ -39,8 +40,9 @@ function fixture() {
     INSERT INTO users VALUES('owner'),('member'),('invited'),('other');
     INSERT INTO projects VALUES('project','owner');
     INSERT INTO project_members VALUES('project','member','2025-01-01');
-    INSERT INTO conversations VALUES('shared','member','project','idle');
-    INSERT INTO conversations VALUES('private','owner',NULL,'idle');
+    INSERT INTO conversations VALUES('shared','member','project','idle',0);
+    INSERT INTO conversations VALUES('temporary','member','project','idle',1);
+    INSERT INTO conversations VALUES('private','owner',NULL,'idle',0);
     INSERT INTO files VALUES('image','member','image.png','/tmp/image.png','image/png',1,'upload','2025-01-01');
     INSERT INTO conversation_entries VALUES(
       'entry','shared',NULL,1,'user_message',
@@ -61,6 +63,13 @@ describe("shared project access", () => {
     expect(conversationAccess(db, "shared", "other")).toBeNull();
     expect(conversationAccess(db, "private", "member")).toBeNull();
     expect(projectUserIds(db, "project")).toEqual(["owner", "member"]);
+  });
+
+  test("プロジェクトの一時conversationは作成者だけがアクセス・受信できる", () => {
+    const db = fixture();
+    expect(conversationAccess(db, "temporary", "member")).not.toBeNull();
+    expect(conversationAccess(db, "temporary", "owner")).toBeNull();
+    expect(conversationUserIds(db, "temporary")).toEqual(["member"]);
   });
 
   test("未読をユーザー別に更新し、conversation画像をmember間で共有する", () => {
