@@ -366,6 +366,7 @@ function ChatImage({
           className="block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover"
           src={`/files/${file.id}?preview`}
           alt=""
+          data-image-preview
         />
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}

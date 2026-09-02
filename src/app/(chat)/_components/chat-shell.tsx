@@ -202,16 +202,28 @@ export function ChatShell() {
 
   useEffect(() => {
     if (!conversationId || !messageListReady || readyConversationId === conversationId) return;
-    const frame = requestAnimationFrame(() => {
-      const viewport = messageViewportRef.current;
-      if (viewport) {
-        followLatestRef.current = true;
-        viewport.scrollTop = viewport.scrollHeight;
-        setShowScrollToLatest(false);
-      }
-      setReadyConversationId(conversationId);
+    const list = messageListRef.current;
+    if (!list) return;
+    let active = true;
+    let frame = 0;
+    void Promise.all(
+      [...list.querySelectorAll<HTMLImageElement>("img[data-image-preview]")].map(waitForImage),
+    ).then(() => {
+      if (!active) return;
+      frame = requestAnimationFrame(() => {
+        const viewport = messageViewportRef.current;
+        if (viewport) {
+          followLatestRef.current = true;
+          viewport.scrollTop = viewport.scrollHeight;
+          setShowScrollToLatest(false);
+        }
+        setReadyConversationId(conversationId);
+      });
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+    };
   }, [conversationId, messageListReady, readyConversationId]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -224,6 +236,7 @@ export function ChatShell() {
       const page = await api<MessagePage>(
         `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
       );
+      await preloadMessagePreviews(page.messages);
       if (openConversationRef.current !== currentConversationId) return;
       const viewport = messageViewportRef.current;
       if (viewport)
@@ -839,6 +852,28 @@ export function ChatShell() {
       </motion.main>
     </div>
   );
+}
+
+function preloadMessagePreviews(messages: readonly Message[]): Promise<void[]> {
+  return Promise.all(
+    messages.flatMap((message) =>
+      message.files
+        .filter((file) => file.mime.startsWith("image/") && file.id && !file.preview)
+        .map((file) => {
+          const image = new window.Image();
+          image.src = `/files/${file.id}?preview`;
+          return waitForImage(image);
+        }),
+    ),
+  );
+}
+
+function waitForImage(image: HTMLImageElement): Promise<void> {
+  if (image.complete) return Promise.resolve();
+  return new Promise((resolve) => {
+    image.addEventListener("load", () => resolve(), { once: true });
+    image.addEventListener("error", () => resolve(), { once: true });
+  });
 }
 
 function clearUnread<T extends { conversations: Conversation[] } | null>(value: T, id: string): T {
