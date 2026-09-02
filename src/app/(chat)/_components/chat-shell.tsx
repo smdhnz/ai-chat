@@ -19,7 +19,7 @@ import {
   useTransform,
   type PanInfo,
 } from "motion/react";
-import { ArrowDown, Menu, SquarePen } from "lucide-react";
+import { ArrowDown, Menu, MessageCircleDashed, SquarePen } from "lucide-react";
 import {
   api,
   getBootstrap,
@@ -730,14 +730,26 @@ export function ChatShell() {
           <p className="absolute left-1/2 max-w-[calc(100%-132px)] -translate-x-1/2 truncate pt-3 text-[12px] font-semibold">
             {project?.name ?? ""}
           </p>
-          <button
-            type="button"
-            className={`${iconButtonClass} ml-auto inline-flex items-center justify-center`}
-            onClick={() => newChat()}
-            aria-label={project ? `${project.name}で新しいチャット` : "新しいチャット"}
-          >
-            <SquarePen />
-          </button>
+          {conversationId ? (
+            <button
+              type="button"
+              className={`${iconButtonClass} ml-auto inline-flex items-center justify-center`}
+              onClick={() => newChat()}
+              aria-label={project ? `${project.name}で新しいチャット` : "新しいチャット"}
+            >
+              <SquarePen />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`${iconButtonClass} ml-auto inline-flex items-center justify-center ${temporary ? "bg-[color-mix(in_srgb,var(--primary)_12%,transparent)] text-primary" : ""}`}
+              onClick={() => newChat(projectId, !temporary)}
+              aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
+              aria-pressed={temporary}
+            >
+              <MessageCircleDashed />
+            </button>
+          )}
         </header>
         <div
           ref={messageViewportRef}
