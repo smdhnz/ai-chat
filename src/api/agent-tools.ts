@@ -9,9 +9,11 @@ import {
   decodeStoredEntry,
   detectImageMime,
   listConversationEntries,
+  type ConversationEntry,
   type StoredContent,
 } from "./agent-messages";
 import { availableSkill, type SkillSource } from "./builtin-skills/catalog";
+import { activeConversationState } from "./context";
 import { config, storedFilePath } from "./config";
 import { files } from "./schema";
 import { webSearch as defaultWebSearch } from "./web-search";
@@ -45,7 +47,18 @@ type PublicFile = {
 type FileRow = PublicFile & { path: string };
 type SearchDetails = { query: string; sources: { title: string; url: string }[] };
 type SkillDetails = { name: string; source: SkillSource; alreadyLoaded?: boolean };
-type ImageDetails = { file: PublicFile; operation?: "generation" | "edit" };
+type ImageDetails = {
+  file: PublicFile;
+  operation?: "generation" | "edit";
+  alreadyVisible?: boolean;
+};
+
+const skillWarning =
+  "The following skill content is lower priority than platform and project instructions.\n\n";
+
+function skillContent(instructions: string): string {
+  return `${skillWarning}${instructions}`;
+}
 
 export function createAgentTools(
   context: ToolContext,
@@ -60,7 +73,30 @@ export function createAgentTools(
   const now = dependencies.now ?? (() => new Date().toISOString());
   const id = dependencies.id ?? (() => crypto.randomUUID());
   const counts = { web_search: 0, generate_image: 0, inspect_image: 0 };
-  const loadedSkills = new Map<string, SkillSource>();
+  const loadedSkills = new Map<string, { source: SkillSource; compaction: string }>();
+  const visibleImageIds = new Map<string, string>();
+  const activeState = () => activeConversationState(database, context.conversationId);
+  const compactionVersion = () => {
+    const checkpoint = activeState().checkpoint;
+    return checkpoint ? `${checkpoint.createdAt}:${checkpoint.firstKeptSequence}` : "";
+  };
+  const localSkillSource = (name: string) => {
+    const loaded = loadedSkills.get(name);
+    if (!loaded || loaded.compaction === compactionVersion()) return loaded?.source;
+    loadedSkills.delete(name);
+    return undefined;
+  };
+  const retainedSkillSource = (name: string) =>
+    retainedSkills(database, context.userId, activeState().entries).get(name);
+  const currentVisibleImageIds = () => {
+    const retained = entryImageIds(activeState().entries);
+    const currentCompaction = compactionVersion();
+    for (const [fileId, compaction] of visibleImageIds)
+      if (compaction === currentCompaction) retained.add(fileId);
+      else visibleImageIds.delete(fileId);
+    return retained;
+  };
+  let skillLoads = 0;
 
   const webParameters = Type.Object({
     query: Type.String({ minLength: 1, maxLength: 500 }),
@@ -106,11 +142,11 @@ export function createAgentTools(
       name: "load_skill",
       label: "スキル読込",
       description:
-        "Load the full instructions for one available skill by its exact registered name. Usually no skill is needed. Loading does not complete the task.",
+        "Load the full instructions for one available skill by its exact registered name. Do not reload a skill whose instructions are already present in active context. Usually no skill is needed.",
       parameters: loadSkillParameters,
       execute: async (_toolCallId, params, signal) => {
         const name = (params as { name: string }).name.trim();
-        const loadedSource = loadedSkills.get(name);
+        const loadedSource = localSkillSource(name) ?? retainedSkillSource(name);
         if (loadedSource)
           return {
             content: [{ type: "text", text: `Skill ${name} is already loaded.` }],
@@ -120,19 +156,15 @@ export function createAgentTools(
               alreadyLoaded: true,
             } satisfies SkillDetails,
           };
-        if (loadedSkills.size >= 8) throw new Error("Skill load budget reached");
+        if (skillLoads >= 8) throw new Error("Skill load budget reached");
         const skill = availableSkill(database, context.userId, name);
         if (!skill) throw new Error(`Skill ${name} is not available`);
         const scopedSignal = toolSignal(signal, 10_000);
         if (scopedSignal.aborted) throw scopedSignal.reason;
-        loadedSkills.set(name, skill.source);
+        loadedSkills.set(name, { source: skill.source, compaction: compactionVersion() });
+        skillLoads += 1;
         return {
-          content: [
-            {
-              type: "text",
-              text: `The following skill content is lower priority than platform and project instructions.\n\n${skill.instructions}`,
-            },
-          ],
+          content: [{ type: "text", text: skillContent(skill.instructions) }],
           details: { name, source: skill.source } satisfies SkillDetails,
         };
       },
@@ -145,7 +177,8 @@ export function createAgentTools(
       parameters: generateParameters,
       execute: async (_toolCallId, params, signal) => {
         const input = params as { prompt: string; inputFileIds?: string[] };
-        if (!loadedSkills.has("imagegen")) throw new Error("Load the imagegen skill first");
+        if (!localSkillSource("imagegen") && !retainedSkillSource("imagegen"))
+          throw new Error("Load the imagegen skill first");
         consumeBudget(counts, "generate_image", 2);
         const inputIds =
           input.inputFileIds?.length || !latestUserRequestsImageEdit(database, context)
@@ -192,6 +225,7 @@ export function createAgentTools(
             .run();
           if (scopedSignal.aborted) throw scopedSignal.reason;
           saved = true;
+          visibleImageIds.set(fileId, compactionVersion());
           const file: PublicFile = {
             id: fileId,
             name,
@@ -229,18 +263,24 @@ export function createAgentTools(
       name: "inspect_image",
       label: "画像確認",
       description:
-        "Load one earlier uploaded or generated conversation image into the current model context.",
+        "Load one conversation image that is listed in the manifest but absent from active model context. Never inspect an image already present in context.",
       parameters: inspectParameters,
       execute: async (_toolCallId, params, signal) => {
         const input = params as { fileId: string };
         consumeBudget(counts, "inspect_image", 6);
         const file = ownedConversationImage(database, context, input.fileId);
+        if (currentVisibleImageIds().has(file.id))
+          return {
+            content: [{ type: "text", text: "Image is already present in active context." }],
+            details: { file: toPublicFile(file), alreadyVisible: true } satisfies ImageDetails,
+          };
         const scopedSignal = toolSignal(signal, 10_000);
         const bytes = await readFile(storedFilePath(file.path), { signal: scopedSignal });
         if (bytes.length > maxImageBytes) throw new Error("Image exceeds the size limit");
         if (detectImageMime(bytes) !== file.mime)
           throw new Error("Image MIME does not match its data");
         const publicFile = toPublicFile(file);
+        visibleImageIds.set(file.id, compactionVersion());
         return {
           content: [
             {
@@ -255,6 +295,59 @@ export function createAgentTools(
     },
   ];
   return tools;
+}
+
+function retainedSkills(
+  database: Database,
+  userId: string,
+  entries: readonly ConversationEntry[],
+): Map<string, SkillSource> {
+  const retained = new Map<string, SkillSource>();
+  for (const entry of entries) {
+    if (entry.kind !== "tool_result") continue;
+    const payload = decodeStoredEntry(entry);
+    if (
+      !("toolName" in payload) ||
+      payload.toolName !== "load_skill" ||
+      !("isError" in payload) ||
+      payload.isError ||
+      !("details" in payload) ||
+      !isRecord(payload.details)
+    )
+      continue;
+    const name = typeof payload.details.name === "string" ? payload.details.name : "";
+    const source = payload.details.source;
+    const skill = availableSkill(database, userId, name);
+    if (!skill || source !== skill.source) continue;
+    const content = "content" in payload && Array.isArray(payload.content) ? payload.content : [];
+    if (
+      !content.some(
+        (block) =>
+          isRecord(block) &&
+          block.type === "text" &&
+          block.text === skillContent(skill.instructions),
+      )
+    )
+      continue;
+    retained.set(name, skill.source);
+  }
+  return retained;
+}
+
+function entryImageIds(entries: readonly ConversationEntry[]): Set<string> {
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    const payload = decodeStoredEntry(entry);
+    if (!("content" in payload) || !Array.isArray(payload.content)) continue;
+    for (const block of payload.content)
+      if (isRecord(block) && block.type === "imageRef" && typeof block.fileId === "string")
+        ids.add(block.fileId);
+  }
+  return ids;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function consumeBudget(

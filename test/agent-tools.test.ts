@@ -133,17 +133,6 @@ describe("custom tool executor", () => {
       fileIds: ["other-conversation"],
       createdAt: "2025-01-01T00:00:00.000Z",
     });
-    const inspect = tool(
-      createAgentTools(
-        { userId: "user-1", conversationId: "conversation-1", runId: "run" },
-        { database: db },
-      ),
-      "inspect_image",
-    );
-    await expect(inspect.execute("inspect", { fileId: "other-conversation" })).rejects.toThrow(
-      "not associated",
-    );
-
     db.$client
       .query(
         "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -166,13 +155,79 @@ describe("custom tool executor", () => {
       fileIds: ["wrong-mime"],
       createdAt: "2025-01-01T00:00:01.000Z",
     });
+    db.$client
+      .query(
+        "INSERT INTO files(id,user_id,name,path,mime,size,source,created_at) VALUES(?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        "hidden-image",
+        "user-1",
+        "hidden.png",
+        path,
+        "image/png",
+        png.length,
+        "upload",
+        "2025-01-01T00:00:02.000Z",
+      );
+    appendLegacyMessage(db, {
+      id: "hidden-entry",
+      conversationId: "conversation-1",
+      role: "user",
+      content: "old image",
+      fileIds: ["hidden-image"],
+      createdAt: "2025-01-01T00:00:02.000Z",
+    });
+    const activeInspect = tool(
+      createAgentTools(
+        { userId: "user-1", conversationId: "conversation-1", runId: "run" },
+        { database: db },
+      ),
+      "inspect_image",
+    );
+    await expect(
+      activeInspect.execute("visible", { fileId: "hidden-image" }),
+    ).resolves.toMatchObject({
+      content: [{ type: "text", text: "Image is already present in active context." }],
+      details: { alreadyVisible: true },
+    });
+    db.$client
+      .query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)")
+      .run(
+        "checkpoint",
+        "conversation-1",
+        null,
+        4,
+        "compaction",
+        JSON.stringify({ summary: "old images", firstKeptSequence: 5 }),
+        "2025-01-01T00:00:03.000Z",
+      );
+    appendLegacyMessage(db, {
+      id: "latest-entry",
+      conversationId: "conversation-1",
+      role: "user",
+      content: "latest",
+      createdAt: "2025-01-01T00:00:04.000Z",
+    });
+    const inspect = tool(
+      createAgentTools(
+        { userId: "user-1", conversationId: "conversation-1", runId: "run" },
+        { database: db },
+      ),
+      "inspect_image",
+    );
+    await expect(inspect.execute("inspect", { fileId: "other-conversation" })).rejects.toThrow(
+      "not associated",
+    );
     await expect(inspect.execute("inspect", { fileId: "wrong-mime" })).rejects.toThrow(
       "MIME does not match",
     );
+    await expect(inspect.execute("inspect", { fileId: "hidden-image" })).resolves.toMatchObject({
+      content: [{ type: "text" }, { type: "image", mimeType: "image/png" }],
+    });
   });
 
-  test("load_skillは本人の有効スキルだけをrun内で読み込み、画像APIをgateする", async () => {
-    const { db } = await fixture();
+  test("load_skillは本人の有効スキルだけをactive context内で再利用し、画像APIをgateする", async () => {
+    const { db, root } = await fixture();
     db.$client.exec(`
       INSERT INTO skills VALUES('own','user-1','own-skill','', 'OWN SECRET',1,'2025','2025');
       INSERT INTO skills VALUES('disabled','user-1','disabled-skill','', 'DISABLED SECRET',0,'2025','2025');
@@ -210,9 +265,54 @@ describe("custom tool executor", () => {
     expect(await load.execute("own-again", { name: "own-skill" })).toMatchObject({
       details: { name: "own-skill", source: "user", alreadyLoaded: true },
     });
-    expect(await load.execute("builtin", { name: "imagegen" })).toMatchObject({
-      details: { name: "imagegen", source: "builtin" },
+    const builtin = await load.execute("builtin", { name: "imagegen" });
+    expect(builtin).toMatchObject({ details: { name: "imagegen", source: "builtin" } });
+    appendAgentMessage(db, "conversation-1", "run", {
+      role: "toolResult",
+      toolCallId: "builtin",
+      toolName: "load_skill",
+      content: builtin.content,
+      details: builtin.details,
+      isError: false,
+      timestamp: Date.now(),
     });
+    const retainedTools = createAgentTools(
+      { userId: "user-1", conversationId: "conversation-1", runId: "run" },
+      {
+        database: db,
+        dataDir: root,
+        generateImage: async () => png,
+        id: () => "retained-generated",
+      },
+    );
+    const retained = tool(retainedTools, "load_skill");
+    await expect(retained.execute("retained", { name: "imagegen" })).resolves.toMatchObject({
+      details: { name: "imagegen", source: "builtin", alreadyLoaded: true },
+    });
+    await expect(
+      tool(retainedTools, "generate_image").execute("retained-generate", { prompt: "image" }),
+    ).resolves.toMatchObject({ details: { file: { id: "retained-generated" } } });
+    db.$client
+      .query("INSERT INTO conversation_entries VALUES(?,?,?,?,?,?,?)")
+      .run(
+        "skill-checkpoint",
+        "conversation-1",
+        null,
+        4,
+        "compaction",
+        JSON.stringify({ summary: "loaded imagegen", firstKeptSequence: 5 }),
+        "2025-01-01T00:00:03.000Z",
+      );
+    appendLegacyMessage(db, {
+      id: "after-compaction",
+      conversationId: "conversation-1",
+      role: "user",
+      content: "generate again",
+      createdAt: "2025-01-01T00:00:04.000Z",
+    });
+    await expect(load.execute("after-compaction", { name: "imagegen" })).resolves.not.toMatchObject(
+      { details: { alreadyLoaded: true } },
+    );
 
     for (let index = 0; index < 9; index++)
       db.$client

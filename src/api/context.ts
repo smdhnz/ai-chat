@@ -100,6 +100,21 @@ export function findCompactionCut(
   return transcript[units[chosen].start].sequence;
 }
 
+export function activeConversationState(
+  database: Database,
+  conversationId: string,
+): { checkpoint: CompactionCheckpoint | null; entries: ConversationEntry[] } {
+  const allEntries = listConversationEntries(database, conversationId);
+  const checkpoint = latestCheckpoint(allEntries);
+  return {
+    checkpoint,
+    entries: allEntries.filter(
+      (entry) =>
+        isTranscriptEntry(entry) && (!checkpoint || entry.sequence >= checkpoint.firstKeptSequence),
+    ),
+  };
+}
+
 export async function hydrateActiveContext(
   database: Database,
   conversationId: string,
@@ -109,12 +124,7 @@ export async function hydrateActiveContext(
   checkpoint: CompactionCheckpoint | null;
   entries: ConversationEntry[];
 }> {
-  const allEntries = listConversationEntries(database, conversationId);
-  const checkpoint = latestCheckpoint(allEntries);
-  const entries = allEntries.filter(
-    (entry) =>
-      isTranscriptEntry(entry) && (!checkpoint || entry.sequence >= checkpoint.firstKeptSequence),
-  );
+  const { checkpoint, entries } = activeConversationState(database, conversationId);
   const messages = (
     await Promise.all(entries.map((entry) => hydrateStoredEntry(database, entry, userId)))
   ).filter((message): message is Message => message !== null);
