@@ -4,7 +4,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { UserMinus, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingWave } from "@/components/loading-wave";
-import { api, type Project, type Skill, type ThinkingLevel, type UserSummary } from "@/lib/api";
+import { api, type Project, type Skill, type UserSummary } from "@/lib/api";
 
 const fieldLabelClass = "text-[10px] font-bold text-muted-foreground";
 const controlClass =
@@ -13,18 +13,12 @@ const controlClass =
 export function Editor({
   item,
   users,
-  defaultLanguage,
-  defaultThinking,
-  thinkingLevels,
   saved,
   cancel,
   refresh,
 }: {
   item?: Project;
   users: UserSummary[];
-  defaultLanguage: string;
-  defaultThinking: ThinkingLevel;
-  thinkingLevels: ThinkingLevel[];
   saved: () => Promise<void>;
   cancel: () => void;
   refresh: () => Promise<Project | null>;
@@ -33,8 +27,6 @@ export function Editor({
   const [project, setProject] = useState(item);
   const [name, setName] = useState(item?.name || "");
   const [instructions, setInstructions] = useState(item?.system_prompt || "");
-  const [language, setLanguage] = useState(item?.language ?? defaultLanguage);
-  const [thinking, setThinking] = useState<ThinkingLevel>(item?.thinking_level || defaultThinking);
   const [saving, setSaving] = useState(false);
   const editable = !project || project.is_owner;
   const unavailable = new Set([
@@ -51,7 +43,7 @@ export function Editor({
     try {
       await api(`/api/projects${project ? `/${project.id}` : ""}`, {
         method: project ? "PUT" : "POST",
-        body: JSON.stringify({ name, systemPrompt: instructions, language, thinking }),
+        body: JSON.stringify({ name, systemPrompt: instructions }),
       });
       await saved();
     } finally {
@@ -86,34 +78,6 @@ export function Editor({
           required
           disabled={!editable}
         />
-      </label>
-      <label className="flex flex-col gap-[7px]" htmlFor={`${id}-language`}>
-        <span className={fieldLabelClass}>回答言語</span>
-        <input
-          id={`${id}-language`}
-          className={controlClass}
-          value={language}
-          onChange={(event) => setLanguage(event.target.value)}
-          maxLength={80}
-          placeholder="Japanese"
-          disabled={!editable}
-        />
-      </label>
-      <label className="flex flex-col gap-[7px]" htmlFor={`${id}-thinking`}>
-        <span className={fieldLabelClass}>Thinking</span>
-        <select
-          id={`${id}-thinking`}
-          className={controlClass}
-          value={thinking}
-          onChange={(event) => setThinking(event.target.value as ThinkingLevel)}
-          disabled={!editable}
-        >
-          {thinkingLevels.map((level) => (
-            <option key={level} value={level}>
-              {level === "auto" ? "Auto" : level === "xhigh" ? "XHigh" : capitalize(level)}
-            </option>
-          ))}
-        </select>
       </label>
       <label className="flex flex-col gap-[7px]" htmlFor={`${id}-instructions`}>
         <span className={fieldLabelClass}>システムプロンプト</span>
@@ -384,8 +348,4 @@ function MemberRow({
       {action}
     </div>
   );
-}
-
-function capitalize(value: string): string {
-  return value[0].toUpperCase() + value.slice(1);
 }

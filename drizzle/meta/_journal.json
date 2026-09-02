@@ -15,6 +15,13 @@
       "when": 1788279629216,
       "tag": "0001_tough_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788320787123,
+      "tag": "0002_aromatic_khan",
+      "breakpoints": true
     }
   ]
 }

@@ -44,12 +44,13 @@ export function ChatShell() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const temporaryParam = searchParams.get("temporary") === "1";
+  const projectParam = searchParams.get("project") || "";
   const [data, setData] = useBootstrap();
   const shellReady = data !== null;
   const [conversationId, setConversationId] = useState<string | null>(() =>
     conversationIdFromPath(pathname),
   );
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(projectParam);
   const [temporary, setTemporary] = useState(temporaryParam);
   const [messages, setMessages] = useState<Message[]>([]);
   const [streams, dispatchStream] = useReducer(reduceChatStreams, {});
@@ -276,12 +277,12 @@ export function ChatShell() {
   useEffect(() => {
     if (!conversationsLoaded) return;
     if (requestedConversationId && !resolvedConversationId) {
-      router.replace(chatUrl("/", temporaryParam));
+      router.replace(chatUrl("/", temporaryParam, projectParam));
       return;
     }
     if (!resolvedConversationId) {
       setConversationId(null);
-      setProjectId("");
+      setProjectId(projectParam);
       setMessages([]);
       setHasOlderMessages(false);
       setTemporary(temporaryParam);
@@ -306,6 +307,7 @@ export function ChatShell() {
     requestedProjectId,
     resolvedConversationId,
     temporaryParam,
+    projectParam,
     router,
     setData,
   ]);
@@ -357,7 +359,7 @@ export function ChatShell() {
     setConversationId(null);
     setProjectId(targetProjectId);
     setMessages([]);
-    router.replace(chatUrl("/", isTemporary));
+    router.replace(chatUrl("/", isTemporary, targetProjectId));
     setMobileSidebar(false);
   }
   function toggleTemporary() {

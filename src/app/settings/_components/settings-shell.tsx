@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   AnimatePresence,
   motion,
@@ -31,7 +31,6 @@ import {
   type Project,
   type ProjectInvitation,
   type Skill,
-  type ThinkingLevel,
 } from "@/lib/api";
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
 import { shouldCompleteSwipe } from "@/lib/swipe";
@@ -43,10 +42,6 @@ import { Editor, SkillEditor } from "@/app/settings/_components/settings-editor"
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
 type EditorState = { type: "project"; item?: Project } | { type: "skill"; item?: Skill };
 
-const settingFieldClass = "flex min-h-[58px] items-center justify-between gap-5 px-4";
-const settingLabelClass = "text-[13px] text-foreground";
-const settingControlClass =
-  "h-[36px] w-[55%] border-0 bg-transparent px-0 text-right text-[13px] text-muted-foreground outline-none focus-visible:text-foreground";
 const pageHeaderClass =
   "relative flex h-[58px] shrink-0 items-center justify-center border-b border-border px-3";
 
@@ -67,23 +62,9 @@ export function SettingsShell({
   const [tab, setTab] = useState<SettingsTab | null>(null);
   const [direction, setDirection] = useState(1);
   const [closing, setClosing] = useState(false);
-  const [language, setLanguage] = useState("");
-  const [ctrlEnterSend, setCtrlEnterSend] = useState(false);
-  const [thinking, setThinking] = useState<ThinkingLevel>("low");
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const settingsSaveTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const settingsSaveRevision = useRef(0);
-  const loaded = useRef(false);
-
-  useEffect(() => {
-    if (loaded.current) return;
-    loaded.current = true;
-    setLanguage(data.user.language);
-    setCtrlEnterSend(data.user.ctrl_enter_send === 1);
-    setThinking(data.user.thinking_level);
-  }, [data]);
 
   useEffect(() => {
     setClosing(false);
@@ -91,40 +72,6 @@ export function SettingsShell({
     setTab(null);
     setEditor(null);
   }, [open]);
-
-  function autoSaveSettings(
-    nextLanguage: string,
-    nextCtrlEnterSend: boolean,
-    nextThinking: ThinkingLevel,
-  ) {
-    const revision = ++settingsSaveRevision.current;
-    clearTimeout(settingsSaveTimeout.current);
-    settingsSaveTimeout.current = setTimeout(() => {
-      void api<{
-        language: string;
-        ctrl_enter_send: number;
-        thinking_level: ThinkingLevel;
-      }>("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({
-          language: nextLanguage,
-          ctrlEnterSend: nextCtrlEnterSend,
-          thinking: nextThinking,
-        }),
-      })
-        .then((saved) => {
-          if (revision !== settingsSaveRevision.current) return;
-          setLanguage(saved.language);
-          setCtrlEnterSend(saved.ctrl_enter_send === 1);
-          setThinking(saved.thinking_level);
-          toast.success("自動保存しました");
-        })
-        .catch((error: Error) => {
-          if (revision === settingsSaveRevision.current)
-            toast.error(`保存できませんでした: ${error.message}`);
-        });
-    }, 500);
-  }
 
   async function refresh(message?: string) {
     const fresh = await getBootstrap();
@@ -281,9 +228,6 @@ export function SettingsShell({
                           key={viewKey}
                           item={editor.item}
                           users={data.users}
-                          defaultLanguage={data.user.language}
-                          defaultThinking={data.user.thinking_level}
-                          thinkingLevels={data.supported_thinking_levels}
                           cancel={back}
                           refresh={async () => {
                             const fresh = await refresh();
@@ -331,16 +275,6 @@ export function SettingsShell({
                     ) : (
                       <SettingsHome
                         data={data}
-                        language={language}
-                        thinking={thinking}
-                        saveLanguage={(value) => {
-                          setLanguage(value);
-                          autoSaveSettings(value, ctrlEnterSend, thinking);
-                        }}
-                        saveThinking={(value) => {
-                          setThinking(value);
-                          autoSaveSettings(language, ctrlEnterSend, value);
-                        }}
                         showTab={showTab}
                         deleteData={() => {
                           setDeleteTarget({ type: "data", id: "", name: "すべてのデータ" });
@@ -383,18 +317,10 @@ export function SettingsShell({
 
 function SettingsHome({
   data,
-  language,
-  thinking,
-  saveLanguage,
-  saveThinking,
   showTab,
   deleteData,
 }: {
   data: Bootstrap;
-  language: string;
-  thinking: ThinkingLevel;
-  saveLanguage: (value: string) => void;
-  saveThinking: (value: ThinkingLevel) => void;
   showTab: (tab: SettingsTab) => void;
   deleteData: () => void;
 }) {
@@ -422,43 +348,6 @@ function SettingsHome({
             <LogOut />
           </button>
         </form>
-      </section>
-      <section>
-        <p className="mb-2 px-1 text-[11px] text-muted-foreground">回答</p>
-        <div className="overflow-hidden rounded-[14px] bg-card">
-          <label className={settingFieldClass} htmlFor="response-language">
-            <span className={settingLabelClass}>回答言語</span>
-            <input
-              className={settingControlClass}
-              id="response-language"
-              type="text"
-              value={language}
-              onChange={(event) => saveLanguage(event.target.value)}
-              maxLength={80}
-              placeholder="Japanese"
-            />
-          </label>
-          <div className="ml-4 border-t border-border" />
-          <label className={settingFieldClass} htmlFor="response-thinking">
-            <span className={settingLabelClass}>Thinking</span>
-            <select
-              id="response-thinking"
-              className={`${settingControlClass} w-auto!`}
-              value={thinking}
-              onChange={(event) => {
-                saveThinking(event.target.value as ThinkingLevel);
-                const select = event.currentTarget;
-                requestAnimationFrame(() => select.blur());
-              }}
-            >
-              {data.supported_thinking_levels.map((level) => (
-                <option key={level} value={level}>
-                  {level === "auto" ? "Auto" : level === "xhigh" ? "XHigh" : capitalize(level)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
       </section>
       <section className="overflow-hidden rounded-[14px] bg-card">
         <SettingsLink
@@ -563,7 +452,7 @@ function SettingsDetail({
   if (tab === "projects")
     return (
       <DetailLayout
-        text="共有メンバーとAIの回答設定を管理します。"
+        text="共有メンバーとAIの指示を管理します。"
         action="作成"
         onAction={() => edit({ type: "project" })}
       >
@@ -573,7 +462,7 @@ function SettingsDetail({
               <SettingsCard
                 key={item.id}
                 title={item.name}
-                text={`${item.language} · ${item.thinking_level}`}
+                text={item.system_prompt || "システムプロンプトなし"}
                 badge={item.is_owner ? (item.shared ? "共有中" : "オーナー") : "参加中"}
                 edit={() => edit({ type: "project", item })}
                 remove={
@@ -785,10 +674,6 @@ function DetailLayout({
 
 function EmptyText({ children }: { children: ReactNode }) {
   return <p className="py-12 text-center text-[12px] text-muted-foreground">{children}</p>;
-}
-
-function capitalize(value: string): string {
-  return value[0].toUpperCase() + value.slice(1);
 }
 
 function SkillToggle({

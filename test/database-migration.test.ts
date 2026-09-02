@@ -67,8 +67,12 @@ describe("database migration", () => {
     const path = join(directory, "chat.sqlite");
     const sqlite = new Database(path);
     sqlite.exec(`
+      ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese';
+      ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low';
       ALTER TABLE users ADD COLUMN model TEXT;
-      INSERT INTO users VALUES ('user','name','User',NULL,'Japanese',0,'low','2025','2025','old-model');
+      ALTER TABLE projects ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese';
+      ALTER TABLE projects ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low';
+      INSERT INTO users VALUES ('user','name','User',NULL,0,'2025','2025','Japanese','low','old-model');
       INSERT INTO conversations VALUES ('conversation','user',NULL,'Chat','',NULL,0,0,'idle',0,'2025','2025');
       INSERT INTO conversation_entries VALUES ('message','conversation',NULL,0,'user_message','{}','2025');
       INSERT INTO skills VALUES ('skill','user','existing','description','instructions',1,'2025','2025');
@@ -85,8 +89,19 @@ describe("database migration", () => {
       { id: "skill", name: "existing" },
     ]);
     expect(
-      migrated.query("SELECT name FROM pragma_table_info('users') WHERE name='model'").get(),
-    ).toBeNull();
+      migrated
+        .query(
+          "SELECT name FROM pragma_table_info('users') WHERE name IN ('language','thinking_level','model')",
+        )
+        .all(),
+    ).toEqual([]);
+    expect(
+      migrated
+        .query(
+          "SELECT name FROM pragma_table_info('projects') WHERE name IN ('language','thinking_level')",
+        )
+        .all(),
+    ).toEqual([]);
     expect(
       migrated.query("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'").get(),
     ).toBeNull();

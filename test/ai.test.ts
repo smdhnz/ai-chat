@@ -3,12 +3,9 @@ import type { Model } from "@earendil-works/pi-ai";
 import {
   DEFAULT_THINKING_LEVEL,
   isAuthenticationError,
-  resolveAiSettings,
   resolveRunThinking,
   resolveThinkingLevel,
 } from "../src/api/ai";
-import { config } from "../src/api/config";
-
 const model: Model<"openai-responses"> = {
   id: "fake",
   name: "Fake",
@@ -24,17 +21,12 @@ const model: Model<"openai-responses"> = {
 };
 
 describe("Codex設定", () => {
-  test("設定モデルを解決できる", () => {
-    expect(resolveAiSettings("auto").model).toBe(config.codexModel);
-  });
-
   test("未設定providerを認証エラーとして扱う", () => {
     expect(isAuthenticationError(new Error("Provider is not configured: openai-codex"))).toBe(true);
   });
 
-  test("設定値を拡張し、不正値だけ既定値へ戻す", () => {
-    expect(resolveAiSettings("max").thinking).toBe("max");
-    expect(resolveAiSettings("invalid").thinking).toBe(DEFAULT_THINKING_LEVEL);
+  test("thinkingの既定値はmedium", () => {
+    expect(DEFAULT_THINKING_LEVEL).toBe("medium");
   });
 
   test("unsupported levelを最も近い低いlevelへ解決する", () => {

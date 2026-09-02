@@ -3,14 +3,12 @@ import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import {
   classifyThinking,
+  DEFAULT_THINKING_LEVEL,
   generateImage,
   getChatModel,
-  resolveAiSettings,
   resolveRunThinking,
   streamChat,
   summarizeConversation,
-  supportedThinkingLevels,
-  type ThinkingLevel,
 } from "./ai";
 import { ConversationRunner, type ChatEventEnvelope } from "./agent";
 import { createAgentTools } from "./agent-tools";
@@ -208,9 +206,7 @@ type User = {
   username: string;
   display_name: string;
   avatar: string | null;
-  language: string;
   ctrl_enter_send: number;
-  thinking_level: ThinkingLevel;
 };
 type UserSummary = Pick<User, "id" | "username" | "display_name" | "avatar">;
 type ProjectRow = {
@@ -218,8 +214,6 @@ type ProjectRow = {
   user_id: string;
   name: string;
   system_prompt: string;
-  language: string;
-  thinking_level: string;
   shared: number;
   created_at: string;
   updated_at: string;
@@ -303,11 +297,8 @@ function bootstrap(user: User): Response {
       ...conversationIds.flatMap((conversationId) => allConversationFileIds(db, conversationId)),
     ]),
   ];
-  const settings = resolveAiSettings(user.thinking_level);
   return json({
-    user: { ...user, thinking_level: settings.thinking },
-    supported_thinking_levels: supportedThinkingLevels(chatModel),
-    model: { id: chatModel.id, supportedThinkingLevels: supportedThinkingLevels(chatModel) },
+    user,
     users: projectViews.some((project) => project.is_owner)
       ? db
           .select({
@@ -460,8 +451,6 @@ function projectView(projectId: string, userId: string) {
       user_id: projectsTable.user_id,
       name: projectsTable.name,
       system_prompt: projectsTable.system_prompt,
-      language: projectsTable.language,
-      thinking_level: projectsTable.thinking_level,
       shared: projectsTable.shared,
       created_at: projectsTable.created_at,
       updated_at: projectsTable.updated_at,
@@ -623,21 +612,13 @@ async function startGeneration(
   user: User,
   userEntryId: string,
 ): Promise<void> {
-  const projectSettings = db
-    .select({ language: projectsTable.language, thinking: projectsTable.thinking_level })
-    .from(conversationsTable)
-    .innerJoin(projectsTable, eq(projectsTable.id, conversationsTable.project_id))
-    .where(eq(conversationsTable.id, conversationId))
-    .get();
-  const settings = resolveAiSettings(projectSettings?.thinking ?? user.thinking_level);
-  const language = projectSettings?.language ?? user.language;
   const messages = listLegacyMessages(db, conversationId) as HistoryRow[];
   const latest = messages.at(-1);
   if (!latest || latest.id !== userEntryId || latest.role !== "user")
     throw new Error("latest user message not found");
   const needsTitle = messages.filter((message) => message.role === "user").length === 1;
   const thinking = await resolveRunThinking(
-    settings.thinking,
+    DEFAULT_THINKING_LEVEL,
     chatModel,
     () =>
       classifyThinking({
@@ -664,8 +645,8 @@ async function startGeneration(
     conversationId,
     userId: user.id,
     userEntryId,
-    systemPrompt: buildSystemPrompt(db, conversationId, user.id, language),
-    requestedThinking: settings.thinking,
+    systemPrompt: buildSystemPrompt(db, conversationId, user.id),
+    requestedThinking: DEFAULT_THINKING_LEVEL,
     resolvedThinking: thinking.resolved,
   });
 }
@@ -719,30 +700,13 @@ async function regenerate(request: Request, conversationId: string, user: User):
 
 async function saveSettings(request: Request, userId: string): Promise<Response> {
   verifyOrigin(request);
-  const body = (await request.json()) as {
-    language?: string;
-    ctrlEnterSend?: boolean;
-    thinking?: string;
-  };
-  const language = clean(body.language, 80);
+  const body = (await request.json()) as { ctrlEnterSend?: boolean };
   const ctrlEnterSend = body.ctrlEnterSend === true ? 1 : 0;
-  const thinking = clean(body.thinking, 20);
-  if (!["auto", "minimal", "low", "medium", "high", "xhigh", "max"].includes(thinking))
-    return json({ error: "invalid thinking level" }, 400);
   db.update(users)
-    .set({
-      language,
-      ctrl_enter_send: ctrlEnterSend,
-      thinking_level: thinking,
-      updated_at: now(),
-    })
+    .set({ ctrl_enter_send: ctrlEnterSend, updated_at: now() })
     .where(eq(users.id, userId))
     .run();
-  return json({
-    language,
-    ctrl_enter_send: ctrlEnterSend,
-    thinking_level: thinking,
-  });
+  return json({ ctrl_enter_send: ctrlEnterSend });
 }
 
 type SkillInput = {
@@ -862,12 +826,7 @@ async function saveProject(
   projectId: string = id(),
 ): Promise<Response> {
   verifyOrigin(request);
-  const body = (await request.json()) as {
-    name?: string;
-    systemPrompt?: string;
-    language?: string;
-    thinking?: string;
-  };
+  const body = (await request.json()) as { name?: string; systemPrompt?: string };
   const name = clean(body.name, 80);
   const prompt = clean(body.systemPrompt, 30_000);
   if (!name) return json({ error: "name is required" }, 400);
@@ -877,27 +836,12 @@ async function saveProject(
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
     .get();
   if (existing) {
-    const language = clean(body.language, 80);
-    const thinking = clean(body.thinking, 20);
-    if (!supportedThinkingLevels(chatModel).includes(thinking as ThinkingLevel))
-      return json({ error: "invalid thinking level" }, 400);
     db.update(projectsTable)
-      .set({
-        name,
-        system_prompt: prompt,
-        language,
-        thinking_level: thinking,
-        updated_at: now(),
-      })
+      .set({ name, system_prompt: prompt, updated_at: now() })
       .where(and(eq(projectsTable.id, projectId), eq(projectsTable.user_id, userId)))
       .run();
     publishSync(projectUserIds(db, projectId));
   } else {
-    const owner = db
-      .select({ thinking: users.thinking_level })
-      .from(users)
-      .where(eq(users.id, userId))
-      .get()!;
     const timestamp = now();
     db.insert(projectsTable)
       .values({
@@ -905,8 +849,6 @@ async function saveProject(
         user_id: userId,
         name,
         system_prompt: prompt,
-        language: clean(body.language, 80),
-        thinking_level: owner.thinking,
         created_at: timestamp,
         updated_at: timestamp,
       })
@@ -1409,9 +1351,7 @@ function sessionUser(request: Request): User | null {
       username: users.username,
       display_name: users.display_name,
       avatar: users.avatar,
-      language: users.language,
       ctrl_enter_send: users.ctrl_enter_send,
-      thinking_level: users.thinking_level,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.user_id))

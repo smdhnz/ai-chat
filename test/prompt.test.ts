@@ -78,7 +78,6 @@ describe("system prompt assembly", () => {
       fixture(),
       "conversation-1",
       "user-1",
-      "Japanese",
       new Date("2026-08-31T12:00:00Z"),
     );
     expect(prompt.startsWith(BASE_SYSTEM_PROMPT)).toBe(true);
@@ -108,14 +107,14 @@ describe("system prompt assembly", () => {
       expect(prompt).not.toContain(secret);
   });
 
-  test("回答言語が空ならJapaneseを使用する", () => {
-    expect(buildSystemPrompt(fixture(), "conversation-1", "user-1", "")).toContain(
+  test("回答言語をJapaneseに固定する", () => {
+    expect(buildSystemPrompt(fixture(), "conversation-1", "user-1")).toContain(
       "Preferred response language: Japanese",
     );
   });
 
   test("認可済みの共有conversationでは作成者に依存せずpromptを構築する", () => {
-    expect(buildSystemPrompt(fixture(), "conversation-2", "user-1", "Japanese")).toContain(
+    expect(buildSystemPrompt(fixture(), "conversation-2", "user-1")).toContain(
       "FOREIGN PROJECT INSTRUCTION",
     );
   });

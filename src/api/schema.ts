@@ -14,9 +14,7 @@ export const users = sqliteTable("users", {
   username: text().notNull(),
   display_name: text().notNull(),
   avatar: text(),
-  language: text().notNull().default("Japanese"),
   ctrl_enter_send: integer().notNull().default(0),
-  thinking_level: text().notNull().default("low"),
   created_at: text().notNull(),
   updated_at: text().notNull(),
 });
@@ -41,8 +39,6 @@ export const projects = sqliteTable("projects", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text().notNull(),
   system_prompt: text().notNull().default(""),
-  language: text().notNull().default("Japanese"),
-  thinking_level: text().notNull().default("low"),
   shared: integer().notNull().default(0),
   created_at: text().notNull(),
   updated_at: text().notNull(),

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  chatUrl,
   isChatEventEnvelope,
   reduceChatStreams,
   streamMessage,
@@ -21,6 +22,12 @@ function envelope(seq: number, event: ChatEvent, runId = "run-1"): ChatEventEnve
 function apply(state: ChatStreams, seq: number, event: ChatEvent, runId?: string) {
   return reduceChatStreams(state, { type: "event", envelope: envelope(seq, event, runId) });
 }
+
+test("新規チャットの状態をURLへ反映する", () => {
+  expect(chatUrl("/", false)).toBe("/");
+  expect(chatUrl("/", true)).toBe("/?temporary=1");
+  expect(chatUrl("/", false, "project-1")).toBe("/?project=project-1");
+});
 
 describe("chat stream reducer", () => {
   test("deltaだけを順に適用し、duplicate/out-of-order seqを無視する", () => {

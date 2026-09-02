@@ -20,10 +20,9 @@ import { COMPACTION_SYSTEM_PROMPT } from "./prompt";
 import { parseThinkingClassification } from "./thinking-classifier";
 
 export const AUTO_THINKING_MODEL = "gpt-5.6-luna";
-export const DEFAULT_THINKING_LEVEL = "low";
+export const DEFAULT_THINKING_LEVEL = "medium";
 export type ThinkingLevel = "auto" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ResolvedThinkingLevel = ModelThinkingLevel;
-export type AiSettings = { model: string; thinking: ThinkingLevel };
 export type ThinkingClassification = {
   thinking: Extract<ThinkingLevel, "minimal" | "low" | "medium" | "high">;
   title: string;
@@ -75,20 +74,6 @@ export function beginCodexReauthentication(): Promise<DeviceAuthInfo> {
     }, 15_000);
   });
   return activeLogin;
-}
-
-export function resolveAiSettings(thinking: string): AiSettings {
-  return {
-    model: getModel(config.codexModel).id,
-    thinking: isThinkingLevel(thinking) ? thinking : DEFAULT_THINKING_LEVEL,
-  };
-}
-
-export function supportedThinkingLevels(model: Model<Api>): ThinkingLevel[] {
-  const supported = new Set(getSupportedThinkingLevels(model));
-  return (["auto", "minimal", "low", "medium", "high", "xhigh", "max"] as const).filter(
-    (level) => level === "auto" || supported.has(level),
-  );
 }
 
 export function resolveThinkingLevel(
@@ -175,10 +160,6 @@ Set title to a concise 12-20 character title only when needsTitle is true; other
   if (!call || call.type !== "toolCall" || call.name !== "submit_classification")
     throw new Error("invalid thinking classification");
   return parseThinkingClassification(call.arguments, input.needsTitle);
-}
-
-function isThinkingLevel(value: string): value is ThinkingLevel {
-  return ["auto", "minimal", "low", "medium", "high", "xhigh", "max"].includes(value);
 }
 
 export async function summarizeConversation(payload: string, signal?: AbortSignal) {

@@ -11,7 +11,7 @@ Follow these platform instructions first. Then follow the project's instructions
 
 # Core behavior
 - Answer the user's actual request directly and naturally.
-- Use the user's language unless they request another language.
+- Respond in Japanese unless the user explicitly requests another language.
 - Be accurate, concise, and useful. Include detail when the task needs it, not by default.
 - Do not claim to have performed an action unless a tool result confirms it.
 - Do not promise future or background work. Complete the work in the current run or state what prevents completion.
@@ -108,7 +108,6 @@ export function buildSystemPrompt(
   database: Database,
   conversationId: string,
   userId: string,
-  language: string,
   date = new Date(),
 ): string {
   const conversation = database
@@ -155,7 +154,7 @@ export function buildSystemPrompt(
   const runtimeContext = [
     "# Runtime context",
     `Current date: ${date.toISOString().slice(0, 10)}`,
-    `Preferred response language: ${language || "Japanese"}`,
+    "Preferred response language: Japanese",
   ].join("\n");
 
   return [BASE_SYSTEM_PROMPT, runtimeContext, projectInstructions, skillCatalog, imageManifest]

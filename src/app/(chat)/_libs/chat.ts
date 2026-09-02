@@ -3,8 +3,13 @@ import type { ChatEventEnvelope, Message, PublicActivity, RunStatus } from "@/li
 export const conversationIdFromPath = (pathname: string): string | null =>
   pathname.match(/^\/chat\/([\w-]+)$/)?.[1] || null;
 
-export const chatUrl = (path: string, temporary: boolean) =>
-  `${path}${temporary ? "?temporary=1" : ""}`;
+export function chatUrl(path: string, temporary: boolean, projectId = ""): string {
+  const params = new URLSearchParams();
+  if (temporary) params.set("temporary", "1");
+  if (projectId) params.set("project", projectId);
+  const query = params.toString();
+  return `${path}${query ? `?${query}` : ""}`;
+}
 
 type StreamActivity = { key: string; value: PublicActivity };
 export type ChatStream = {

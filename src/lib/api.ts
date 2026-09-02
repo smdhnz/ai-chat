@@ -18,8 +18,6 @@ export type Project = {
   user_id: string;
   name: string;
   system_prompt: string;
-  language: string;
-  thinking_level: ThinkingLevel;
   owner: UserSummary;
   members: UserSummary[];
   pending_invitations: UserSummary[];
@@ -122,19 +120,14 @@ export function parseDeviceAuth(content: string): DeviceAuth | undefined {
   return { verificationUri: match[1], userCode: match[2], expiresInSeconds: 0 };
 }
 
-export type ThinkingLevel = "auto" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type Bootstrap = {
   user: {
     id: string;
     username: string;
     display_name: string;
     avatar: string | null;
-    language: string;
     ctrl_enter_send: number;
-    thinking_level: ThinkingLevel;
   };
-  supported_thinking_levels: ThinkingLevel[];
-  model: { id: string; supportedThinkingLevels: ThinkingLevel[] };
   users: UserSummary[];
   invitations: ProjectInvitation[];
   projects: Project[];
