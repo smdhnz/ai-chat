@@ -351,24 +351,20 @@ function ChatImage({
   priority: boolean;
   open: () => void;
 }) {
-  const [loaded, setLoaded] = useState(false);
   return (
     <button
       type="button"
-      className={`shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border p-0 ${loaded ? "bg-transparent" : "min-h-24 min-w-32 animate-pulse bg-muted"}`}
+      className="shrink-0 cursor-zoom-in overflow-hidden rounded-[14px] border border-border bg-transparent p-0"
       aria-label={`${file.name}を表示`}
-      aria-busy={!loaded}
       onClick={open}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        className={`block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
+        className="block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover"
         src={file.preview || `/files/${file.id}`}
         alt=""
-        loading={priority ? "eager" : "lazy"}
+        loading="eager"
         fetchPriority={priority ? "high" : "low"}
-        onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(true)}
       />
     </button>
   );

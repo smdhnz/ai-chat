@@ -77,6 +77,7 @@ export function ChatShell() {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [readyConversationId, setReadyConversationId] = useState<string | null>(null);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
@@ -186,6 +187,26 @@ export function ChatShell() {
       viewport.removeEventListener("scroll", trackPosition);
     };
   }, [conversationId, messageListReady]);
+
+  useEffect(() => {
+    if (!conversationId || !messageListReady || readyConversationId === conversationId) return;
+    const list = messageListRef.current;
+    if (!list) return;
+    let active = true;
+    void Promise.all([...list.querySelectorAll("img")].map(waitForImage)).then(() => {
+      if (!active) return;
+      const viewport = messageViewportRef.current;
+      if (viewport) {
+        followLatestRef.current = true;
+        viewport.scrollTop = viewport.scrollHeight;
+        setShowScrollToLatest(false);
+      }
+      setReadyConversationId(conversationId);
+    });
+    return () => {
+      active = false;
+    };
+  }, [conversationId, messageListReady, readyConversationId]);
 
   useEffect(() => {
     if (sidebarDragging) return;
@@ -325,6 +346,7 @@ export function ChatShell() {
       return;
     }
     if (!resolvedConversationId) {
+      setReadyConversationId(null);
       setConversationId(null);
       setProjectId(projectParam);
       setMessages([]);
@@ -392,12 +414,14 @@ export function ChatShell() {
   );
 
   function selectConversation(item: Conversation) {
+    setReadyConversationId(null);
     setEditingMessageId(null);
     setPrompt("");
     router.replace(chatUrl(`/chat/${item.id}`, item.temporary === 1));
     setMobileSidebar(false);
   }
   function newChat(targetProjectId = "", isTemporary = temporary) {
+    setReadyConversationId(null);
     setEditingMessageId(null);
     setPrompt("");
     setConversationId(null);
@@ -695,9 +719,10 @@ export function ChatShell() {
           {displayedMessages.length > 0 && (
             <div
               ref={messageListRef}
-              className="mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[86px] pb-[96px]"
+              className={`mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[86px] pb-[96px] ${readyConversationId === conversationId ? "" : "pointer-events-none opacity-0"}`}
               aria-live="polite"
               aria-busy={generating}
+              aria-hidden={readyConversationId === conversationId ? undefined : true}
             >
               <motion.div
                 key={conversationId}
@@ -771,6 +796,24 @@ export function ChatShell() {
       </motion.main>
     </div>
   );
+}
+
+function waitForImage(image: HTMLImageElement): Promise<void> {
+  if (image.complete) return image.decode().catch(() => undefined);
+  return new Promise((resolve) => {
+    image.addEventListener(
+      "load",
+      () =>
+        void image
+          .decode()
+          .catch(() => undefined)
+          .then(resolve),
+      {
+        once: true,
+      },
+    );
+    image.addEventListener("error", () => resolve(), { once: true });
+  });
 }
 
 function clearUnread<T extends { conversations: Conversation[] } | null>(value: T, id: string): T {
