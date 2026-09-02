@@ -678,7 +678,7 @@ export function ChatShell() {
         </header>
         <div
           ref={messageViewportRef}
-          className="flex min-h-0 flex-1 overflow-y-auto overscroll-y-auto"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-auto"
         >
           {!conversationId && (
             <Image
@@ -695,12 +695,13 @@ export function ChatShell() {
           {displayedMessages.length > 0 && (
             <div
               ref={messageListRef}
-              className="mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col justify-end pt-[86px] pb-[96px]"
+              className="mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[86px] pb-[96px]"
               aria-live="polite"
               aria-busy={generating}
             >
               <motion.div
                 key={conversationId}
+                className="mt-auto"
                 initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: reduceMotion ? 0 : 0.2 }}
