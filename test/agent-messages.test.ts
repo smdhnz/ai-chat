@@ -59,7 +59,7 @@ function database() {
 }
 
 describe("public transcript projection", () => {
-  test("同じrunのreasoning・tool・final textを1件へまとめてsecretを公開しない", () => {
+  test("同じrunを1件へまとめ、再生成時は最後の画像だけ公開してsecretを隠す", () => {
     const db = database();
     db.$client
       .query(
@@ -148,9 +148,52 @@ describe("public transcript projection", () => {
         },
       ],
       [
-        "assistant-final",
+        "assistant-image-retry",
         "run",
         5,
+        "assistant_message",
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "image-retry",
+              name: "generate_image",
+              arguments: { prompt: "SECRET_RETRY_PROMPT" },
+            },
+          ],
+          api: "openai-responses",
+          provider: "openai",
+          model: "fake",
+          usage: {
+            input: 2,
+            output: 1,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 3,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "toolUse",
+        },
+      ],
+      [
+        "image-retry-result",
+        "run",
+        6,
+        "tool_result",
+        {
+          role: "toolResult",
+          toolCallId: "image-retry",
+          toolName: "generate_image",
+          content: [{ type: "imageRef", fileId: "generated-2", mimeType: "image/png" }],
+          details: { operation: "generation" },
+          isError: false,
+        },
+      ],
+      [
+        "assistant-final",
+        "run",
+        7,
         "assistant_message",
         {
           role: "assistant",
@@ -189,7 +232,7 @@ describe("public transcript projection", () => {
       id: "assistant-tool",
       runId: "run",
       content: "確認します。\n\n完了しました。",
-      fileIds: ["generated"],
+      fileIds: ["generated-2"],
       status: "completed",
       activities: [
         { type: "reasoning", text: "検索が必要" },
@@ -200,10 +243,12 @@ describe("public transcript projection", () => {
           status: "completed",
         },
         { type: "image_generation", operation: "generation", status: "completed" },
+        { type: "image_generation", operation: "generation", status: "completed" },
       ],
     });
     expect(JSON.stringify(page)).not.toContain("SECRET_SIGNATURE");
     expect(JSON.stringify(page)).not.toContain("SECRET_IMAGE_PROMPT");
+    expect(JSON.stringify(page)).not.toContain("SECRET_RETRY_PROMPT");
     expect(JSON.stringify(page)).not.toContain("RAW PRIVATE RESULT");
   });
 

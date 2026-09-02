@@ -440,7 +440,10 @@ export function pagePublicMessages(
       continue;
     }
     const result = payload as ToolResultPayload;
-    group.fileIds.push(...imageRefs(result.content));
+    const resultFileIds = imageRefs(result.content);
+    if (result.toolName === "generate_image" && !result.isError && resultFileIds.length)
+      group.fileIds = resultFileIds;
+    else group.fileIds.push(...resultFileIds);
     const call = toolCalls.get(`${entry.run_id}:${result.toolCallId}`);
     if (call) {
       call.group.activities[call.activityIndex] = publicToolActivity(
