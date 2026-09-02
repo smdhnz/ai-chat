@@ -90,6 +90,7 @@ export function ChatShell() {
   const messageListRef = useRef<HTMLDivElement>(null);
   const olderMessagesSentinelRef = useRef<HTMLDivElement>(null);
   const loadingOlderMessagesRef = useRef(false);
+  const prependScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const followLatestRef = useRef(true);
   openConversationRef.current = conversationId;
 
@@ -191,23 +192,39 @@ export function ChatShell() {
     };
   }, [conversationId, messageListReady]);
 
+  useLayoutEffect(() => {
+    const pending = prependScrollRef.current;
+    const viewport = messageViewportRef.current;
+    if (!pending || !viewport) return;
+    viewport.scrollTop = pending.scrollTop + viewport.scrollHeight - pending.scrollHeight;
+    prependScrollRef.current = null;
+  }, [messages]);
+
   useEffect(() => {
     if (!conversationId || !messageListReady || readyConversationId === conversationId) return;
     const list = messageListRef.current;
     if (!list) return;
     let active = true;
+    let frame = 0;
     void Promise.all([...list.querySelectorAll("img")].map(waitForImage)).then(() => {
       if (!active) return;
-      const viewport = messageViewportRef.current;
-      if (viewport) {
-        followLatestRef.current = true;
-        viewport.scrollTop = viewport.scrollHeight;
-        setShowScrollToLatest(false);
-      }
-      setReadyConversationId(conversationId);
+      frame = requestAnimationFrame(() => {
+        const viewport = messageViewportRef.current;
+        if (viewport) {
+          followLatestRef.current = true;
+          viewport.scrollTop = viewport.scrollHeight;
+          setShowScrollToLatest(false);
+        }
+        frame = requestAnimationFrame(() => {
+          if (!active) return;
+          if (viewport) viewport.scrollTop = viewport.scrollHeight;
+          setReadyConversationId(conversationId);
+        });
+      });
     });
     return () => {
       active = false;
+      cancelAnimationFrame(frame);
     };
   }, [conversationId, messageListReady, readyConversationId]);
 
@@ -217,21 +234,20 @@ export function ChatShell() {
     if (!oldest || !currentConversationId || loadingOlderMessagesRef.current) return;
     loadingOlderMessagesRef.current = true;
     setLoadingOlderMessages(true);
-    const viewport = messageViewportRef.current;
-    const previousScrollHeight = viewport?.scrollHeight ?? 0;
-    const previousScrollTop = viewport?.scrollTop ?? 0;
     try {
       const page = await api<MessagePage>(
         `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
       );
       await preloadMessageImages(page.messages);
       if (openConversationRef.current !== currentConversationId) return;
+      const viewport = messageViewportRef.current;
+      if (viewport)
+        prependScrollRef.current = {
+          scrollHeight: viewport.scrollHeight,
+          scrollTop: viewport.scrollTop,
+        };
       setMessages((value) => [...page.messages, ...value]);
       setHasOlderMessages(page.hasMore);
-      requestAnimationFrame(() => {
-        if (viewport)
-          viewport.scrollTop = previousScrollTop + viewport.scrollHeight - previousScrollHeight;
-      });
     } finally {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
