@@ -72,7 +72,9 @@ export function MessageView({
               {!isUser && message.activities && message.activities.length > 0 && (
                 <ActivityPanel activities={message.activities} streaming={streaming} />
               )}
-              {streaming ? (
+              {isUser ? (
+                <div className="break-words whitespace-pre-wrap">{content}</div>
+              ) : streaming ? (
                 <StreamingContent content={content} finish={finishStreaming} />
               ) : (
                 <MarkdownContent content={content} />
