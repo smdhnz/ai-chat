@@ -192,7 +192,7 @@ export function SettingsShell({
                 >
                   {tab && (
                     <div
-                      className="absolute inset-y-0 left-0 z-20 w-5 touch-none"
+                      className="absolute inset-y-0 left-0 z-20 w-[10vw] touch-none"
                       aria-hidden="true"
                       onPointerDown={(event) => backDragControls.start(event)}
                     />
