@@ -179,6 +179,7 @@ export function SettingsShell({
                   transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.32, 0.72, 0, 1] }}
                   drag={tab ? "x" : false}
                   dragControls={backDragControls}
+                  dragListener={false}
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={{ left: 0, right: 1 }}
                   onDragEnd={(_, info: PanInfo) => {
