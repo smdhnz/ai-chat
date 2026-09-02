@@ -759,7 +759,7 @@ export function ChatShell() {
         </header>
         <div
           ref={messageViewportRef}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-auto [overflow-anchor:none]"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-auto"
         >
           {!conversationId && (
             <Image
@@ -776,12 +776,18 @@ export function ChatShell() {
           {displayedMessages.length > 0 && (
             <div
               ref={messageListRef}
-              className={`mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[86px] pb-[96px] ${readyConversationId === conversationId ? "" : "pointer-events-none opacity-0"}`}
+              className={`mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[86px] pb-[96px] ${readyConversationId === conversationId ? "" : "pointer-events-none"}`}
               aria-live="polite"
               aria-busy={generating}
               aria-hidden={readyConversationId === conversationId ? undefined : true}
             >
-              <div className="mt-auto">
+              <motion.div
+                key={conversationId}
+                className="mt-auto"
+                initial={false}
+                animate={{ opacity: readyConversationId === conversationId ? 1 : 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2 }}
+              >
                 {hasOlderMessages && (
                   <div
                     ref={olderMessagesSentinelRef}
@@ -810,7 +816,7 @@ export function ChatShell() {
                   />
                 ))}
                 {generating && waitingForResponse && <Thinking />}
-              </div>
+              </motion.div>
             </div>
           )}
         </div>
