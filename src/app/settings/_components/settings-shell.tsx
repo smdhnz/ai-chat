@@ -601,6 +601,24 @@ function ProjectInvitations({
   );
 }
 
+function SettingsThumbnail({ file }: { file: FileItem }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="size-full object-cover" src={`/files/${file.id}?preview`} alt="" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className={`absolute inset-0 size-full object-cover transition-all duration-300 motion-reduce:transition-none ${loaded ? "opacity-100 active:scale-[0.97]" : "opacity-0"}`}
+        src={`/files/${file.id}`}
+        alt=""
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+      />
+    </>
+  );
+}
+
 function SettingsImages({ files }: { files: FileItem[] }) {
   const [preview, setPreview] = useState<FileItem | null>(null);
 
@@ -612,18 +630,12 @@ function SettingsImages({ files }: { files: FileItem[] }) {
             {files.map((file) => (
               <button
                 type="button"
-                className="aspect-[4/3] min-w-0 cursor-zoom-in overflow-hidden rounded-[14px] bg-card p-0 shadow-[0_12px_30px_rgba(0,0,0,0.16)]"
+                className="relative aspect-[4/3] min-w-0 cursor-zoom-in overflow-hidden rounded-[14px] bg-card p-0 shadow-[0_12px_30px_rgba(0,0,0,0.16)]"
                 key={file.id}
                 aria-label={`${file.name}を表示`}
                 onClick={() => setPreview(file)}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  className="size-full object-cover transition-transform duration-300 active:scale-[0.97]"
-                  src={`/files/${file.id}`}
-                  alt=""
-                  loading="lazy"
-                />
+                <SettingsThumbnail file={file} />
               </button>
             ))}
           </div>
