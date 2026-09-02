@@ -781,13 +781,7 @@ export function ChatShell() {
               aria-busy={generating}
               aria-hidden={readyConversationId === conversationId ? undefined : true}
             >
-              <motion.div
-                key={conversationId}
-                className="mt-auto"
-                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: reduceMotion ? 0 : 0.2 }}
-              >
+              <div className="mt-auto">
                 {hasOlderMessages && (
                   <div
                     ref={olderMessagesSentinelRef}
@@ -816,7 +810,7 @@ export function ChatShell() {
                   />
                 ))}
                 {generating && waitingForResponse && <Thinking />}
-              </motion.div>
+              </div>
             </div>
           )}
         </div>
