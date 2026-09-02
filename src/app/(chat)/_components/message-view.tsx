@@ -74,7 +74,7 @@ export function MessageView({
                 <ActivityPanel activities={message.activities} streaming={streaming} />
               )}
               {isUser ? (
-                <div className="break-words whitespace-pre-wrap">{content}</div>
+                <div className="message-text break-words whitespace-pre-wrap">{content}</div>
               ) : streaming ? (
                 <StreamingContent content={content} finish={finishStreaming} />
               ) : (
