@@ -117,7 +117,7 @@ export function ChatSidebar({
                 className={`flex h-10 w-full items-center gap-2 rounded-[11px] px-[11px] text-left text-xs transition-colors ${!project ? "bg-sidebar-accent text-sidebar-foreground" : "text-muted-foreground"}`}
                 onClick={() => newChat("")}
               >
-                <span className="min-w-0 flex-1 truncate">標準チャット</span>
+                <span className="min-w-0 flex-1 truncate">プロジェクトなし</span>
                 {!project ? <Check className="size-3.5 shrink-0 text-primary" /> : null}
               </button>
               {data.projects.map((item) => (
