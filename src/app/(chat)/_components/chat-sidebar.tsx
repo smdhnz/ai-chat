@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Check, Settings, SquarePen, Trash2, UsersRound } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import { iconButtonClass } from "@/lib/ui";
 
@@ -64,12 +65,13 @@ export function ChatSidebar({
   data: Bootstrap;
   conversationId: string | null;
   projectId: string;
-  newChat: (projectId: string, temporary?: boolean) => void;
+  newChat: (projectId: string, temporary?: boolean, closeSidebar?: boolean) => void;
   selectConversation: (item: Conversation) => void;
   askDeleteConversation: (item: Conversation) => void;
   openSettings: () => void;
 }) {
   const [conversationLimit, setConversationLimit] = useState(10);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!open) return;
@@ -115,7 +117,7 @@ export function ChatSidebar({
                 type="button"
                 aria-pressed={!project}
                 className={`flex h-10 w-full items-center gap-2 rounded-[11px] px-[11px] text-left text-xs transition-colors ${!project ? "bg-sidebar-accent text-sidebar-foreground" : "text-muted-foreground"}`}
-                onClick={() => newChat("")}
+                onClick={() => newChat("", false, false)}
               >
                 <span className="min-w-0 flex-1 truncate">プロジェクトなし</span>
                 {!project ? <Check className="size-3.5 shrink-0 text-primary" /> : null}
@@ -126,7 +128,7 @@ export function ChatSidebar({
                   aria-pressed={item.id === projectId}
                   key={item.id}
                   className={`flex h-10 w-full items-center gap-2 rounded-[11px] px-[11px] text-left text-xs transition-colors ${item.id === projectId ? "bg-sidebar-accent text-sidebar-foreground" : "text-muted-foreground"}`}
-                  onClick={() => newChat(item.id)}
+                  onClick={() => newChat(item.id, false, false)}
                 >
                   <span className="min-w-0 flex-1 truncate">{item.name}</span>
                   {item.shared ? (
@@ -146,28 +148,37 @@ export function ChatSidebar({
             チャット
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto px-3.5" aria-label="チャット一覧">
-            <ul className="flex flex-col">
-              {conversations.slice(0, conversationLimit).map((item) => (
-                <ConversationRow
-                  key={item.id}
-                  item={item}
-                  active={item.id === conversationId}
-                  select={() => selectConversation(item)}
-                  remove={canDelete ? () => askDeleteConversation(item) : undefined}
-                />
-              ))}
-              {conversations.length > conversationLimit && (
-                <li>
-                  <button
-                    type="button"
-                    className="h-8 w-full px-[11px] text-left text-[11px] text-muted-foreground"
-                    onClick={() => setConversationLimit((current) => current + 10)}
-                  >
-                    もっと見る
-                  </button>
-                </li>
-              )}
-            </ul>
+            <AnimatePresence initial={false} mode="wait">
+              <motion.ul
+                key={projectId}
+                className="flex flex-col"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
+              >
+                {conversations.slice(0, conversationLimit).map((item) => (
+                  <ConversationRow
+                    key={item.id}
+                    item={item}
+                    active={item.id === conversationId}
+                    select={() => selectConversation(item)}
+                    remove={canDelete ? () => askDeleteConversation(item) : undefined}
+                  />
+                ))}
+                {conversations.length > conversationLimit && (
+                  <li>
+                    <button
+                      type="button"
+                      className="h-8 w-full px-[11px] text-left text-[11px] text-muted-foreground"
+                      onClick={() => setConversationLimit((current) => current + 10)}
+                    >
+                      もっと見る
+                    </button>
+                  </li>
+                )}
+              </motion.ul>
+            </AnimatePresence>
           </nav>
           <footer className="flex justify-between px-10 pt-2.5 pb-10">
             <button

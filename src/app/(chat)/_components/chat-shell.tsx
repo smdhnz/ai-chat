@@ -491,7 +491,7 @@ export function ChatShell() {
     router.replace(chatUrl(`/chat/${item.id}`, item.temporary === 1));
     setMobileSidebar(false);
   }
-  function newChat(targetProjectId = projectId, isTemporary = false) {
+  function newChat(targetProjectId = projectId, isTemporary = false, closeSidebar = true) {
     setReadyConversationId(null);
     setEditingMessageId(null);
     setPrompt("");
@@ -500,7 +500,7 @@ export function ChatShell() {
     setTemporary(isTemporary);
     setMessages([]);
     router.replace(chatUrl("/", isTemporary, targetProjectId));
-    setMobileSidebar(false);
+    if (closeSidebar) setMobileSidebar(false);
   }
   async function removeConversation(item: Conversation) {
     await api(`/api/conversations/${item.id}`, { method: "DELETE" });
