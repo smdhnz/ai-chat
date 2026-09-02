@@ -3,6 +3,30 @@ import type { ChatEventEnvelope, Message, PublicActivity, RunStatus } from "@/li
 export const conversationIdFromPath = (pathname: string): string | null =>
   pathname.match(/^\/chat\/([\w-]+)$/)?.[1] || null;
 
+export function chatBottomDistance(
+  scrollHeight: number,
+  clientHeight: number,
+  scrollTop: number,
+): number {
+  return scrollHeight - clientHeight - scrollTop;
+}
+
+export function isNearChatBottom(
+  scrollHeight: number,
+  clientHeight: number,
+  scrollTop: number,
+): boolean {
+  return chatBottomDistance(scrollHeight, clientHeight, scrollTop) <= 32;
+}
+
+export function isFarFromChatBottom(
+  scrollHeight: number,
+  clientHeight: number,
+  scrollTop: number,
+): boolean {
+  return chatBottomDistance(scrollHeight, clientHeight, scrollTop) > 160;
+}
+
 export function chatUrl(path: string, temporary: boolean, projectId = ""): string {
   const params = new URLSearchParams();
   if (temporary) params.set("temporary", "1");

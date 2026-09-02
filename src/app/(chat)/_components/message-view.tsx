@@ -52,6 +52,7 @@ export function MessageView({
   const isUser = message.role === "user";
   const collapsible = isUser && content.length > 1200;
   const [expanded, setExpanded] = useState(false);
+  const copy = useCopy();
   const streaming = message.id.startsWith("stream-");
   return (
     <article className={`mb-6 flex gap-2.5 ${isUser ? "justify-end" : ""}`}>
@@ -96,26 +97,40 @@ export function MessageView({
         {!isUser && message.files?.length > 0 && (
           <FileBlocks files={message.files} prioritizeImages={prioritizeImages} />
         )}
-        {isUser && (
-          <div className="mt-1 flex w-full justify-end gap-0.5">
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-foreground disabled:opacity-40 [&_svg]:size-3.5"
-              aria-label="このメッセージから再生成"
-              disabled={disabled}
-              onClick={regenerate}
-            >
-              <RotateCcw />
-            </button>
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-foreground disabled:opacity-40 [&_svg]:size-3.5"
-              aria-label="編集して再生成"
-              disabled={disabled}
-              onClick={edit}
-            >
-              <Pencil />
-            </button>
+        {(sourceContent || isUser) && (
+          <div className={`mt-1 flex w-full gap-0.5 ${isUser ? "justify-end" : "justify-start"}`}>
+            {sourceContent && (
+              <button
+                type="button"
+                className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-foreground [&_svg]:size-3.5"
+                aria-label="メッセージ全体をコピー"
+                onClick={() => copy.copy(sourceContent)}
+              >
+                {copy.copied ? <Check /> : <Copy />}
+              </button>
+            )}
+            {isUser && (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-foreground disabled:opacity-40 [&_svg]:size-3.5"
+                  aria-label="このメッセージから再生成"
+                  disabled={disabled}
+                  onClick={regenerate}
+                >
+                  <RotateCcw />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-muted active:text-foreground disabled:opacity-40 [&_svg]:size-3.5"
+                  aria-label="編集して再生成"
+                  disabled={disabled}
+                  onClick={edit}
+                >
+                  <Pencil />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

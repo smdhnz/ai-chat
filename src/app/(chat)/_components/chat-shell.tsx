@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -11,7 +19,7 @@ import {
   useTransform,
   type PanInfo,
 } from "motion/react";
-import { Menu, MessageCircleDashed, SquarePen } from "lucide-react";
+import { ArrowDown, Menu, MessageCircleDashed, SquarePen } from "lucide-react";
 import {
   api,
   getBootstrap,
@@ -29,6 +37,8 @@ import {
   chatUrl,
   conversationIdFromPath,
   isChatEventEnvelope,
+  isFarFromChatBottom,
+  isNearChatBottom,
   reduceChatStreams,
   streamMessage,
 } from "@/app/(chat)/_libs/chat";
@@ -67,13 +77,16 @@ export function ChatShell() {
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   const shellRef = useRef<HTMLDivElement>(null);
+  const messageViewportRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
   openConversationRef.current = conversationId;
 
   useEffect(() => {
@@ -142,6 +155,37 @@ export function ChatShell() {
       reset();
     };
   }, [reduceMotion, shellReady]);
+
+  const messageListReady =
+    messages.length > 0 || Boolean(conversationId && streams[conversationId]);
+  useLayoutEffect(() => {
+    const viewport = messageViewportRef.current;
+    const list = messageListRef.current;
+    if (!viewport || !list) return;
+    followLatestRef.current = true;
+    setShowScrollToLatest(false);
+    viewport.scrollTop = viewport.scrollHeight;
+    const trackPosition = () => {
+      followLatestRef.current = isNearChatBottom(
+        viewport.scrollHeight,
+        viewport.clientHeight,
+        viewport.scrollTop,
+      );
+      setShowScrollToLatest(
+        isFarFromChatBottom(viewport.scrollHeight, viewport.clientHeight, viewport.scrollTop),
+      );
+    };
+    const observer = new ResizeObserver(() => {
+      if (followLatestRef.current) viewport.scrollTop = viewport.scrollHeight;
+      trackPosition();
+    });
+    observer.observe(list);
+    viewport.addEventListener("scroll", trackPosition, { passive: true });
+    return () => {
+      observer.disconnect();
+      viewport.removeEventListener("scroll", trackPosition);
+    };
+  }, [conversationId, messageListReady]);
 
   useEffect(() => {
     if (sidebarDragging) return;
@@ -396,6 +440,7 @@ export function ChatShell() {
   async function send(event: FormEvent) {
     event.preventDefault();
     if ((!prompt.trim() && !files.length) || generating) return;
+    followLatestRef.current = true;
     setSending(true);
     let currentId = conversationId;
     try {
@@ -506,6 +551,7 @@ export function ChatShell() {
   }
   async function regenerate(messageId: string) {
     if (!conversationId) return;
+    followLatestRef.current = true;
     setEditingMessageId(null);
     setPrompt("");
     setSending(true);
@@ -630,7 +676,10 @@ export function ChatShell() {
             </button>
           )}
         </header>
-        <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-y-auto">
+        <div
+          ref={messageViewportRef}
+          className="flex min-h-0 flex-1 overflow-y-auto overscroll-y-auto"
+        >
           {!conversationId && (
             <Image
               src="/favicon.svg?v=3"
@@ -646,7 +695,7 @@ export function ChatShell() {
           {displayedMessages.length > 0 && (
             <div
               ref={messageListRef}
-              className="mx-auto w-[calc(100%-32px)] shrink-0 pt-[86px] pb-[96px]"
+              className="mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col justify-end pt-[86px] pb-[96px]"
               aria-live="polite"
               aria-busy={generating}
             >
@@ -687,6 +736,22 @@ export function ChatShell() {
             </div>
           )}
         </div>
+        {showScrollToLatest && (
+          <button
+            type="button"
+            className="liquid-glass liquid-glass-control absolute bottom-24 left-1/2 z-10 inline-flex size-10 -translate-x-1/2 items-center justify-center rounded-full text-muted-foreground [&_svg]:size-4"
+            aria-label="最新のメッセージへ移動"
+            onClick={() => {
+              const viewport = messageViewportRef.current;
+              if (!viewport) return;
+              followLatestRef.current = true;
+              viewport.scrollTop = viewport.scrollHeight;
+              setShowScrollToLatest(false);
+            }}
+          >
+            <ArrowDown />
+          </button>
+        )}
         <Composer
           prompt={prompt}
           setPrompt={setPrompt}

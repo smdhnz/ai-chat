@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   chatUrl,
   isChatEventEnvelope,
+  isFarFromChatBottom,
+  isNearChatBottom,
   reduceChatStreams,
   streamMessage,
   type ChatStreams,
@@ -27,6 +29,13 @@ test("新規チャットの状態をURLへ反映する", () => {
   expect(chatUrl("/", false)).toBe("/");
   expect(chatUrl("/", true)).toBe("/?temporary=1");
   expect(chatUrl("/", false, "project-1")).toBe("/?project=project-1");
+});
+
+test("末尾付近だけ生成内容へ追従し、離れた場合は移動ボタンを表示する", () => {
+  expect(isNearChatBottom(1_000, 600, 368)).toBe(true);
+  expect(isNearChatBottom(1_000, 600, 367)).toBe(false);
+  expect(isFarFromChatBottom(1_000, 600, 240)).toBe(false);
+  expect(isFarFromChatBottom(1_000, 600, 239)).toBe(true);
 });
 
 describe("chat stream reducer", () => {
