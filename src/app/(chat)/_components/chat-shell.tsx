@@ -759,7 +759,7 @@ export function ChatShell() {
         </header>
         <div
           ref={messageViewportRef}
-          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-auto"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-auto [overflow-anchor:none]"
         >
           {!conversationId && (
             <Image
