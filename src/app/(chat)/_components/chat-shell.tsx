@@ -57,7 +57,6 @@ export function ChatShell() {
   const temporaryParam = searchParams.get("temporary") === "1";
   const projectParam = searchParams.get("project") || "";
   const [data, setData] = useBootstrap();
-  const shellReady = data !== null;
   const [conversationId, setConversationId] = useState<string | null>(() =>
     conversationIdFromPath(pathname),
   );
@@ -85,7 +84,6 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
-  const shellRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const olderMessagesSentinelRef = useRef<HTMLDivElement>(null);
@@ -93,73 +91,6 @@ export function ChatShell() {
   const prependScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const followLatestRef = useRef(true);
   openConversationRef.current = conversationId;
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    const viewport = window.visualViewport;
-    if (!shell || !viewport) return;
-
-    let keyboardOpen = false;
-    let frame = 0;
-    let historyAnimation: Animation | undefined;
-    const isEditable = (element: Element | null) =>
-      (element instanceof HTMLTextAreaElement && !element.readOnly) ||
-      (element instanceof HTMLInputElement &&
-        !element.readOnly &&
-        !["button", "checkbox", "file", "hidden", "radio", "range", "reset", "submit"].includes(
-          element.type,
-        )) ||
-      (element instanceof HTMLElement && element.isContentEditable);
-    const reset = () => {
-      keyboardOpen = false;
-      shell.style.removeProperty("height");
-      shell.style.removeProperty("--composer-bottom-padding");
-    };
-    const update = () => {
-      if (viewport.scale !== 1) {
-        reset();
-        return;
-      }
-      const messageList = messageListRef.current;
-      const previousTop = messageList?.getBoundingClientRect().top;
-      historyAnimation?.cancel();
-
-      const focused = isEditable(document.activeElement);
-      const reduced = viewport.height < document.documentElement.clientHeight - 1;
-      keyboardOpen = reduced && (focused || keyboardOpen);
-      if (!focused && !keyboardOpen) reset();
-      else {
-        shell.style.height = `${viewport.height}px`;
-        if (keyboardOpen) shell.style.setProperty("--composer-bottom-padding", "15px");
-        else shell.style.removeProperty("--composer-bottom-padding");
-      }
-
-      if (reduceMotion || !messageList || previousTop === undefined) return;
-      const distance = previousTop - messageList.getBoundingClientRect().top;
-      if (Math.abs(distance) < 1) return;
-      historyAnimation = messageList.animate(
-        [{ transform: `translateY(${distance}px)` }, { transform: "translateY(0)" }],
-        { duration: 260, easing: "cubic-bezier(0.32, 0.72, 0, 1)" },
-      );
-    };
-    const updateAfterFocus = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
-    };
-
-    update();
-    viewport.addEventListener("resize", update);
-    document.addEventListener("focusin", updateAfterFocus);
-    document.addEventListener("focusout", updateAfterFocus);
-    return () => {
-      cancelAnimationFrame(frame);
-      historyAnimation?.cancel();
-      viewport.removeEventListener("resize", update);
-      document.removeEventListener("focusin", updateAfterFocus);
-      document.removeEventListener("focusout", updateAfterFocus);
-      reset();
-    };
-  }, [reduceMotion, shellReady]);
 
   const messageListReady =
     messages.length > 0 || Boolean(conversationId && streams[conversationId]);
@@ -648,10 +579,7 @@ export function ChatShell() {
   }
 
   return (
-    <div
-      ref={shellRef}
-      className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar"
-    >
+    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
       <ChatSidebar
         open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
@@ -700,7 +628,7 @@ export function ChatShell() {
         onPanStart={(_, info: PanInfo) => startSidebarSwipe(info)}
         onPan={(_, info: PanInfo) => moveSidebarSwipe(info)}
         onPanEnd={(_, info: PanInfo) => endSidebarSwipe(info)}
-        className="relative z-10 flex min-h-0 w-full shrink-0 touch-pan-y flex-col overflow-hidden bg-background"
+        className="relative z-10 grid min-h-0 w-full shrink-0 touch-pan-y grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-background"
       >
         {(mobileSidebar || sidebarDragging) && (
           <button
@@ -710,7 +638,7 @@ export function ChatShell() {
             onClick={() => setMobileSidebar(false)}
           />
         )}
-        <header className="absolute inset-x-0 top-0 z-10 flex h-[72px] items-start gap-2 px-[18px] pt-2.5">
+        <header className="relative z-10 flex h-[72px] shrink-0 items-start gap-2 px-[18px] pt-2.5">
           <button
             type="button"
             className={`${iconButtonClass} inline-flex items-center justify-center`}
@@ -770,7 +698,7 @@ export function ChatShell() {
           {displayedMessages.length > 0 && (
             <div
               ref={messageListRef}
-              className={`mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[86px] pb-[96px] ${readyConversationId === conversationId ? "" : "pointer-events-none"}`}
+              className={`mx-auto flex min-h-full w-[calc(100%-32px)] shrink-0 flex-col pt-[14px] pb-5 ${readyConversationId === conversationId ? "" : "pointer-events-none"}`}
               aria-live="polite"
               aria-busy={generating}
               aria-hidden={readyConversationId === conversationId ? undefined : true}

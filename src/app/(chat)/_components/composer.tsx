@@ -5,15 +5,6 @@ import { ArrowUp, Image, Pencil, Square, TimerReset, X } from "lucide-react";
 
 const isSupportedImage = (file: File) => /^image\/(png|jpeg|webp|gif)$/i.test(file.type);
 
-function focusWithoutViewportScroll(element: HTMLTextAreaElement) {
-  const transform = element.style.transform;
-  element.style.transform = "translateY(-2000px)";
-  element.focus({ preventScroll: true });
-  requestAnimationFrame(() => {
-    element.style.transform = transform;
-  });
-}
-
 function ImagePreview({ file, remove }: { file: File; remove: () => void }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
@@ -61,13 +52,13 @@ export function Composer(props: {
     element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
   }, [props.prompt]);
   useEffect(() => {
-    if (props.editing && textarea.current) focusWithoutViewportScroll(textarea.current);
+    if (props.editing) textarea.current?.focus({ preventScroll: true });
   }, [props.editing]);
   const sendButtonClass =
     "order-3 mr-2 mb-[7px] inline-flex size-[34px] items-center justify-center rounded-full bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_color-mix(in_srgb,#9f7ab8_30%,transparent)] transition duration-200 active:scale-95 disabled:pointer-events-none disabled:opacity-30 disabled:shadow-none";
 
   return (
-    <footer className="absolute inset-x-0 bottom-0 z-5 shrink-0 pb-[var(--composer-bottom-padding,max(15px,env(safe-area-inset-bottom)))]">
+    <footer className="relative z-5 shrink-0 pb-[max(15px,env(safe-area-inset-bottom))]">
       <form
         className="liquid-glass-field relative mx-auto w-[calc(100%-80px)] overflow-hidden rounded-[25px] transition-[width] has-[textarea:focus]:w-[calc(100%-34px)]"
         onSubmit={props.send}
@@ -109,11 +100,6 @@ export function Composer(props: {
             ref={textarea}
             className="order-2 block max-h-[180px] min-h-12 w-auto min-w-0 flex-1 resize-none rounded-none border-0 bg-transparent px-2 pt-[11px] pb-2 text-base leading-[1.6] outline-none placeholder:text-muted-foreground"
             value={props.prompt}
-            onTouchEnd={(event) => {
-              if (document.activeElement === event.currentTarget) return;
-              event.preventDefault();
-              focusWithoutViewportScroll(event.currentTarget);
-            }}
             onChange={(event) => props.setPrompt(event.target.value)}
             onPaste={(event) => {
               if (props.editing) return;
