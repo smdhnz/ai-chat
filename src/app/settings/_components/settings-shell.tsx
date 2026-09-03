@@ -31,6 +31,7 @@ import {
   type FileItem,
   type Project,
   type ProjectInvitation,
+  type RegistrySkill,
   type Skill,
 } from "@/lib/api";
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
@@ -39,11 +40,17 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
 import { Editor, SkillEditor, SkillManager } from "@/app/settings/_components/settings-editor";
+import {
+  installedRegistryIds,
+  SkillCatalog,
+  SkillCatalogDetail,
+} from "@/app/settings/_components/skill-catalog";
 
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
 type EditorState =
   { type: "project"; item?: Project } | { type: "skill"; item: Skill; projectId?: string };
 
+type CatalogState = { projectId?: string; skill?: RegistrySkill };
 const pageHeaderClass =
   "relative flex h-[58px] shrink-0 items-center justify-center border-b border-border px-3";
 
@@ -67,12 +74,18 @@ export function SettingsShell({
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogState | null>(null);
+  const [projectSkills, setProjectSkills] = useState<string | null>(null);
+  const [projectDraft, setProjectDraft] = useState<Project | null>(null);
 
   useEffect(() => {
     setClosing(false);
     if (open) return;
     setTab(null);
     setEditor(null);
+    setCatalog(null);
+    setProjectSkills(null);
+    setProjectDraft(null);
   }, [open]);
 
   async function refresh(message?: string) {
@@ -86,8 +99,16 @@ export function SettingsShell({
     await api(type === "data" ? "/api/data" : `/api/${type}/${objectId}`, {
       method: "DELETE",
     });
-    await refresh("削除しました");
-    if (type === "skills") setEditor(null);
+    const fresh = await refresh("削除しました");
+    if (type === "skills" && editor?.type === "skill")
+      setEditor(
+        editor.projectId
+          ? {
+              type: "project",
+              item: fresh.projects.find((project) => project.id === editor.projectId),
+            }
+          : null,
+      );
   }
 
   function close() {
@@ -104,30 +125,74 @@ export function SettingsShell({
     setEditor(next);
   }
 
+  function showCatalog(projectId?: string) {
+    setDirection(1);
+    setCatalog({ projectId });
+  }
+
+  function showProjectSkills(draft: Project) {
+    setDirection(1);
+    setProjectDraft(draft);
+    setProjectSkills(draft.id);
+  }
+
   function back() {
     setDirection(-1);
-    if (editor?.type === "skill" && editor.projectId) {
+    if (catalog?.skill) {
+      setCatalog({ projectId: catalog.projectId });
+      return;
+    }
+    if (catalog) {
+      setCatalog(null);
+      return;
+    }
+    if (projectSkills) {
+      const latest = data.projects.find((project) => project.id === projectSkills);
+      setProjectSkills(null);
       setEditor({
         type: "project",
-        item: data.projects.find((project) => project.id === editor.projectId),
+        item: projectDraft && latest ? { ...projectDraft, skills: latest.skills } : latest,
       });
+      setProjectDraft(null);
+      return;
+    }
+    if (editor?.type === "skill" && editor.projectId) {
+      const latest = data.projects.find((project) => project.id === editor.projectId);
+      setEditor({
+        type: "project",
+        item: projectDraft && latest ? { ...projectDraft, skills: latest.skills } : latest,
+      });
+      setProjectDraft(null);
     } else if (editor) setEditor(null);
     else if (tab === "skills") setTab("chat");
     else setTab(null);
   }
 
-  const viewKey = editor
-    ? `${editor.type}-${editor.item?.id ?? "new"}`
-    : tab
-      ? `tab-${tab}`
-      : "root";
-  const title = editor
-    ? editor.type === "project"
-      ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
-      : "スキルを編集"
-    : tab
-      ? settingsTabLabels[tab]
-      : "設定";
+  const viewKey = catalog
+    ? `catalog-${catalog.projectId ?? "general"}-${catalog.skill?.id ?? "list"}`
+    : projectSkills
+      ? `project-skills-${projectSkills}`
+      : editor
+        ? `${editor.type}-${editor.item?.id ?? "new"}`
+        : tab
+          ? `tab-${tab}`
+          : "root";
+  const title = catalog
+    ? catalog.skill
+      ? "スキル詳細"
+      : "スキルを追加"
+    : projectSkills
+      ? "スキル"
+      : editor
+        ? editor.type === "project"
+          ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
+          : "スキルを編集"
+        : tab
+          ? settingsTabLabels[tab]
+          : "設定";
+  const skillProject = projectSkills
+    ? data.projects.find((project) => project.id === projectSkills)
+    : undefined;
   const visible = open && !closing;
 
   return (
@@ -228,7 +293,71 @@ export function SettingsShell({
                     )}
                   </header>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {editor ? (
+                    {catalog ? (
+                      catalog.skill ? (
+                        <SkillCatalogDetail
+                          skill={catalog.skill}
+                          projectId={catalog.projectId}
+                          installed={installedRegistryIds(
+                            (catalog.projectId
+                              ? data.projects.find((project) => project.id === catalog.projectId)
+                                  ?.skills
+                              : data.skills) ?? [],
+                          ).has(catalog.skill.id)}
+                          refresh={async () => {
+                            await refresh();
+                          }}
+                        />
+                      ) : (
+                        <SkillCatalog
+                          projectId={catalog.projectId}
+                          installedSourceIds={installedRegistryIds(
+                            (catalog.projectId
+                              ? data.projects.find((project) => project.id === catalog.projectId)
+                                  ?.skills
+                              : data.skills) ?? [],
+                          )}
+                          select={(skill) => {
+                            setDirection(1);
+                            setCatalog({ ...catalog, skill });
+                          }}
+                          installed={async () => {
+                            await refresh();
+                          }}
+                        />
+                      )
+                    ) : projectSkills ? (
+                      skillProject ? (
+                        <DetailLayout text={`${skillProject.name}に適用されます。`}>
+                          <SkillManager
+                            skills={skillProject.skills}
+                            editable={skillProject.is_owner}
+                            edit={(skill) => {
+                              setProjectSkills(null);
+                              showEditor({
+                                type: "skill",
+                                item: skill,
+                                projectId: skillProject.id,
+                              });
+                            }}
+                            remove={(skill) => {
+                              setDeleteTarget({
+                                type: "skills",
+                                id: skill.id,
+                                name: skill.name,
+                              });
+                              setDeleteOpen(true);
+                            }}
+                            refresh={async () => {
+                              await refresh();
+                            }}
+                            browse={() => showCatalog(skillProject.id)}
+                          />
+                        </DetailLayout>
+                      ) : (
+                        <EmptyText>プロジェクトが見つかりません。</EmptyText>
+                      )
+                    ) : editor ? (
                       editor.type === "project" ? (
                         <Editor
                           key={viewKey}
@@ -246,13 +375,7 @@ export function SettingsShell({
                             await refresh("保存しました");
                             back();
                           }}
-                          editSkill={(skill) =>
-                            showEditor({ type: "skill", item: skill, projectId: editor.item?.id })
-                          }
-                          removeSkill={(skill) => {
-                            setDeleteTarget({ type: "skills", id: skill.id, name: skill.name });
-                            setDeleteOpen(true);
-                          }}
+                          showSkills={(draft) => showProjectSkills(draft)}
                         />
                       ) : (
                         <SkillEditor
@@ -288,6 +411,7 @@ export function SettingsShell({
                         edit={showEditor}
                         navigate={showTab}
                         refresh={refresh}
+                        browse={showCatalog}
                         askDelete={(next) => {
                           setDeleteTarget(next);
                           setDeleteOpen(true);
@@ -437,6 +561,7 @@ function SettingsDetail({
   refresh,
   askDelete,
   navigate,
+  browse,
 }: {
   tab: SettingsTab;
   data: Bootstrap;
@@ -444,6 +569,7 @@ function SettingsDetail({
   refresh: (message?: string) => Promise<Bootstrap>;
   askDelete: (target: DeleteTarget) => void;
   navigate: (tab: SettingsTab) => void;
+  browse: (projectId?: string) => void;
 }) {
   if (tab === "chat")
     return (
@@ -475,6 +601,7 @@ function SettingsDetail({
           refresh={async () => {
             await refresh();
           }}
+          browse={() => browse()}
         />
       </DetailLayout>
     );
@@ -557,7 +684,7 @@ function StandardChatSettings({
           <span className="text-[12px] font-semibold">システムプロンプト</span>
           <textarea
             id="default-system-prompt"
-            className="min-h-[240px] resize-y rounded-[12px] border border-input bg-background px-3 py-2.5 text-base leading-relaxed outline-none focus:border-ring"
+            className="min-h-[180px] resize-y rounded-[11px] border border-border bg-background px-[11px] py-2.5 text-xs leading-[1.55] outline-none focus:border-ring"
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             maxLength={30000}

@@ -36,7 +36,7 @@ import {
 import { buildSystemPrompt } from "./prompt";
 import { builtinSkill, builtinSkills } from "./builtin-skills/catalog";
 import { webSearch } from "./web-search";
-import { importRegistrySkill, searchRegistry } from "./skill-registry";
+import { importRegistrySkill, listRegistry } from "./skill-registry";
 import {
   conversationReads,
   conversations as conversationsTable,
@@ -146,8 +146,10 @@ const server = Bun.serve<SocketData>({
         return saveSettings(request, user.id);
       if (url.pathname === "/api/data" && request.method === "DELETE")
         return deleteAllData(request, user.id);
+      if (url.pathname === "/api/skill-catalog/detail" && request.method === "GET")
+        return skillCatalogDetail(url.searchParams.get("id") ?? "");
       if (url.pathname === "/api/skill-catalog" && request.method === "GET")
-        return searchSkillCatalog(url.searchParams.get("q") ?? "");
+        return searchSkillCatalog(url.searchParams);
       if (url.pathname === "/api/skills/install" && request.method === "POST")
         return installSkill(request, user.id);
       const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)$/);
@@ -764,11 +766,42 @@ type SkillInput = {
   enabled: number;
 };
 
-async function searchSkillCatalog(query: string): Promise<Response> {
+async function searchSkillCatalog(params: URLSearchParams): Promise<Response> {
+  const query = params.get("query")?.trim() ?? "";
+  const offsetValue = params.get("offset") ?? "";
+  const limitValue = params.get("limit") ?? "";
+  if (
+    query.length > 100 ||
+    !/^\d+$/.test(offsetValue) ||
+    !/^\d+$/.test(limitValue) ||
+    Number(limitValue) !== 10
+  )
+    return json({ error: "invalid catalog query" }, 400);
   try {
-    return json({ skills: await searchRegistry(query, AbortSignal.timeout(10_000)) });
+    return json(
+      await listRegistry(
+        query,
+        Number(offsetValue),
+        Number(limitValue),
+        AbortSignal.timeout(10_000),
+      ),
+    );
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "検索できませんでした" }, 502);
+    return json({ error: error instanceof Error ? error.message : "取得できませんでした" }, 502);
+  }
+}
+
+async function skillCatalogDetail(catalogId: string): Promise<Response> {
+  if (!catalogId.trim()) return json({ error: "invalid skill" }, 400);
+  try {
+    const detail = await importRegistrySkill(catalogId.trim(), AbortSignal.timeout(30_000));
+    return json({
+      name: detail.name,
+      description: detail.description,
+      files: detail.files.map((file) => ({ path: file.path })),
+    });
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "取得できませんでした" }, 502);
   }
 }
 

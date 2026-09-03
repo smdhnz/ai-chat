@@ -1,10 +1,10 @@
 "use client";
 
 import { useId, useState, type FormEvent, type ReactNode } from "react";
-import { Search, UserMinus, UserPlus, X } from "lucide-react";
+import { ChevronRight, Sparkles, UserMinus, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingWave } from "@/components/loading-wave";
-import { api, type Project, type RegistrySkill, type Skill, type UserSummary } from "@/lib/api";
+import { api, type Project, type Skill, type UserSummary } from "@/lib/api";
 
 const fieldLabelClass = "text-[10px] font-bold text-muted-foreground";
 const controlClass =
@@ -16,16 +16,14 @@ export function Editor({
   saved,
   cancel,
   refresh,
-  editSkill,
-  removeSkill,
+  showSkills,
 }: {
   item?: Project;
   users: UserSummary[];
   saved: () => Promise<void>;
   cancel: () => void;
   refresh: () => Promise<Project | null>;
-  editSkill: (skill: Skill) => void;
-  removeSkill: (skill: Skill) => void;
+  showSkills: (draft: Project) => void;
 }) {
   const id = useId();
   const [project, setProject] = useState(item);
@@ -98,17 +96,18 @@ export function Editor({
       </label>
 
       {project ? (
-        <SkillManager
-          skills={project.skills}
-          projectId={project.id}
-          editable={project.is_owner}
-          edit={editSkill}
-          remove={removeSkill}
-          refresh={async () => {
-            const next = await refresh();
-            if (next) setProject(next);
-          }}
-        />
+        <button
+          type="button"
+          className="flex min-h-[54px] w-full items-center gap-3 rounded-[11px] bg-card px-3.5 text-left"
+          onClick={() => showSkills({ ...project, name, system_prompt: instructions })}
+        >
+          <span className="flex size-8 items-center justify-center text-primary [&_svg]:size-[17px]">
+            <Sparkles />
+          </span>
+          <span className="flex-1 text-[13px]">スキル</span>
+          <span className="text-[12px] text-muted-foreground">{project.skills.length}</span>
+          <ChevronRight className="size-[17px] text-muted-foreground/60" />
+        </button>
       ) : null}
       {project ? (
         <section className="flex flex-col gap-2 pt-2" aria-labelledby={`${id}-members`}>
@@ -343,57 +342,23 @@ export function SkillEditor({
 
 export function SkillManager({
   skills,
-  projectId,
   editable = true,
   edit,
   remove,
   refresh,
+  browse,
 }: {
   skills: Skill[];
-  projectId?: string;
   editable?: boolean;
   edit: (skill: Skill) => void;
   remove: (skill: Skill) => void;
   refresh: () => Promise<void>;
+  browse: () => void;
 }) {
   const id = useId();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<RegistrySkill[]>([]);
   const [loading, setLoading] = useState(false);
   const builtin = skills.filter((skill) => skill.source === "builtin");
   const installed = skills.filter((skill) => skill.source !== "builtin");
-
-  async function search() {
-    setLoading(true);
-    try {
-      const result = await api<{ skills: RegistrySkill[] }>(
-        `/api/skill-catalog?q=${encodeURIComponent(query)}`,
-      );
-      setResults(result.skills);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "検索できませんでした");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function install(skill: RegistrySkill) {
-    setLoading(true);
-    try {
-      await api("/api/skills/install", {
-        method: "POST",
-        body: JSON.stringify({ catalogId: skill.id, projectId }),
-      });
-      await refresh();
-      setResults((current) => current.filter((item) => item.id !== skill.id));
-      toast.success("スキルを追加しました");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "追加できませんでした");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function toggle(skill: Skill) {
     setLoading(true);
     try {
@@ -467,62 +432,15 @@ export function SkillManager({
         <p className="text-[11px] text-muted-foreground">追加済みスキルはありません。</p>
       )}
       {editable ? (
-        <>
-          <div className="flex gap-2 pt-1">
-            <label className="sr-only" htmlFor={`${id}-skill-search`}>
-              公開スキルを検索
-            </label>
-            <input
-              id={`${id}-skill-search`}
-              className={controlClass}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && query.trim().length >= 2) {
-                  event.preventDefault();
-                  void search();
-                }
-              }}
-              minLength={2}
-              maxLength={100}
-              placeholder="skills.sh を検索"
-            />
-            <button
-              type="button"
-              className="inline-flex size-10 shrink-0 items-center justify-center rounded-[11px] bg-primary text-primary-foreground disabled:opacity-50 [&_svg]:size-4"
-              disabled={loading || query.trim().length < 2}
-              onClick={() => void search()}
-              aria-label="公開スキルを検索"
-            >
-              {loading ? <LoadingWave /> : <Search />}
-            </button>
-          </div>
-          {results.length ? (
-            <div className="overflow-hidden rounded-[11px] bg-card">
-              {results.map((skill) => (
-                <div
-                  key={skill.id}
-                  className="flex min-h-14 items-center gap-2 border-b border-border px-3 last:border-b-0"
-                >
-                  <div className="min-w-0 flex-1 py-2">
-                    <span className="block truncate text-xs font-semibold">{skill.name}</span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
-                      {skill.source} · {skill.installs.toLocaleString()} installs
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="h-8 px-2 text-[10px] font-semibold text-primary"
-                    disabled={loading}
-                    onClick={() => void install(skill)}
-                  >
-                    追加
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </>
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            className="h-10 rounded-[11px] bg-primary px-4 text-xs font-semibold text-primary-foreground"
+            onClick={browse}
+          >
+            追加
+          </button>
+        </div>
       ) : null}
       {builtin.length ? (
         <div className="pt-2">

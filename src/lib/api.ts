@@ -45,6 +45,12 @@ export type RegistrySkill = {
   source: string;
   installs: number;
 };
+export type RegistryPage = { skills: RegistrySkill[]; hasMore: boolean };
+export type RegistrySkillDetail = {
+  name: string;
+  description: string;
+  files: { path: string }[];
+};
 export type ProjectInvitation = {
   project_id: string;
   project_name: string;
