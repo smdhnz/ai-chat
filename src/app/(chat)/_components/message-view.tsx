@@ -371,7 +371,7 @@ function ChatImage({
       ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        className={`${file.preview ? "block" : "absolute inset-0 size-full"} rounded-[13px] object-cover transition-opacity duration-300 motion-reduce:transition-none ${loaded ? "opacity-100" : "opacity-0"}`}
+        className={`${file.preview ? "block h-auto max-h-[170px] max-w-[260px]" : "absolute inset-0 size-full"} rounded-[13px] object-cover transition-opacity duration-300 motion-reduce:transition-none ${loaded ? "opacity-100" : "opacity-0"}`}
         src={source}
         alt=""
         loading="lazy"
