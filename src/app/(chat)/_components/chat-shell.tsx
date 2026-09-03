@@ -84,6 +84,7 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
+  const shellRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const olderMessagesSentinelRef = useRef<HTMLDivElement>(null);
@@ -91,6 +92,32 @@ export function ChatShell() {
   const prependScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const followLatestRef = useRef(true);
   openConversationRef.current = conversationId;
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    const viewport = window.visualViewport;
+    if (!shell || !viewport) return;
+
+    const update = () => {
+      if (viewport.scale !== 1) {
+        shell.style.removeProperty("height");
+        shell.style.removeProperty("transform");
+        return;
+      }
+      shell.style.height = `${viewport.height}px`;
+      shell.style.transform = `translateY(${viewport.offsetTop}px)`;
+    };
+
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update, { passive: true });
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      shell.style.removeProperty("height");
+      shell.style.removeProperty("transform");
+    };
+  }, []);
 
   const messageListReady =
     messages.length > 0 || Boolean(conversationId && streams[conversationId]);
@@ -579,7 +606,10 @@ export function ChatShell() {
   }
 
   return (
-    <div className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar">
+    <div
+      ref={shellRef}
+      className="relative flex h-dvh min-h-0 overflow-hidden overscroll-none bg-sidebar"
+    >
       <ChatSidebar
         open={mobileSidebar || sidebarDragging}
         onOpenChange={setMobileSidebar}
