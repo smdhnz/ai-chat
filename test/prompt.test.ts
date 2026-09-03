@@ -13,7 +13,13 @@ function fixture() {
     CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, project_id TEXT);
     CREATE TABLE skills (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
-      instructions TEXT NOT NULL, enabled INTEGER NOT NULL, updated_at TEXT NOT NULL
+      instructions TEXT NOT NULL, files TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE project_skills (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+      instructions TEXT NOT NULL, files TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE files (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
@@ -31,9 +37,10 @@ function fixture() {
     INSERT INTO conversations VALUES('conversation-2','user-2','project-2');
     INSERT INTO conversations VALUES('conversation-3','user-1',NULL);
     INSERT INTO conversations VALUES('conversation-4','user-1','project-3');
-    INSERT INTO skills VALUES('own','user-1','own<skill','Own & useful','SECRET OWN INSTRUCTIONS',1,'2025-02');
-    INSERT INTO skills VALUES('disabled','user-1','disabled','Hidden','SECRET DISABLED',0,'2025-03');
-    INSERT INTO skills VALUES('foreign','user-2','foreign','Foreign','SECRET FOREIGN',1,'2025-04');
+    INSERT INTO skills VALUES('own','user-1','own<skill','Own & useful','SECRET OWN INSTRUCTIONS','[]',1,'2025-02');
+    INSERT INTO skills VALUES('disabled','user-1','disabled','Hidden','SECRET DISABLED','[]',0,'2025-03');
+    INSERT INTO skills VALUES('foreign','user-2','foreign','Foreign','SECRET FOREIGN','[]',1,'2025-04');
+    INSERT INTO project_skills VALUES('project-skill','project-1','shared-skill','Shared & useful','SECRET PROJECT INSTRUCTIONS','[]',1,'2025-05');
   `);
   const refs = [];
   for (let index = 0; index < 21; index++) {
@@ -98,8 +105,9 @@ describe("system prompt assembly", () => {
     expect(prompt).toContain("Current date: 2026-08-31");
     expect(prompt).toContain("OWNER PROJECT INSTRUCTION");
     expect(prompt).toContain("<name>imagegen</name>");
-    expect(prompt).toContain("<name>own&lt;skill</name>");
-    expect(prompt).toContain("<description>Own &amp; useful</description>");
+    expect(prompt).toContain("<name>shared-skill</name>");
+    expect(prompt).toContain("<description>Shared &amp; useful</description>");
+    expect(prompt).not.toContain("<name>own&lt;skill</name>");
     expect(prompt).not.toContain("<name>disabled</name>");
     expect(prompt).not.toContain("<name>foreign</name>");
     expect(prompt.match(/<image id=/g)).toHaveLength(20);
@@ -108,6 +116,7 @@ describe("system prompt assembly", () => {
       "SECRET OWN INSTRUCTIONS",
       "SECRET DISABLED",
       "SECRET FOREIGN",
+      "SECRET PROJECT INSTRUCTIONS",
       "conversation_summary",
       "web search result",
     ])
@@ -123,6 +132,12 @@ describe("system prompt assembly", () => {
     );
     expect(buildSystemPrompt(fixture(), "conversation-4", "user-1")).not.toContain(
       "STANDARD INSTRUCTION",
+    );
+    expect(buildSystemPrompt(fixture(), "conversation-3", "user-1")).toContain(
+      "<name>own&lt;skill</name>",
+    );
+    expect(buildSystemPrompt(fixture(), "conversation-1", "user-1")).not.toContain(
+      "<name>own&lt;skill</name>",
     );
   });
 

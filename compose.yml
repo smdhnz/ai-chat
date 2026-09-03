@@ -5,10 +5,37 @@ services:
     container_name: ai-chat
     restart: unless-stopped
     env_file: .env
+    depends_on:
+      - skill-executor
     environment:
       PI_AUTH_PATH: /app/data/auth.json
+      SKILL_EXECUTOR_URL: http://skill-executor:3010
     volumes:
       - ./data:/app/data
+    networks:
+      - default
+      - skill-executor
+
+  skill-executor:
+    image: ai-chat:latest
+    container_name: ai-chat-skill-executor
+    restart: unless-stopped
+    command: ["bun", "src/api/skill-executor.ts"]
+    user: bun
+    environment:
+      PORT: "3010"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    networks:
+      - skill-executor
 
   tunnel:
     image: alpine:latest
@@ -29,3 +56,7 @@ services:
       -p 2222
       -R chat:80:chat:3000
       gateway.fumiya.dev"
+
+networks:
+  skill-executor:
+    internal: true

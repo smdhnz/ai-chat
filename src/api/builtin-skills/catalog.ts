@@ -2,9 +2,9 @@ import { and, desc, eq } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "../database";
-import { skills } from "../schema";
+import { projectSkills, skills } from "../schema";
 
-export type SkillSource = "builtin" | "user";
+export type SkillSource = "builtin" | "general" | "project";
 
 export type SkillCatalogItem = {
   name: string;
@@ -34,34 +34,77 @@ export function readBuiltinSkill(skill: BuiltinSkill): string {
   return readFileSync(skill.instructionsPath, "utf8").slice(0, 30_000);
 }
 
-export function availableSkillCatalog(database: Database, userId: string): SkillCatalogItem[] {
+export type SkillFile = { path: string; contents: string };
+
+function scopedSkills(database: Database, userId: string, projectId: string | null) {
+  return projectId
+    ? database
+        .select({
+          name: projectSkills.name,
+          description: projectSkills.description,
+          instructions: projectSkills.instructions,
+          files: projectSkills.files,
+        })
+        .from(projectSkills)
+        .where(and(eq(projectSkills.project_id, projectId), eq(projectSkills.enabled, 1)))
+        .orderBy(desc(projectSkills.updated_at))
+        .all()
+    : database
+        .select({
+          name: skills.name,
+          description: skills.description,
+          instructions: skills.instructions,
+          files: skills.files,
+        })
+        .from(skills)
+        .where(and(eq(skills.user_id, userId), eq(skills.enabled, 1)))
+        .orderBy(desc(skills.updated_at))
+        .all();
+}
+
+export function availableSkillCatalog(
+  database: Database,
+  userId: string,
+  projectId: string | null,
+): SkillCatalogItem[] {
   return [
     ...builtinSkills.map(({ name, description }) => ({
       name,
       description,
       source: "builtin" as const,
     })),
-    ...database
-      .select({ name: skills.name, description: skills.description })
-      .from(skills)
-      .where(and(eq(skills.user_id, userId), eq(skills.enabled, 1)))
-      .orderBy(desc(skills.updated_at))
-      .all()
-      .map((skill) => ({ ...skill, source: "user" as const })),
+    ...scopedSkills(database, userId, projectId).map(({ name, description }) => ({
+      name,
+      description,
+      source: projectId ? ("project" as const) : ("general" as const),
+    })),
   ];
 }
 
 export function availableSkill(
   database: Database,
   userId: string,
+  projectId: string | null,
   name: string,
-): { instructions: string; source: SkillSource } | undefined {
+): { instructions: string; files: SkillFile[]; source: SkillSource } | undefined {
   const builtin = builtinSkill(name);
-  if (builtin) return { instructions: readBuiltinSkill(builtin), source: "builtin" };
-  const skill = database
-    .select({ instructions: skills.instructions })
-    .from(skills)
-    .where(and(eq(skills.user_id, userId), eq(skills.enabled, 1), eq(skills.name, name)))
-    .get();
-  return skill ? { instructions: skill.instructions.slice(0, 30_000), source: "user" } : undefined;
+  if (builtin)
+    return {
+      instructions: readBuiltinSkill(builtin),
+      files: [],
+      source: "builtin",
+    };
+  const skill = scopedSkills(database, userId, projectId).find((item) => item.name === name);
+  if (!skill) return;
+  let files: SkillFile[] = [];
+  try {
+    files = JSON.parse(skill.files) as SkillFile[];
+  } catch {
+    // Legacy rows had no supporting files.
+  }
+  return {
+    instructions: skill.instructions.slice(0, 30_000),
+    files,
+    source: projectId ? "project" : "general",
+  };
 }

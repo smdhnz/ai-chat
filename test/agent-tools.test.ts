@@ -32,11 +32,19 @@ async function fixture() {
   db.$client.exec(`
     PRAGMA foreign_keys=ON;
     CREATE TABLE users (id TEXT PRIMARY KEY);
-    CREATE TABLE conversations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id));
+    CREATE TABLE conversations (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), project_id TEXT
+    );
     CREATE TABLE skills (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), name TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(user_id,name)
+      description TEXT NOT NULL DEFAULT '', instructions TEXT NOT NULL, files TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      UNIQUE(user_id,name)
+    );
+    CREATE TABLE project_skills (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+      instructions TEXT NOT NULL, files TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE files (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
@@ -234,9 +242,9 @@ describe("custom tool executor", () => {
   test("load_skillは本人の有効スキルだけをactive context内で再利用し、画像APIをgateする", async () => {
     const { db, root } = await fixture();
     db.$client.exec(`
-      INSERT INTO skills VALUES('own','user-1','own-skill','', 'OWN SECRET',1,'2025','2025');
-      INSERT INTO skills VALUES('disabled','user-1','disabled-skill','', 'DISABLED SECRET',0,'2025','2025');
-      INSERT INTO skills VALUES('foreign','user-2','foreign-skill','', 'FOREIGN SECRET',1,'2025','2025');
+      INSERT INTO skills VALUES('own','user-1','own-skill','', 'OWN SECRET','[]',1,'2025','2025');
+      INSERT INTO skills VALUES('disabled','user-1','disabled-skill','', 'DISABLED SECRET','[]',0,'2025','2025');
+      INSERT INTO skills VALUES('foreign','user-2','foreign-skill','', 'FOREIGN SECRET','[]',1,'2025','2025');
     `);
     let imageCalls = 0;
     const tools = createAgentTools(
@@ -268,7 +276,7 @@ describe("custom tool executor", () => {
       },
     ]);
     expect(await load.execute("own-again", { name: "own-skill" })).toMatchObject({
-      details: { name: "own-skill", source: "user", alreadyLoaded: true },
+      details: { name: "own-skill", source: "general", alreadyLoaded: true },
     });
     const builtin = await load.execute("builtin", { name: "imagegen" });
     expect(builtin).toMatchObject({ details: { name: "imagegen", source: "builtin" } });
@@ -321,13 +329,14 @@ describe("custom tool executor", () => {
 
     for (let index = 0; index < 9; index++)
       db.$client
-        .query("INSERT INTO skills VALUES(?,?,?,?,?,?,?,?)")
+        .query("INSERT INTO skills VALUES(?,?,?,?,?,?,?,?,?)")
         .run(
           `limit-${index}`,
           "user-1",
           `limit-${index}`,
           "",
           "instructions",
+          "[]",
           1,
           "2025",
           `2025-${index}`,
@@ -344,6 +353,49 @@ describe("custom tool executor", () => {
     await expect(limited.execute("over", { name: "limit-8" })).rejects.toThrow(
       "Skill load budget reached",
     );
+  });
+  test("プロジェクトは一般スキルを継承せず、同梱スクリプトだけを隔離実行へ渡す", async () => {
+    const { db } = await fixture();
+    db.$client.exec(`
+      INSERT INTO conversations(id,user_id,project_id) VALUES('project-conversation','user-1','project-1');
+      INSERT INTO skills VALUES('general','user-1','general-skill','','GENERAL','[]',1,'2025','2025');
+      INSERT INTO project_skills VALUES(
+        'project-skill','project-1','project-skill','','PROJECT',
+        '[{"path":"SKILL.md","contents":"instructions"},{"path":"scripts/run.ts","contents":"console.log(1)"}]',
+        1,'2025'
+      );
+    `);
+    let executed = false;
+    const tools = createAgentTools(
+      { userId: "user-1", conversationId: "project-conversation", runId: "run" },
+      {
+        database: db,
+        executeSkill: async (files, script, args) => {
+          executed = true;
+          expect(files.map((file) => file.path)).toEqual(["SKILL.md", "scripts/run.ts"]);
+          expect({ script, args }).toEqual({ script: "scripts/run.ts", args: ["value"] });
+          return { stdout: "ok", stderr: "", exitCode: 0 };
+        },
+      },
+    );
+    await expect(
+      tool(tools, "load_skill").execute("general", { name: "general-skill" }),
+    ).rejects.toThrow("not available");
+    await tool(tools, "load_skill").execute("project", { name: "project-skill" });
+    await expect(
+      tool(tools, "run_skill_script").execute("run", {
+        skill: "project-skill",
+        script: "../scripts/run.ts",
+      }),
+    ).rejects.toThrow("Invalid skill script path");
+    await expect(
+      tool(tools, "run_skill_script").execute("run", {
+        skill: "project-skill",
+        script: "scripts/run.ts",
+        args: ["value"],
+      }),
+    ).resolves.toMatchObject({ details: { exitCode: 0 } });
+    expect(executed).toBe(true);
   });
 
   test("generate_imageはimageRefとして保存し、共有相手も復元できる", async () => {

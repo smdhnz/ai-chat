@@ -52,6 +52,7 @@ describe("database migration", () => {
       "oauth_states",
       "project_invitations",
       "project_members",
+      "project_skills",
       "projects",
       "runs",
       "sessions",
@@ -72,11 +73,15 @@ describe("database migration", () => {
       ALTER TABLE users ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low';
       ALTER TABLE users ADD COLUMN model TEXT;
       ALTER TABLE projects ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese';
+      DROP TABLE project_skills;
+      ALTER TABLE skills DROP COLUMN source_id;
+      ALTER TABLE skills DROP COLUMN files;
       ALTER TABLE projects ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low';
       INSERT INTO users VALUES ('user','name','User',NULL,0,'2025','2025','Japanese','low','old-model');
       INSERT INTO conversations VALUES ('conversation','user',NULL,'Chat','',NULL,0,0,'idle',0,'2025','2025');
       INSERT INTO conversation_entries VALUES ('message','conversation',NULL,0,'user_message','{}','2025');
-      INSERT INTO skills VALUES ('skill','user','existing','description','instructions',1,'2025','2025');
+      INSERT INTO skills (id,user_id,name,description,instructions,enabled,created_at,updated_at)
+      VALUES ('skill','user','existing','description','instructions',1,'2025','2025');
       CREATE TABLE messages (id TEXT PRIMARY KEY);
       INSERT INTO messages VALUES ('message');
       DROP TABLE __drizzle_migrations;

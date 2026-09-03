@@ -104,6 +104,8 @@ export const skills = sqliteTable(
     name: text().notNull(),
     description: text().notNull().default(""),
     instructions: text().notNull(),
+    files: text().notNull().default("[]"),
+    source_id: text(),
     enabled: integer().notNull().default(1),
     created_at: text().notNull(),
     updated_at: text().notNull(),
@@ -111,6 +113,28 @@ export const skills = sqliteTable(
   (table) => [
     uniqueIndex("skills_user_name_unique").on(table.user_id, table.name),
     index("skills_user_updated").on(table.user_id, table.updated_at),
+  ],
+);
+
+export const projectSkills = sqliteTable(
+  "project_skills",
+  {
+    id: text().primaryKey(),
+    project_id: text()
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    description: text().notNull().default(""),
+    instructions: text().notNull(),
+    files: text().notNull().default("[]"),
+    source_id: text().notNull(),
+    enabled: integer().notNull().default(1),
+    created_at: text().notNull(),
+    updated_at: text().notNull(),
+  },
+  (table) => [
+    uniqueIndex("project_skills_project_name_unique").on(table.project_id, table.name),
+    index("project_skills_project_updated").on(table.project_id, table.updated_at),
   ],
 );
 
@@ -211,6 +235,7 @@ export const schema = {
   conversations,
   conversationReads,
   skills,
+  projectSkills,
   files,
   runs,
   conversationEntries,

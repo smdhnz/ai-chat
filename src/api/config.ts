@@ -24,6 +24,7 @@ export const config = {
   codexModel: env("CODEX_MODEL", "gpt-5.6-sol"),
   aiTimeoutMs: Number(env("AI_TIMEOUT_MS", "600000")),
   maxUploadBytes: Number(env("MAX_UPLOAD_BYTES", String(20 * 1024 * 1024))),
+  skillExecutorUrl: env("SKILL_EXECUTOR_URL"),
 };
 
 // Stored file paths are absolute and can predate a move of the project or data

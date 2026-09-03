@@ -1,10 +1,10 @@
 "use client";
 
 import { useId, useState, type FormEvent, type ReactNode } from "react";
-import { UserMinus, UserPlus, X } from "lucide-react";
+import { Search, UserMinus, UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingWave } from "@/components/loading-wave";
-import { api, type Project, type Skill, type UserSummary } from "@/lib/api";
+import { api, type Project, type RegistrySkill, type Skill, type UserSummary } from "@/lib/api";
 
 const fieldLabelClass = "text-[10px] font-bold text-muted-foreground";
 const controlClass =
@@ -16,12 +16,16 @@ export function Editor({
   saved,
   cancel,
   refresh,
+  editSkill,
+  removeSkill,
 }: {
   item?: Project;
   users: UserSummary[];
   saved: () => Promise<void>;
   cancel: () => void;
   refresh: () => Promise<Project | null>;
+  editSkill: (skill: Skill) => void;
+  removeSkill: (skill: Skill) => void;
 }) {
   const id = useId();
   const [project, setProject] = useState(item);
@@ -93,6 +97,19 @@ export function Editor({
         />
       </label>
 
+      {project ? (
+        <SkillManager
+          skills={project.skills}
+          projectId={project.id}
+          editable={project.is_owner}
+          edit={editSkill}
+          remove={removeSkill}
+          refresh={async () => {
+            const next = await refresh();
+            if (next) setProject(next);
+          }}
+        />
+      ) : null}
       {project ? (
         <section className="flex flex-col gap-2 pt-2" aria-labelledby={`${id}-members`}>
           <h3 id={`${id}-members`} className={fieldLabelClass}>
@@ -217,26 +234,26 @@ export function SkillEditor({
   cancel,
   remove,
 }: {
-  item?: Skill;
+  item: Skill;
   saved: () => Promise<void>;
   cancel: () => void;
   remove: () => void;
 }) {
   const id = useId();
-  const [name, setName] = useState(item?.name ?? "");
-  const [description, setDescription] = useState(item?.description ?? "");
-  const [instructions, setInstructions] = useState(item?.instructions ?? "");
-  const enabled = item?.enabled !== 0;
+  const [name, setName] = useState(item.name);
+  const [description, setDescription] = useState(item.description);
+  const [instructions, setInstructions] = useState(item.instructions);
+  const enabled = item.enabled !== 0;
   const [saving, setSaving] = useState(false);
-  const editable = item?.editable ?? true;
+  const editable = item.editable;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!editable) return;
     setSaving(true);
     try {
-      await api(`/api/skills${item ? `/${item.id}` : ""}`, {
-        method: item ? "PUT" : "POST",
+      await api(`/api/skills/${item.id}`, {
+        method: "PUT",
         body: JSON.stringify({ name, description, instructions, enabled }),
       });
       await saved();
@@ -292,7 +309,7 @@ export function SkillEditor({
         />
       </label>
       <footer className="flex items-center justify-end gap-2 pt-[7px] pb-[max(0px,env(safe-area-inset-bottom))]">
-        {item?.editable ? (
+        {item.editable ? (
           <button
             type="button"
             className="mr-auto h-[39px] px-2 text-[11px] text-destructive"
@@ -321,6 +338,209 @@ export function SkillEditor({
         ) : null}
       </footer>
     </form>
+  );
+}
+
+export function SkillManager({
+  skills,
+  projectId,
+  editable = true,
+  edit,
+  remove,
+  refresh,
+}: {
+  skills: Skill[];
+  projectId?: string;
+  editable?: boolean;
+  edit: (skill: Skill) => void;
+  remove: (skill: Skill) => void;
+  refresh: () => Promise<void>;
+}) {
+  const id = useId();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<RegistrySkill[]>([]);
+  const [loading, setLoading] = useState(false);
+  const builtin = skills.filter((skill) => skill.source === "builtin");
+  const installed = skills.filter((skill) => skill.source !== "builtin");
+
+  async function search() {
+    setLoading(true);
+    try {
+      const result = await api<{ skills: RegistrySkill[] }>(
+        `/api/skill-catalog?q=${encodeURIComponent(query)}`,
+      );
+      setResults(result.skills);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "検索できませんでした");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function install(skill: RegistrySkill) {
+    setLoading(true);
+    try {
+      await api("/api/skills/install", {
+        method: "POST",
+        body: JSON.stringify({ catalogId: skill.id, projectId }),
+      });
+      await refresh();
+      setResults((current) => current.filter((item) => item.id !== skill.id));
+      toast.success("スキルを追加しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "追加できませんでした");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggle(skill: Skill) {
+    setLoading(true);
+    try {
+      await api(`/api/skills/${skill.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: skill.name,
+          description: skill.description,
+          instructions: skill.instructions,
+          enabled: skill.enabled === 0,
+        }),
+      });
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存できませんでした");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-2 pt-2" aria-labelledby={`${id}-skills`}>
+      <h3 id={`${id}-skills`} className={fieldLabelClass}>
+        スキル
+      </h3>
+      {installed.length ? (
+        <div className="overflow-hidden rounded-[11px] bg-card">
+          {installed.map((skill) => (
+            <div
+              key={skill.id}
+              className="flex min-h-14 items-center gap-2 border-b border-border px-3 last:border-b-0"
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 py-2 text-left"
+                onClick={() => edit(skill)}
+              >
+                <span className="block truncate text-xs font-semibold">{skill.name}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {skill.description || skill.source_id}
+                </span>
+              </button>
+              {skill.editable ? (
+                <>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={skill.enabled !== 0}
+                    aria-label={`${skill.name}を${skill.enabled ? "無効化" : "有効化"}`}
+                    disabled={loading}
+                    className={`relative h-6 w-10 shrink-0 rounded-full ${skill.enabled ? "bg-primary" : "bg-muted"}`}
+                    onClick={() => void toggle(skill)}
+                  >
+                    <span
+                      className={`absolute top-1 size-4 rounded-full bg-white shadow-sm ${skill.enabled ? "left-5" : "left-1"}`}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className="h-8 px-2 text-[10px] text-destructive"
+                    onClick={() => remove(skill)}
+                  >
+                    削除
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">追加済みスキルはありません。</p>
+      )}
+      {editable ? (
+        <>
+          <div className="flex gap-2 pt-1">
+            <label className="sr-only" htmlFor={`${id}-skill-search`}>
+              公開スキルを検索
+            </label>
+            <input
+              id={`${id}-skill-search`}
+              className={controlClass}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && query.trim().length >= 2) {
+                  event.preventDefault();
+                  void search();
+                }
+              }}
+              minLength={2}
+              maxLength={100}
+              placeholder="skills.sh を検索"
+            />
+            <button
+              type="button"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-[11px] bg-primary text-primary-foreground disabled:opacity-50 [&_svg]:size-4"
+              disabled={loading || query.trim().length < 2}
+              onClick={() => void search()}
+              aria-label="公開スキルを検索"
+            >
+              {loading ? <LoadingWave /> : <Search />}
+            </button>
+          </div>
+          {results.length ? (
+            <div className="overflow-hidden rounded-[11px] bg-card">
+              {results.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="flex min-h-14 items-center gap-2 border-b border-border px-3 last:border-b-0"
+                >
+                  <div className="min-w-0 flex-1 py-2">
+                    <span className="block truncate text-xs font-semibold">{skill.name}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {skill.source} · {skill.installs.toLocaleString()} installs
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="h-8 px-2 text-[10px] font-semibold text-primary"
+                    disabled={loading}
+                    onClick={() => void install(skill)}
+                  >
+                    追加
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {builtin.length ? (
+        <div className="pt-2">
+          <p className={`${fieldLabelClass} mb-2`}>組み込み機能</p>
+          <div className="overflow-hidden rounded-[11px] bg-card">
+            {builtin.map((skill) => (
+              <div key={skill.id} className="px-3 py-2.5">
+                <p className="text-xs font-semibold">{skill.name}</p>
+                <p className="text-[10px] text-muted-foreground">{skill.description}</p>
+              </div>
+            ))}
+          </div>
+          <p className="pt-2 text-[10px] leading-relaxed text-muted-foreground">
+            アプリ機能に必要なため常時利用でき、編集・削除はできません。
+          </p>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

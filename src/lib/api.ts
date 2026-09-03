@@ -25,6 +25,7 @@ export type Project = {
   shared: boolean;
   created_at: string;
   updated_at: string;
+  skills: Skill[];
 };
 export type Skill = {
   id: string;
@@ -32,10 +33,17 @@ export type Skill = {
   description: string;
   instructions: string;
   enabled: number;
-  source: "builtin" | "user";
+  source: "builtin" | "skills.sh" | "legacy";
+  source_id: string | null;
   editable: boolean;
   created_at: string | null;
   updated_at: string | null;
+};
+export type RegistrySkill = {
+  id: string;
+  name: string;
+  source: string;
+  installs: number;
 };
 export type ProjectInvitation = {
   project_id: string;

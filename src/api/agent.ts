@@ -601,6 +601,12 @@ function publicToolArgs(name: string, args: unknown): unknown {
   if (name === "web_search")
     return { query: text(args.query, 500), maxResults: number(args.maxResults) };
   if (name === "load_skill") return { name: text(args.name, 80) };
+  if (name === "run_skill_script")
+    return {
+      skill: text(args.skill, 80),
+      script: text(args.script, 240),
+      args: stringArray(args.args, 20),
+    };
   if (name === "generate_image")
     return {
       prompt: text(args.prompt, 2_000),
@@ -630,8 +636,15 @@ function publicToolResult(name: string, result: unknown, isError: boolean): unkn
   if (name === "load_skill")
     return {
       name: text(details.name, 80),
-      source: details.source === "builtin" ? "builtin" : "user",
+      source:
+        details.source === "builtin" || details.source === "project" ? details.source : "general",
       alreadyLoaded: details.alreadyLoaded === true,
+    };
+  if (name === "run_skill_script")
+    return {
+      name: text(details.name, 80),
+      script: text(details.script, 240),
+      exitCode: number(details.exitCode),
     };
   if (name === "generate_image" || name === "inspect_image")
     return {

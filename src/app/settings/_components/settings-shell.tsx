@@ -17,7 +17,6 @@ import {
   Mail,
   Pencil,
   Plus,
-  Sparkles,
   Trash2,
   MessageSquareText,
   X,
@@ -38,10 +37,11 @@ import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
-import { Editor, SkillEditor } from "@/app/settings/_components/settings-editor";
+import { Editor, SkillEditor, SkillManager } from "@/app/settings/_components/settings-editor";
 
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
-type EditorState = { type: "project"; item?: Project } | { type: "skill"; item?: Skill };
+type EditorState =
+  { type: "project"; item?: Project } | { type: "skill"; item: Skill; projectId?: string };
 
 const pageHeaderClass =
   "relative flex h-[58px] shrink-0 items-center justify-center border-b border-border px-3";
@@ -105,7 +105,12 @@ export function SettingsShell({
 
   function back() {
     setDirection(-1);
-    if (editor) setEditor(null);
+    if (editor?.type === "skill" && editor.projectId) {
+      setEditor({
+        type: "project",
+        item: data.projects.find((project) => project.id === editor.projectId),
+      });
+    } else if (editor) setEditor(null);
     else setTab(null);
   }
 
@@ -117,7 +122,7 @@ export function SettingsShell({
   const title = editor
     ? editor.type === "project"
       ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
-      : `スキル${editor.item ? (editor.item.editable ? "を編集" : "の詳細") : "を作成"}`
+      : "スキルを編集"
     : tab
       ? settingsTabLabels[tab]
       : "設定";
@@ -239,6 +244,13 @@ export function SettingsShell({
                             await refresh("保存しました");
                             back();
                           }}
+                          editSkill={(skill) =>
+                            showEditor({ type: "skill", item: skill, projectId: editor.item?.id })
+                          }
+                          removeSkill={(skill) => {
+                            setDeleteTarget({ type: "skills", id: skill.id, name: skill.name });
+                            setDeleteOpen(true);
+                          }}
                         />
                       ) : (
                         <SkillEditor
@@ -246,7 +258,7 @@ export function SettingsShell({
                           item={editor.item}
                           cancel={back}
                           remove={() => {
-                            if (!editor.item?.editable) return;
+                            if (!editor.item.editable) return;
                             setDeleteTarget({
                               type: "skills",
                               id: editor.item.id,
@@ -255,8 +267,15 @@ export function SettingsShell({
                             setDeleteOpen(true);
                           }}
                           saved={async () => {
-                            await refresh("保存しました");
-                            back();
+                            const fresh = await refresh("保存しました");
+                            if (editor.projectId)
+                              setEditor({
+                                type: "project",
+                                item: fresh.projects.find(
+                                  (project) => project.id === editor.projectId,
+                                ),
+                              });
+                            else back();
                           }}
                         />
                       )
@@ -363,12 +382,6 @@ function SettingsHome({
           onClick={() => showTab("invitations")}
         />
         <SettingsLink
-          icon={Sparkles}
-          label="スキル"
-          value={`${data.skills.length}`}
-          onClick={() => showTab("skills")}
-        />
-        <SettingsLink
           icon={Images}
           label="画像"
           value={`${data.files.length}`}
@@ -427,34 +440,24 @@ function SettingsDetail({
   refresh: (message?: string) => Promise<Bootstrap>;
   askDelete: (target: DeleteTarget) => void;
 }) {
-  const [savingSkill, setSavingSkill] = useState("");
-
-  async function toggleSkill(item: Skill) {
-    setSavingSkill(item.id);
-    try {
-      await api(`/api/skills/${item.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: item.name,
-          description: item.description,
-          instructions: item.instructions,
-          enabled: item.enabled === 0,
-        }),
-      });
-      await refresh("自動保存しました");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存できませんでした");
-    } finally {
-      setSavingSkill("");
-    }
-  }
-
   if (tab === "chat")
     return (
-      <StandardChatSettings
-        value={data.user.default_system_prompt}
-        saved={() => refresh("保存しました")}
-      />
+      <>
+        <StandardChatSettings
+          value={data.user.default_system_prompt}
+          saved={() => refresh("保存しました")}
+        />
+        <div className="px-5 pb-8">
+          <SkillManager
+            skills={data.skills}
+            edit={(item) => edit({ type: "skill", item })}
+            remove={(item) => askDelete({ type: "skills", id: item.id, name: item.name })}
+            refresh={async () => {
+              await refresh();
+            }}
+          />
+        </div>
+      </>
     );
 
   if (tab === "projects")
@@ -484,43 +487,6 @@ function SettingsDetail({
         ) : (
           <EmptyText>プロジェクトはありません。</EmptyText>
         )}
-      </DetailLayout>
-    );
-
-  if (tab === "skills")
-    return (
-      <DetailLayout
-        text="必要な手順だけを会話中に読み込みます。"
-        action="作成"
-        onAction={() => edit({ type: "skill" })}
-      >
-        <section className="overflow-hidden rounded-[14px] bg-card">
-          {data.skills.map((item) => (
-            <SettingsCard
-              key={item.id}
-              title={item.name}
-              text={item.description || "説明なし"}
-              badge={item.source === "builtin" ? "組み込み" : item.enabled ? "有効" : "無効"}
-              edit={() => edit({ type: "skill", item })}
-              showAction={item.editable}
-              control={
-                item.editable ? (
-                  <SkillToggle
-                    name={item.name}
-                    enabled={item.enabled !== 0}
-                    disabled={Boolean(savingSkill)}
-                    toggle={() => void toggleSkill(item)}
-                  />
-                ) : undefined
-              }
-              remove={
-                item.editable
-                  ? () => askDelete({ type: "skills", id: item.id, name: item.name })
-                  : undefined
-              }
-            />
-          ))}
-        </section>
       </DetailLayout>
     );
 
@@ -747,34 +713,6 @@ function DetailLayout({
 
 function EmptyText({ children }: { children: ReactNode }) {
   return <p className="py-12 text-center text-[12px] text-muted-foreground">{children}</p>;
-}
-
-function SkillToggle({
-  name,
-  enabled,
-  disabled,
-  toggle,
-}: {
-  name: string;
-  enabled: boolean;
-  disabled: boolean;
-  toggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      aria-label={`${name}を${enabled ? "無効化" : "有効化"}`}
-      disabled={disabled}
-      className={`relative h-6 w-10 shrink-0 rounded-full transition-colors disabled:opacity-50 ${enabled ? "bg-primary" : "bg-muted"}`}
-      onClick={toggle}
-    >
-      <span
-        className={`absolute top-1 size-4 rounded-full bg-white shadow-sm transition-[left] ${enabled ? "left-5" : "left-1"}`}
-      />
-    </button>
-  );
 }
 
 function SettingsCard({

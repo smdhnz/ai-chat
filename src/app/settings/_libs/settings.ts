@@ -1,9 +1,8 @@
-export type SettingsTab = "chat" | "projects" | "invitations" | "skills" | "files";
+export type SettingsTab = "chat" | "projects" | "invitations" | "files";
 
 export const settingsTabLabels: Record<SettingsTab, string> = {
   chat: "一般",
   projects: "プロジェクト",
   invitations: "プロジェクト招待",
-  skills: "スキル",
   files: "画像",
 };

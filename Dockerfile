@@ -15,7 +15,7 @@ RUN bun install --frozen-lockfile --production
 
 FROM oven/bun:1-alpine
 WORKDIR /app
-RUN apk add --no-cache ca-certificates tini
+RUN apk add --no-cache ca-certificates python3 tini
 ENV NODE_ENV=production PORT=3000 WEB_ORIGIN=http://127.0.0.1:3002 DATA_DIR=/app/data
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next

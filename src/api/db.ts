@@ -22,16 +22,23 @@ const tables = Object.values(schema) as Table[];
 const hasMigration =
   existingTables.has("__drizzle_migrations") &&
   sqlite.query("SELECT 1 FROM __drizzle_migrations LIMIT 1").get() !== null;
+const migratedTables = new Set(["project_skills"]);
+const migratedColumns = new Set([
+  "users.default_system_prompt",
+  "skills.files",
+  "skills.source_id",
+]);
 if (!hasMigration && tables.some((table) => existingTables.has(getTableName(table))))
   for (const table of tables) {
     const name = getTableName(table);
+    if (!existingTables.has(name) && migratedTables.has(name)) continue;
     const columns = new Set(
       (sqlite.query(`PRAGMA table_info(${name})`).all() as { name: string }[]).map(
         ({ name }) => name,
       ),
     );
     const missing = Object.keys(getTableColumns(table)).filter(
-      (column) => !columns.has(column) && !(name === "users" && column === "default_system_prompt"),
+      (column) => !columns.has(column) && !migratedColumns.has(`${name}.${column}`),
     );
     if (missing.length) throw new Error(`database schema mismatch: ${name}.${missing.join(",")}`);
   }

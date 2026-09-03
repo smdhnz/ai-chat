@@ -34,8 +34,9 @@ import {
   setConversationRead,
 } from "./access";
 import { buildSystemPrompt } from "./prompt";
-import { builtinSkill, builtinSkills, readBuiltinSkill } from "./builtin-skills/catalog";
+import { builtinSkill, builtinSkills } from "./builtin-skills/catalog";
 import { webSearch } from "./web-search";
+import { importRegistrySkill, searchRegistry } from "./skill-registry";
 import {
   conversationReads,
   conversations as conversationsTable,
@@ -43,6 +44,7 @@ import {
   oauthStates,
   projectInvitations,
   projectMembers,
+  projectSkills,
   projects as projectsTable,
   runs as runsTable,
   sessions,
@@ -144,8 +146,10 @@ const server = Bun.serve<SocketData>({
         return saveSettings(request, user.id);
       if (url.pathname === "/api/data" && request.method === "DELETE")
         return deleteAllData(request, user.id);
-      if (url.pathname === "/api/skills" && request.method === "POST")
-        return saveSkill(request, user.id);
+      if (url.pathname === "/api/skill-catalog" && request.method === "GET")
+        return searchSkillCatalog(url.searchParams.get("q") ?? "");
+      if (url.pathname === "/api/skills/install" && request.method === "POST")
+        return installSkill(request, user.id);
       const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)$/);
       if (skillMatch && request.method === "PUT") return saveSkill(request, user.id, skillMatch[1]);
       if (skillMatch && request.method === "DELETE")
@@ -330,9 +334,10 @@ function bootstrap(user: User): Response {
         id: `builtin:${skill.name}`,
         name: skill.name,
         description: skill.description,
-        instructions: readBuiltinSkill(skill),
+        instructions: "",
         enabled: 1,
         source: "builtin" as const,
+        source_id: null,
         editable: false,
         created_at: null,
         updated_at: null,
@@ -344,6 +349,7 @@ function bootstrap(user: User): Response {
           description: skillsTable.description,
           instructions: skillsTable.instructions,
           enabled: skillsTable.enabled,
+          source_id: skillsTable.source_id,
           created_at: skillsTable.created_at,
           updated_at: skillsTable.updated_at,
         })
@@ -351,7 +357,11 @@ function bootstrap(user: User): Response {
         .where(eq(skillsTable.user_id, user.id))
         .orderBy(desc(skillsTable.updated_at))
         .all()
-        .map((skill) => ({ ...skill, source: "user" as const, editable: true })),
+        .map((skill) => ({
+          ...skill,
+          source: skill.source_id ? ("skills.sh" as const) : ("legacy" as const),
+          editable: true,
+        })),
     ],
     conversations: conversationRows.map((conversation) => ({
       ...conversation,
@@ -488,11 +498,28 @@ function projectView(projectId: string, userId: string) {
       const user = userSummary(invitation.user_id);
       return user ? [user] : [];
     });
+  const installedSkills = db
+    .select({
+      id: projectSkills.id,
+      name: projectSkills.name,
+      description: projectSkills.description,
+      instructions: projectSkills.instructions,
+      enabled: projectSkills.enabled,
+      source_id: projectSkills.source_id,
+      created_at: projectSkills.created_at,
+      updated_at: projectSkills.updated_at,
+    })
+    .from(projectSkills)
+    .where(eq(projectSkills.project_id, projectId))
+    .orderBy(desc(projectSkills.updated_at))
+    .all()
+    .map((skill) => ({ ...skill, source: "skills.sh" as const, editable: access.isOwner }));
   return {
     ...project,
     owner: userSummary(project.user_id)!,
     members,
     pending_invitations,
+    skills: installedSkills,
     is_owner: access.isOwner,
     shared: project.shared === 1,
   };
@@ -737,66 +764,155 @@ type SkillInput = {
   enabled: number;
 };
 
-async function saveSkill(request: Request, userId: string, skillId?: string): Promise<Response> {
+async function searchSkillCatalog(query: string): Promise<Response> {
+  try {
+    return json({ skills: await searchRegistry(query, AbortSignal.timeout(10_000)) });
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "検索できませんでした" }, 502);
+  }
+}
+
+async function installSkill(request: Request, userId: string): Promise<Response> {
   verifyOrigin(request);
-  const body = await request.json().catch(() => null);
-  const input = skillInput(body);
-  if (!input) return json({ error: "invalid skill" }, 400);
-  if (builtinSkill(input.name)) return json({ error: "skill name is reserved" }, 409);
-
-  const existing = skillId
-    ? db
-        .select({ id: skillsTable.id })
-        .from(skillsTable)
-        .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
-        .get()
-    : undefined;
-  if (skillId && !existing) return json({ error: "skill not found" }, 404);
-  const duplicate = db
-    .select({ id: skillsTable.id })
-    .from(skillsTable)
-    .where(
-      and(
-        eq(skillsTable.user_id, userId),
-        eq(skillsTable.name, input.name),
-        skillId ? ne(skillsTable.id, skillId) : undefined,
-      ),
-    )
-    .get();
-  if (duplicate) return json({ error: "skill name already exists" }, 409);
-
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const catalogId = typeof body?.catalogId === "string" ? body.catalogId.trim() : "";
+  const projectId = typeof body?.projectId === "string" ? body.projectId : null;
+  if (!catalogId) return json({ error: "invalid skill" }, 400);
+  if (projectId && !projectAccess(db, projectId, userId)?.isOwner)
+    return json({ error: "project not found" }, 404);
+  const imported = await importRegistrySkill(catalogId, AbortSignal.timeout(30_000));
+  if (builtinSkill(imported.name)) return json({ error: "skill name is reserved" }, 409);
   const timestamp = now();
-  const targetId = skillId ?? id();
-  if (existing)
-    db.update(skillsTable)
-      .set({ ...input, updated_at: timestamp })
-      .where(and(eq(skillsTable.id, targetId), eq(skillsTable.user_id, userId)))
-      .run();
-  else
-    db.insert(skillsTable)
+  if (projectId) {
+    const duplicate = db
+      .select({ id: projectSkills.id })
+      .from(projectSkills)
+      .where(
+        and(
+          eq(projectSkills.project_id, projectId),
+          or(eq(projectSkills.name, imported.name), eq(projectSkills.source_id, catalogId)),
+        ),
+      )
+      .get();
+    if (duplicate) return json({ error: "skill already installed" }, 409);
+    db.insert(projectSkills)
       .values({
-        id: targetId,
-        user_id: userId,
-        ...input,
+        id: id(),
+        project_id: projectId,
+        name: imported.name,
+        description: imported.description,
+        instructions: imported.instructions,
+        files: JSON.stringify(imported.files),
+        source_id: imported.sourceId,
         created_at: timestamp,
         updated_at: timestamp,
       })
       .run();
-
-  return json(userSkill(targetId, userId), existing ? 200 : 201);
+    publishSync(projectUserIds(db, projectId));
+  } else {
+    const duplicate = db
+      .select({ id: skillsTable.id })
+      .from(skillsTable)
+      .where(
+        and(
+          eq(skillsTable.user_id, userId),
+          or(eq(skillsTable.name, imported.name), eq(skillsTable.source_id, catalogId)),
+        ),
+      )
+      .get();
+    if (duplicate) return json({ error: "skill already installed" }, 409);
+    db.insert(skillsTable)
+      .values({
+        id: id(),
+        user_id: userId,
+        name: imported.name,
+        description: imported.description,
+        instructions: imported.instructions,
+        files: JSON.stringify(imported.files),
+        source_id: imported.sourceId,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .run();
+  }
+  return json({ installed: true }, 201);
 }
 
-function deleteSkill(request: Request, skillId: string, userId: string): Response {
+async function saveSkill(request: Request, userId: string, skillId: string): Promise<Response> {
   verifyOrigin(request);
-  const existing = db
+  const input = skillInput(await request.json().catch(() => null));
+  if (!input) return json({ error: "invalid skill" }, 400);
+  if (builtinSkill(input.name)) return json({ error: "skill name is reserved" }, 409);
+  const general = db
     .select({ id: skillsTable.id })
     .from(skillsTable)
     .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
     .get();
-  if (!existing) return json({ error: "skill not found" }, 404);
-  db.delete(skillsTable)
-    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+  if (general) {
+    const duplicate = db
+      .select({ id: skillsTable.id })
+      .from(skillsTable)
+      .where(
+        and(
+          eq(skillsTable.user_id, userId),
+          eq(skillsTable.name, input.name),
+          ne(skillsTable.id, skillId),
+        ),
+      )
+      .get();
+    if (duplicate) return json({ error: "skill name already exists" }, 409);
+    db.update(skillsTable)
+      .set({ ...input, updated_at: now() })
+      .where(eq(skillsTable.id, skillId))
+      .run();
+    return json({ saved: true });
+  }
+  const project = db
+    .select({ project_id: projectSkills.project_id })
+    .from(projectSkills)
+    .where(eq(projectSkills.id, skillId))
+    .get();
+  if (!project || !projectAccess(db, project.project_id, userId)?.isOwner)
+    return json({ error: "skill not found" }, 404);
+  const duplicate = db
+    .select({ id: projectSkills.id })
+    .from(projectSkills)
+    .where(
+      and(
+        eq(projectSkills.project_id, project.project_id),
+        eq(projectSkills.name, input.name),
+        ne(projectSkills.id, skillId),
+      ),
+    )
+    .get();
+  if (duplicate) return json({ error: "skill name already exists" }, 409);
+  db.update(projectSkills)
+    .set({ ...input, updated_at: now() })
+    .where(eq(projectSkills.id, skillId))
     .run();
+  publishSync(projectUserIds(db, project.project_id));
+  return json({ saved: true });
+}
+
+function deleteSkill(request: Request, skillId: string, userId: string): Response {
+  verifyOrigin(request);
+  const general = db
+    .select({ id: skillsTable.id })
+    .from(skillsTable)
+    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
+    .get();
+  if (general) db.delete(skillsTable).where(eq(skillsTable.id, skillId)).run();
+  else {
+    const project = db
+      .select({ project_id: projectSkills.project_id })
+      .from(projectSkills)
+      .where(eq(projectSkills.id, skillId))
+      .get();
+    if (!project || !projectAccess(db, project.project_id, userId)?.isOwner)
+      return json({ error: "skill not found" }, 404);
+    db.delete(projectSkills).where(eq(projectSkills.id, skillId)).run();
+    publishSync(projectUserIds(db, project.project_id));
+  }
   return new Response(null, { status: 204 });
 }
 
@@ -822,23 +938,6 @@ function skillInput(value: unknown): SkillInput | null {
   )
     return null;
   return { name, description, instructions, enabled: body.enabled ? 1 : 0 };
-}
-
-function userSkill(skillId: string, userId: string) {
-  const skill = db
-    .select({
-      id: skillsTable.id,
-      name: skillsTable.name,
-      description: skillsTable.description,
-      instructions: skillsTable.instructions,
-      enabled: skillsTable.enabled,
-      created_at: skillsTable.created_at,
-      updated_at: skillsTable.updated_at,
-    })
-    .from(skillsTable)
-    .where(and(eq(skillsTable.id, skillId), eq(skillsTable.user_id, userId)))
-    .get();
-  return skill ? { ...skill, source: "user" as const, editable: true } : null;
 }
 
 async function saveProject(

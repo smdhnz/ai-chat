@@ -16,7 +16,7 @@ import { availableSkill, type SkillSource } from "./builtin-skills/catalog";
 import { activeConversationState } from "./context";
 import { config, storedFilePath } from "./config";
 import { imagePreviewPath, prepareImage } from "./images";
-import { files } from "./schema";
+import { conversations, files } from "./schema";
 import { webSearch as defaultWebSearch } from "./web-search";
 
 export type ToolContext = {
@@ -32,6 +32,12 @@ type ToolDependencies = {
   imageTimeoutMs?: number;
   webSearch?: (query: string, maxResults: number, signal: AbortSignal) => Promise<string>;
   generateImage?: (prompt: string, inputPaths: string[], signal: AbortSignal) => Promise<Buffer>;
+  executeSkill?: (
+    files: { path: string; contents: string }[],
+    script: string,
+    args: string[],
+    signal: AbortSignal,
+  ) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
   now?: () => string;
   id?: () => string;
 };
@@ -73,6 +79,13 @@ export function createAgentTools(
   const generate = dependencies.generateImage ?? defaultGenerateImage;
   const now = dependencies.now ?? (() => new Date().toISOString());
   const id = dependencies.id ?? (() => crypto.randomUUID());
+  const projectId =
+    database
+      .select({ project_id: conversations.project_id })
+      .from(conversations)
+      .where(eq(conversations.id, context.conversationId))
+      .get()?.project_id ?? null;
+  const executeSkill = dependencies.executeSkill ?? defaultSkillExecutor;
   const counts = { web_search: 0, generate_image: 0, inspect_image: 0 };
   const loadedSkills = new Map<string, { source: SkillSource; compaction: string }>();
   const visibleImageIds = new Map<string, string>();
@@ -85,10 +98,9 @@ export function createAgentTools(
     const loaded = loadedSkills.get(name);
     if (!loaded || loaded.compaction === compactionVersion()) return loaded?.source;
     loadedSkills.delete(name);
-    return undefined;
   };
   const retainedSkillSource = (name: string) =>
-    retainedSkills(database, context.userId, activeState().entries).get(name);
+    retainedSkills(database, context.userId, projectId, activeState().entries).get(name);
   const currentVisibleImageIds = () => {
     const retained = entryImageIds(activeState().entries);
     const currentCompaction = compactionVersion();
@@ -105,6 +117,11 @@ export function createAgentTools(
   });
   const loadSkillParameters = Type.Object({
     name: Type.String({ minLength: 1, maxLength: 80 }),
+  });
+  const runSkillParameters = Type.Object({
+    skill: Type.String({ minLength: 1, maxLength: 80 }),
+    script: Type.String({ minLength: 1, maxLength: 240 }),
+    args: Type.Optional(Type.Array(Type.String({ maxLength: 1_000 }), { maxItems: 20 })),
   });
   const generateParameters = Type.Object({
     prompt: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -158,15 +175,57 @@ export function createAgentTools(
             } satisfies SkillDetails,
           };
         if (skillLoads >= 8) throw new Error("Skill load budget reached");
-        const skill = availableSkill(database, context.userId, name);
+        const skill = availableSkill(database, context.userId, projectId, name);
         if (!skill) throw new Error(`Skill ${name} is not available`);
         const scopedSignal = toolSignal(signal, 10_000);
         if (scopedSignal.aborted) throw scopedSignal.reason;
-        loadedSkills.set(name, { source: skill.source, compaction: compactionVersion() });
+        loadedSkills.set(name, {
+          source: skill.source,
+          compaction: compactionVersion(),
+        });
         skillLoads += 1;
         return {
           content: [{ type: "text", text: skillContent(skill.instructions) }],
           details: { name, source: skill.source } satisfies SkillDetails,
+        };
+      },
+    },
+    {
+      name: "run_skill_script",
+      label: "スキルスクリプト実行",
+      description:
+        "Run a supporting script from a loaded skill in the isolated server executor. Use only scripts named by that skill's instructions.",
+      parameters: runSkillParameters,
+      execute: async (_toolCallId, params, signal) => {
+        const input = params as { skill: string; script: string; args?: string[] };
+        const name = input.skill.trim();
+        if (!localSkillSource(name) && !retainedSkillSource(name))
+          throw new Error(`Load skill ${name} first`);
+        const skill = availableSkill(database, context.userId, projectId, name);
+        if (!skill || skill.source === "builtin") throw new Error(`Skill ${name} has no scripts`);
+        const script = safeSkillPath(input.script);
+        if (!skill.files.some((file) => file.path === script))
+          throw new Error(`Script ${script} is not part of skill ${name}`);
+        const result = await executeSkill(
+          skill.files,
+          script,
+          input.args ?? [],
+          toolSignal(signal, 30_000),
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: [
+                `Exit code: ${result.exitCode}`,
+                result.stdout && `stdout:\n${result.stdout}`,
+                result.stderr && `stderr:\n${result.stderr}`,
+              ]
+                .filter(Boolean)
+                .join("\n"),
+            },
+          ],
+          details: { name, script, exitCode: result.exitCode },
         };
       },
     },
@@ -305,6 +364,7 @@ export function createAgentTools(
 function retainedSkills(
   database: Database,
   userId: string,
+  projectId: string | null,
   entries: readonly ConversationEntry[],
 ): Map<string, SkillSource> {
   const retained = new Map<string, SkillSource>();
@@ -322,7 +382,7 @@ function retainedSkills(
       continue;
     const name = typeof payload.details.name === "string" ? payload.details.name : "";
     const source = payload.details.source;
-    const skill = availableSkill(database, userId, name);
+    const skill = availableSkill(database, userId, projectId, name);
     if (!skill || source !== skill.source) continue;
     const content = "content" in payload && Array.isArray(payload.content) ? payload.content : [];
     if (
@@ -349,6 +409,45 @@ function entryImageIds(entries: readonly ConversationEntry[]): Set<string> {
         ids.add(block.fileId);
   }
   return ids;
+}
+
+function safeSkillPath(value: string): string {
+  const path = value.replaceAll("\\", "/");
+  if (
+    path.startsWith("/") ||
+    path.includes("\0") ||
+    path.split("/").some((part) => !part || part === "." || part === "..") ||
+    !/\.(?:js|ts|mjs|cjs|py|sh)$/.test(path)
+  )
+    throw new Error("Invalid skill script path");
+  return path;
+}
+
+async function defaultSkillExecutor(
+  files: { path: string; contents: string }[],
+  script: string,
+  args: string[],
+  signal: AbortSignal,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  if (!config.skillExecutorUrl) throw new Error("Skill executor is not configured");
+  const response = await fetch(`${config.skillExecutorUrl}/execute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files, script, args }),
+    signal,
+  });
+  const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (
+    !response.ok ||
+    !body ||
+    typeof body.stdout !== "string" ||
+    typeof body.stderr !== "string" ||
+    typeof body.exitCode !== "number"
+  )
+    throw new Error(
+      typeof body?.error === "string" ? body.error : `Skill executor failed (${response.status})`,
+    );
+  return { stdout: body.stdout, stderr: body.stderr, exitCode: body.exitCode };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
