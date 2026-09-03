@@ -35,6 +35,52 @@ export function chatUrl(path: string, temporary: boolean, projectId = ""): strin
   return `${path}${query ? `?${query}` : ""}`;
 }
 
+export function mergeServerMessages(
+  current: Message[],
+  incoming: Message[],
+  previews: Map<string, string>,
+): Message[] {
+  let local: Message | undefined;
+  for (let index = current.length - 1; index >= 0; index--) {
+    const message = current[index];
+    if (message.id.startsWith("local-") && message.files.some((file) => file.preview)) {
+      local = message;
+      break;
+    }
+  }
+  if (local) {
+    let uploaded: Message | undefined;
+    for (let index = incoming.length - 1; index >= 0; index--) {
+      const message = incoming[index];
+      if (
+        message.role === "user" &&
+        message.content === local.content &&
+        message.files.length === local.files.length &&
+        message.files.every((file) => file.source === "upload")
+      ) {
+        uploaded = message;
+        break;
+      }
+    }
+    if (!uploaded) return incoming.length ? [...incoming, local] : current;
+    uploaded.files.forEach((file, index) => {
+      const preview = local.files[index]?.preview;
+      if (preview) previews.set(file.id, preview);
+    });
+  }
+
+  return incoming.map((message) => {
+    let changed = false;
+    const files = message.files.map((file) => {
+      const preview = previews.get(file.id);
+      if (!preview || preview === file.preview) return file;
+      changed = true;
+      return { ...file, preview };
+    });
+    return changed ? { ...message, files } : message;
+  });
+}
+
 type StreamActivity = { key: string; value: PublicActivity };
 export type ChatStream = {
   conversationId: string;

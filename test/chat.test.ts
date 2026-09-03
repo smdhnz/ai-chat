@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  mergeServerMessages,
   chatUrl,
   isChatEventEnvelope,
   isFarFromChatBottom,
@@ -8,7 +9,7 @@ import {
   streamMessage,
   type ChatStreams,
 } from "../src/app/(chat)/_libs/chat";
-import type { ChatEvent, ChatEventEnvelope } from "../src/lib/api";
+import type { ChatEvent, ChatEventEnvelope, Message } from "../src/lib/api";
 
 function envelope(seq: number, event: ChatEvent, runId = "run-1"): ChatEventEnvelope {
   return {
@@ -36,6 +37,47 @@ test("末尾付近だけ生成内容へ追従し、離れた場合は移動ボ�
   expect(isNearChatBottom(1_000, 600, 367)).toBe(false);
   expect(isFarFromChatBottom(1_000, 600, 240)).toBe(false);
   expect(isFarFromChatBottom(1_000, 600, 239)).toBe(true);
+});
+
+test("同期がアップロード直後に来てもローカル画像を引き継ぐ", () => {
+  const local: Message = {
+    id: "local-message-1",
+    role: "user",
+    content: "この画像を見て",
+    files: [
+      {
+        id: "",
+        name: "image.png",
+        mime: "image/png",
+        size: 10,
+        source: "upload",
+        created_at: "2025-01-01T00:00:00.000Z",
+        preview: "blob:local-preview",
+      },
+    ],
+    created_at: "2025-01-01T00:00:00.000Z",
+  };
+  const uploaded: Message = {
+    ...local,
+    id: "message-1",
+    files: [
+      {
+        ...local.files[0],
+        id: "file-1",
+        name: "image.webp",
+        mime: "image/webp",
+        size: 8,
+        preview: undefined,
+      },
+    ],
+  };
+  const previews = new Map<string, string>();
+
+  const [result] = mergeServerMessages([local], [uploaded], previews);
+
+  expect(result.files[0].preview).toBe("blob:local-preview");
+  expect(previews.get("file-1")).toBe("blob:local-preview");
+  expect(mergeServerMessages([local], [], previews)).toEqual([local]);
 });
 
 describe("chat stream reducer", () => {

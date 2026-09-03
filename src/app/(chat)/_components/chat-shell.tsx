@@ -34,6 +34,7 @@ import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
 import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
 import {
+  mergeServerMessages,
   chatUrl,
   conversationIdFromPath,
   isChatEventEnvelope,
@@ -92,7 +93,19 @@ export function ChatShell() {
   const loadingOlderMessagesRef = useRef(false);
   const prependScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const followLatestRef = useRef(true);
+  const localImagePreviewsRef = useRef(new Map<string, string>());
+  const localObjectUrlsRef = useRef<string[]>([]);
+  const replaceMessagesFromServer = useCallback((incoming: Message[]) => {
+    setMessages((current) => mergeServerMessages(current, incoming, localImagePreviewsRef.current));
+  }, []);
+  const clearLocalImagePreviews = useCallback(() => {
+    localObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    localObjectUrlsRef.current = [];
+    localImagePreviewsRef.current.clear();
+  }, []);
   openConversationRef.current = conversationId;
+
+  useEffect(() => clearLocalImagePreviews, [clearLocalImagePreviews]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -307,7 +320,7 @@ export function ChatShell() {
         return;
       const page = await api<MessagePage>(`/api/conversations/${openId}`);
       if (!active || openConversationRef.current !== openId) return;
-      setMessages(page.messages);
+      replaceMessagesFromServer(page.messages);
       setHasOlderMessages(page.hasMore);
       setData((value) => clearUnread(value, openId));
     };
@@ -321,7 +334,7 @@ export function ChatShell() {
           if (!active) return;
           setData(fresh);
           if (page && openConversationRef.current === event.conversationId) {
-            setMessages(page.messages);
+            replaceMessagesFromServer(page.messages);
             setHasOlderMessages(page.hasMore);
             setData((value) => clearUnread(value, event.conversationId));
           }
@@ -402,7 +415,7 @@ export function ChatShell() {
         closingSocket.onopen = () => closingSocket.close();
       else closingSocket?.close();
     };
-  }, [setData]);
+  }, [replaceMessagesFromServer, setData]);
 
   const conversations = data?.conversations;
   const requestedConversationId = conversationIdFromPath(pathname);
@@ -420,7 +433,9 @@ export function ChatShell() {
       setReadyConversationId(null);
       setConversationId(null);
       setProjectId(projectParam);
-      setMessages([]);
+      setMessages((value) =>
+        value.some((message) => message.id.startsWith("local-")) ? value : [],
+      );
       setHasOlderMessages(false);
       setTemporary(temporaryParam);
       return;
@@ -428,7 +443,7 @@ export function ChatShell() {
     let active = true;
     void api<MessagePage>(`/api/conversations/${resolvedConversationId}`).then((page) => {
       if (!active) return;
-      setMessages(page.messages);
+      replaceMessagesFromServer(page.messages);
       setHasOlderMessages(page.hasMore);
       setData((value) => clearUnread(value, resolvedConversationId));
       setConversationId(resolvedConversationId);
@@ -446,6 +461,7 @@ export function ChatShell() {
     temporaryParam,
     projectParam,
     router,
+    replaceMessagesFromServer,
     setData,
   ]);
 
@@ -456,10 +472,10 @@ export function ChatShell() {
         api<MessagePage>(`/api/conversations/${id}`),
       ]);
       setData(clearUnread(fresh, id));
-      setMessages(page.messages);
+      replaceMessagesFromServer(page.messages);
       setHasOlderMessages(page.hasMore);
     },
-    [setData],
+    [replaceMessagesFromServer, setData],
   );
 
   if (!data) return <LoadingScreen />;
@@ -485,6 +501,7 @@ export function ChatShell() {
   );
 
   function selectConversation(item: Conversation) {
+    clearLocalImagePreviews();
     setReadyConversationId(null);
     setEditingMessageId(null);
     setPrompt("");
@@ -492,6 +509,7 @@ export function ChatShell() {
     setMobileSidebar(false);
   }
   function newChat(targetProjectId = projectId, isTemporary = false, closeSidebar = true) {
+    clearLocalImagePreviews();
     setReadyConversationId(null);
     setEditingMessageId(null);
     setPrompt("");
@@ -559,7 +577,7 @@ export function ChatShell() {
         return;
       }
       const optimistic: Message = {
-        id: crypto.randomUUID(),
+        id: `local-${crypto.randomUUID()}`,
         role: "user",
         content: text,
         author: {
@@ -568,15 +586,19 @@ export function ChatShell() {
           display_name: data!.user.display_name,
           avatar: data!.user.avatar,
         },
-        files: files.map((file) => ({
-          id: "",
-          name: file.name,
-          mime: file.type,
-          size: file.size,
-          source: "upload",
-          created_at: new Date().toISOString(),
-          preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
-        })),
+        files: files.map((file) => {
+          const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+          if (preview) localObjectUrlsRef.current.push(preview);
+          return {
+            id: "",
+            name: file.name,
+            mime: file.type,
+            size: file.size,
+            source: "upload",
+            created_at: new Date().toISOString(),
+            preview,
+          };
+        }),
         created_at: new Date().toISOString(),
       };
       setMessages((value) => [...value, optimistic]);
@@ -587,8 +609,12 @@ export function ChatShell() {
       form.set("content", text);
       files.forEach((file) => form.append("files", file));
       const response = await fetch("/api/chat", { method: "POST", body: form });
-      const body = await readJson<{ error?: string }>(response);
+      const body = await readJson<{ error?: string; message?: Message }>(response);
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      body.message?.files.forEach((file, index) => {
+        const preview = optimistic.files[index]?.preview;
+        if (preview) localImagePreviewsRef.current.set(file.id, preview);
+      });
       await refreshChat(currentId);
     } catch (error) {
       appendError("エラー", error);
