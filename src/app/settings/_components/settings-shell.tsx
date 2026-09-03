@@ -17,6 +17,7 @@ import {
   Mail,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
   MessageSquareText,
   X,
@@ -111,6 +112,7 @@ export function SettingsShell({
         item: data.projects.find((project) => project.id === editor.projectId),
       });
     } else if (editor) setEditor(null);
+    else if (tab === "skills") setTab("chat");
     else setTab(null);
   }
 
@@ -284,6 +286,7 @@ export function SettingsShell({
                         tab={tab}
                         data={data}
                         edit={showEditor}
+                        navigate={showTab}
                         refresh={refresh}
                         askDelete={(next) => {
                           setDeleteTarget(next);
@@ -433,12 +436,14 @@ function SettingsDetail({
   edit,
   refresh,
   askDelete,
+  navigate,
 }: {
   tab: SettingsTab;
   data: Bootstrap;
   edit: (editor: EditorState) => void;
   refresh: (message?: string) => Promise<Bootstrap>;
   askDelete: (target: DeleteTarget) => void;
+  navigate: (tab: SettingsTab) => void;
 }) {
   if (tab === "chat")
     return (
@@ -447,17 +452,31 @@ function SettingsDetail({
           value={data.user.default_system_prompt}
           saved={() => refresh("保存しました")}
         />
-        <div className="px-5 pb-8">
-          <SkillManager
-            skills={data.skills}
-            edit={(item) => edit({ type: "skill", item })}
-            remove={(item) => askDelete({ type: "skills", id: item.id, name: item.name })}
-            refresh={async () => {
-              await refresh();
-            }}
-          />
+        <div className="px-4 pb-[max(28px,env(safe-area-inset-bottom))]">
+          <section className="overflow-hidden rounded-[14px] bg-card">
+            <SettingsLink
+              icon={Sparkles}
+              label="スキル"
+              value={`${data.skills.filter((skill) => skill.source !== "builtin").length}`}
+              onClick={() => navigate("skills")}
+            />
+          </section>
         </div>
       </>
+    );
+
+  if (tab === "skills")
+    return (
+      <DetailLayout text="プロジェクトを使用しない通常・一時チャットに適用されます。">
+        <SkillManager
+          skills={data.skills}
+          edit={(item) => edit({ type: "skill", item })}
+          remove={(item) => askDelete({ type: "skills", id: item.id, name: item.name })}
+          refresh={async () => {
+            await refresh();
+          }}
+        />
+      </DetailLayout>
     );
 
   if (tab === "projects")
