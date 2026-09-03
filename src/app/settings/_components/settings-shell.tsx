@@ -39,9 +39,10 @@ import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
-import { Editor, SkillEditor, SkillManager } from "@/app/settings/_components/settings-editor";
+import { Editor, SkillManager } from "@/app/settings/_components/settings-editor";
 import {
   installedRegistryIds,
+  InstalledSkillDetail,
   SkillCatalog,
   SkillCatalogDetail,
 } from "@/app/settings/_components/skill-catalog";
@@ -99,16 +100,7 @@ export function SettingsShell({
     await api(type === "data" ? "/api/data" : `/api/${type}/${objectId}`, {
       method: "DELETE",
     });
-    const fresh = await refresh("削除しました");
-    if (type === "skills" && editor?.type === "skill")
-      setEditor(
-        editor.projectId
-          ? {
-              type: "project",
-              item: fresh.projects.find((project) => project.id === editor.projectId),
-            }
-          : null,
-      );
+    await refresh("削除しました");
   }
 
   function close() {
@@ -186,7 +178,7 @@ export function SettingsShell({
       : editor
         ? editor.type === "project"
           ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
-          : "スキルを編集"
+          : "スキル詳細"
         : tab
           ? settingsTabLabels[tab]
           : "設定";
@@ -328,11 +320,17 @@ export function SettingsShell({
                       )
                     ) : projectSkills ? (
                       skillProject ? (
-                        <DetailLayout text={`${skillProject.name}に適用されます。`}>
+                        <DetailLayout
+                          text={`${skillProject.name}に適用されます。`}
+                          action={skillProject.is_owner ? "追加" : undefined}
+                          onAction={
+                            skillProject.is_owner ? () => showCatalog(skillProject.id) : undefined
+                          }
+                        >
                           <SkillManager
                             skills={skillProject.skills}
                             editable={skillProject.is_owner}
-                            edit={(skill) => {
+                            detail={(skill) => {
                               setProjectSkills(null);
                               showEditor({
                                 type: "skill",
@@ -351,7 +349,6 @@ export function SettingsShell({
                             refresh={async () => {
                               await refresh();
                             }}
-                            browse={() => showCatalog(skillProject.id)}
                           />
                         </DetailLayout>
                       ) : (
@@ -378,31 +375,7 @@ export function SettingsShell({
                           showSkills={(draft) => showProjectSkills(draft)}
                         />
                       ) : (
-                        <SkillEditor
-                          key={viewKey}
-                          item={editor.item}
-                          cancel={back}
-                          remove={() => {
-                            if (!editor.item.editable) return;
-                            setDeleteTarget({
-                              type: "skills",
-                              id: editor.item.id,
-                              name: editor.item.name,
-                            });
-                            setDeleteOpen(true);
-                          }}
-                          saved={async () => {
-                            const fresh = await refresh("保存しました");
-                            if (editor.projectId)
-                              setEditor({
-                                type: "project",
-                                item: fresh.projects.find(
-                                  (project) => project.id === editor.projectId,
-                                ),
-                              });
-                            else back();
-                          }}
-                        />
+                        <InstalledSkillDetail key={viewKey} skill={editor.item} />
                       )
                     ) : tab ? (
                       <SettingsDetail
@@ -593,15 +566,14 @@ function SettingsDetail({
 
   if (tab === "skills")
     return (
-      <DetailLayout text="プロジェクトを使用しない通常・一時チャットに適用されます。">
+      <DetailLayout action="追加" onAction={() => browse()}>
         <SkillManager
           skills={data.skills}
-          edit={(item) => edit({ type: "skill", item })}
+          detail={(item) => edit({ type: "skill", item })}
           remove={(item) => askDelete({ type: "skills", id: item.id, name: item.name })}
           refresh={async () => {
             await refresh();
           }}
-          browse={() => browse()}
         />
       </DetailLayout>
     );
@@ -661,45 +633,45 @@ function StandardChatSettings({
   const [saving, setSaving] = useState(false);
 
   return (
-    <DetailLayout text="プロジェクトを使用しない通常・一時チャットに適用されます。">
-      <form
-        className="flex flex-col gap-4 rounded-[14px] bg-card p-3.5"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setSaving(true);
-          try {
-            await api("/api/settings", {
-              method: "PUT",
-              body: JSON.stringify({ defaultSystemPrompt: prompt }),
-            });
-            await saved();
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : "保存できませんでした");
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        <label className="flex flex-col gap-2" htmlFor="default-system-prompt">
-          <span className="text-[12px] font-semibold">システムプロンプト</span>
-          <textarea
-            id="default-system-prompt"
-            className="min-h-[180px] resize-y rounded-[11px] border border-border bg-background px-[11px] py-2.5 text-xs leading-[1.55] outline-none focus:border-ring"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            maxLength={30000}
-            rows={14}
-          />
-        </label>
+    <form
+      className="flex flex-col gap-[15px] p-5 pb-8"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        try {
+          await api("/api/settings", {
+            method: "PUT",
+            body: JSON.stringify({ defaultSystemPrompt: prompt }),
+          });
+          await saved();
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "保存できませんでした");
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <label className="flex flex-col gap-[7px]" htmlFor="default-system-prompt">
+        <span className="text-[10px] font-bold text-muted-foreground">システムプロンプト</span>
+        <textarea
+          id="default-system-prompt"
+          className="min-h-[180px] w-full resize-y rounded-[11px] border border-border bg-background px-[11px] py-2.5 text-xs leading-[1.55] text-foreground outline-none focus:border-ring"
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          maxLength={30000}
+          rows={11}
+        />
+      </label>
+      <footer className="flex justify-end pt-[7px]">
         <button
           type="submit"
-          className="inline-flex h-11 items-center justify-center self-end rounded-full bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-6 text-xs font-bold text-primary-foreground disabled:opacity-50"
+          className="inline-flex h-[39px] items-center gap-1.5 rounded-xl bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-[15px] text-[11px] font-bold text-primary-foreground shadow-[0_8px_20px_color-mix(in_srgb,#9f7ab8_25%,transparent)] disabled:opacity-50"
           disabled={saving}
         >
           {saving ? "保存中" : "保存"}
         </button>
-      </form>
-    </DetailLayout>
+      </footer>
+    </form>
   );
 }
 
@@ -832,26 +804,30 @@ function DetailLayout({
   onAction,
   children,
 }: {
-  text: string;
+  text?: string;
   action?: string;
   onAction?: () => void;
   children: ReactNode;
 }) {
   return (
     <div className="px-4 pt-5 pb-[max(28px,env(safe-area-inset-bottom))]">
-      <div className="mb-4 flex min-h-10 items-center gap-3 px-1">
-        <p className="flex-1 text-[11px] leading-relaxed text-muted-foreground">{text}</p>
-        {onAction && (
-          <button
-            type="button"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-3 text-[11px] font-bold text-primary-foreground [&_svg]:size-4"
-            onClick={onAction}
-          >
-            <Plus />
-            {action}
-          </button>
-        )}
-      </div>
+      {text || onAction ? (
+        <div className="mb-4 flex min-h-10 items-center gap-3 px-1">
+          {text ? (
+            <p className="flex-1 text-[11px] leading-relaxed text-muted-foreground">{text}</p>
+          ) : null}
+          {onAction ? (
+            <button
+              type="button"
+              className="ml-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[linear-gradient(150deg,#c99bc5,#9f7ab8)] px-3 text-[11px] font-bold text-primary-foreground [&_svg]:size-4"
+              onClick={onAction}
+            >
+              <Plus />
+              {action}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {children}
     </div>
   );

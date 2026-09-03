@@ -231,6 +231,18 @@ type ProjectRow = {
   created_at: string;
   updated_at: string;
 };
+const builtinSkillViews = builtinSkills.map((skill) => ({
+  id: `builtin:${skill.name}`,
+  name: skill.name,
+  description: skill.description,
+  instructions: "",
+  enabled: 1,
+  source: "builtin" as const,
+  source_id: null,
+  editable: false,
+  created_at: null,
+  updated_at: null,
+}));
 type HistoryRow = {
   id: string;
   role: "user" | "assistant";
@@ -332,18 +344,7 @@ function bootstrap(user: User): Response {
     invitations: incomingInvitations(user.id),
     projects: projectViews,
     skills: [
-      ...builtinSkills.map((skill) => ({
-        id: `builtin:${skill.name}`,
-        name: skill.name,
-        description: skill.description,
-        instructions: "",
-        enabled: 1,
-        source: "builtin" as const,
-        source_id: null,
-        editable: false,
-        created_at: null,
-        updated_at: null,
-      })),
+      ...builtinSkillViews,
       ...db
         .select({
           id: skillsTable.id,
@@ -521,7 +522,7 @@ function projectView(projectId: string, userId: string) {
     owner: userSummary(project.user_id)!,
     members,
     pending_invitations,
-    skills: installedSkills,
+    skills: [...builtinSkillViews, ...installedSkills],
     is_owner: access.isOwner,
     shared: project.shared === 1,
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { Check, Download, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingWave } from "@/components/loading-wave";
 import {
@@ -196,16 +196,17 @@ export function SkillCatalog({
                 </button>
                 <button
                   type="button"
-                  className="h-9 shrink-0 px-2 text-[10px] font-semibold text-primary disabled:text-muted-foreground"
+                  className="inline-flex size-9 shrink-0 items-center justify-center text-primary disabled:text-muted-foreground [&_svg]:size-4"
                   disabled={Boolean(installing) || isInstalled}
+                  aria-label={isInstalled ? `${skill.name}は追加済み` : `${skill.name}を追加`}
                   onClick={() => void install(skill)}
                 >
                   {installing === skill.id ? (
-                    <LoadingWave label="インストール中" />
+                    <LoadingWave label="追加中" />
                   ) : isInstalled ? (
-                    "インストール済み"
+                    <Check />
                   ) : (
-                    "インストール"
+                    <Download />
                   )}
                 </button>
               </div>
@@ -241,24 +242,8 @@ export function SkillCatalogDetail({
   projectId?: string;
   refresh: () => Promise<void>;
 }) {
-  const [detail, setDetail] = useState<RegistrySkillDetail>();
-  const [error, setError] = useState("");
+  const { detail, error } = useRegistryDetail(skill.id);
   const [installing, setInstalling] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setDetail(undefined);
-    setError("");
-    void api<RegistrySkillDetail>(`/api/skill-catalog/detail?id=${encodeURIComponent(skill.id)}`, {
-      signal: controller.signal,
-    })
-      .then(setDetail)
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted)
-          setError(reason instanceof Error ? reason.message : "詳細を取得できませんでした");
-      });
-    return () => controller.abort();
-  }, [skill.id]);
 
   async function install() {
     if (installing || installed) return;
@@ -279,31 +264,84 @@ export function SkillCatalogDetail({
 
   return (
     <article className="flex flex-col gap-4 p-5 pb-[max(28px,env(safe-area-inset-bottom))]">
-      <div>
-        <h3 className="text-lg font-bold">{detail?.name ?? skill.name}</h3>
-        <p className="text-[11px] text-muted-foreground">{skill.source}</p>
-        <p className="text-[11px] text-muted-foreground">
-          累計インストール数 {skill.installs.toLocaleString("ja-JP")}
-        </p>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-bold">{detail?.name ?? skill.name}</h3>
+          <p className="text-[11px] text-muted-foreground">{skill.source}</p>
+          <p className="text-[11px] text-muted-foreground">
+            累計インストール数 {skill.installs.toLocaleString("ja-JP")}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-[11px] bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground [&_svg]:size-4"
+          disabled={installed || installing || !detail}
+          aria-label={installed ? `${skill.name}は追加済み` : `${skill.name}を追加`}
+          onClick={() => void install()}
+        >
+          {installing ? <LoadingWave label="追加中" /> : installed ? <Check /> : <Download />}
+        </button>
       </div>
-      <button
-        type="button"
-        className="h-10 rounded-[11px] bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
-        disabled={installed || installing || !detail}
-        onClick={() => void install()}
-      >
-        {installing ? "インストール中" : installed ? "インストール済み" : "インストール"}
-      </button>
-      {detail ? (
-        <>
-          <section className="flex flex-col gap-1">
-            <h4 className="text-[10px] font-bold text-muted-foreground">説明</h4>
-            <p className="cursor-text select-text whitespace-pre-wrap text-xs leading-relaxed">
-              {detail.description || "説明はありません。"}
-            </p>
-          </section>
-          <section className="flex flex-col gap-2">
-            <h4 className="text-[10px] font-bold text-muted-foreground">同梱ファイル</h4>
+      <DetailState detail={detail} error={error} />
+    </article>
+  );
+}
+
+export function InstalledSkillDetail({ skill }: { skill: Skill }) {
+  const { detail, error } = useRegistryDetail(skill.source_id ?? undefined);
+  const localDetail = skill.source_id
+    ? detail
+    : { name: skill.name, description: skill.description, files: [] };
+
+  return (
+    <article className="flex flex-col gap-4 p-5 pb-[max(28px,env(safe-area-inset-bottom))]">
+      <div>
+        <h3 className="text-lg font-bold">{localDetail?.name ?? skill.name}</h3>
+        {skill.source_id ? (
+          <p className="text-[11px] text-muted-foreground">{skill.source_id}</p>
+        ) : null}
+      </div>
+      <DetailState detail={localDetail} error={error} />
+    </article>
+  );
+}
+
+function useRegistryDetail(id?: string) {
+  const [detail, setDetail] = useState<RegistrySkillDetail>();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDetail(undefined);
+    setError("");
+    if (!id) return;
+    const controller = new AbortController();
+    void api<RegistrySkillDetail>(`/api/skill-catalog/detail?id=${encodeURIComponent(id)}`, {
+      signal: controller.signal,
+    })
+      .then(setDetail)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted)
+          setError(reason instanceof Error ? reason.message : "詳細を取得できませんでした");
+      });
+    return () => controller.abort();
+  }, [id]);
+
+  return { detail, error };
+}
+
+function DetailState({ detail, error }: { detail?: RegistrySkillDetail; error: string }) {
+  if (detail)
+    return (
+      <>
+        <section className="flex flex-col gap-1">
+          <h4 className="text-[10px] font-bold text-muted-foreground">説明</h4>
+          <p className="cursor-text select-text whitespace-pre-wrap text-xs leading-relaxed">
+            {detail.description || "説明はありません。"}
+          </p>
+        </section>
+        <section className="flex flex-col gap-2">
+          <h4 className="text-[10px] font-bold text-muted-foreground">同梱ファイル</h4>
+          {detail.files.length ? (
             <ul className="overflow-hidden rounded-[11px] bg-card">
               {detail.files.map((file) => (
                 <li
@@ -314,18 +352,22 @@ export function SkillCatalogDetail({
                 </li>
               ))}
             </ul>
-          </section>
-        </>
-      ) : error ? (
-        <p className="text-[11px] text-destructive" role="alert">
-          {error}
-        </p>
-      ) : (
-        <div className="flex justify-center py-6" aria-label="詳細を読み込み中">
-          <LoadingWave />
-        </div>
-      )}
-    </article>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">同梱ファイルはありません。</p>
+          )}
+        </section>
+      </>
+    );
+  if (error)
+    return (
+      <p className="text-[11px] text-destructive" role="alert">
+        {error}
+      </p>
+    );
+  return (
+    <div className="flex justify-center py-6" aria-label="詳細を読み込み中">
+      <LoadingWave />
+    </div>
   );
 }
 
