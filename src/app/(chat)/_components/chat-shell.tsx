@@ -86,6 +86,7 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
+  const projectIdRef = useRef(projectId);
   const shellRef = useRef<HTMLDivElement>(null);
   const messageViewportRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -104,6 +105,7 @@ export function ChatShell() {
     localImagePreviewsRef.current.clear();
   }, []);
   openConversationRef.current = conversationId;
+  projectIdRef.current = projectId;
 
   useEffect(() => clearLocalImagePreviews, [clearLocalImagePreviews]);
 
@@ -426,7 +428,7 @@ export function ChatShell() {
   useEffect(() => {
     if (!conversationsLoaded) return;
     if (requestedConversationId && !resolvedConversationId) {
-      router.replace(chatUrl("/", temporaryParam, projectParam));
+      router.replace(chatUrl("/", temporaryParam, projectIdRef.current));
       return;
     }
     if (!resolvedConversationId) {
@@ -532,7 +534,7 @@ export function ChatShell() {
           }
         : value,
     );
-    if (conversationIdFromPath(pathname) === item.id) newChat(item.project_id ?? "");
+    if (conversationIdFromPath(pathname) === item.id) newChat(item.project_id ?? "", false, false);
   }
   function appendError(prefix: string, error: unknown) {
     setMessages((value) => [
