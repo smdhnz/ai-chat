@@ -302,7 +302,6 @@ export function SettingsShell({
                         />
                       ) : (
                         <SkillCatalog
-                          projectId={catalog.projectId}
                           installedSourceIds={installedRegistryIds(
                             (catalog.projectId
                               ? data.projects.find((project) => project.id === catalog.projectId)
@@ -312,9 +311,6 @@ export function SettingsShell({
                           select={(skill) => {
                             setDirection(1);
                             setCatalog({ ...catalog, skill });
-                          }}
-                          installed={async () => {
-                            await refresh();
                           }}
                         />
                       )

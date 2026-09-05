@@ -238,6 +238,7 @@ const builtinSkillViews = builtinSkills.map((skill) => ({
   enabled: 1,
   source: "builtin" as const,
   source_id: null,
+  source_commit_sha: null,
   editable: false,
   created_at: null,
   updated_at: null,
@@ -352,6 +353,7 @@ function bootstrap(user: User): Response {
           instructions: skillsTable.instructions,
           enabled: skillsTable.enabled,
           source_id: skillsTable.source_id,
+          source_commit_sha: skillsTable.source_commit_sha,
           created_at: skillsTable.created_at,
           updated_at: skillsTable.updated_at,
         })
@@ -508,6 +510,7 @@ function projectView(projectId: string, userId: string) {
       instructions: projectSkills.instructions,
       enabled: projectSkills.enabled,
       source_id: projectSkills.source_id,
+      source_commit_sha: projectSkills.source_commit_sha,
       created_at: projectSkills.created_at,
       updated_at: projectSkills.updated_at,
     })
@@ -791,11 +794,16 @@ async function searchSkillCatalog(params: URLSearchParams): Promise<Response> {
 async function skillCatalogDetail(catalogId: string): Promise<Response> {
   if (!catalogId.trim()) return json({ error: "invalid skill" }, 400);
   try {
-    const detail = await importRegistrySkill(catalogId.trim(), AbortSignal.timeout(30_000));
+    const detail = await importRegistrySkill(
+      catalogId.trim(),
+      undefined,
+      AbortSignal.timeout(30_000),
+    );
     return json({
       name: detail.name,
       description: detail.description,
-      files: detail.files.map((file) => ({ path: file.path })),
+      sourceCommitSha: detail.sourceCommitSha,
+      files: detail.files,
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "取得できませんでした" }, 502);
@@ -806,11 +814,17 @@ async function installSkill(request: Request, userId: string): Promise<Response>
   verifyOrigin(request);
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const catalogId = typeof body?.catalogId === "string" ? body.catalogId.trim() : "";
+  const sourceCommitSha = body?.sourceCommitSha;
   const projectId = typeof body?.projectId === "string" ? body.projectId : null;
-  if (!catalogId) return json({ error: "invalid skill" }, 400);
+  if (!catalogId || typeof sourceCommitSha !== "string" || !/^[0-9a-f]{40}$/i.test(sourceCommitSha))
+    return json({ error: "invalid skill or commit SHA" }, 400);
   if (projectId && !projectAccess(db, projectId, userId)?.isOwner)
     return json({ error: "project not found" }, 404);
-  const imported = await importRegistrySkill(catalogId, AbortSignal.timeout(30_000));
+  const imported = await importRegistrySkill(
+    catalogId,
+    sourceCommitSha,
+    AbortSignal.timeout(30_000),
+  );
   if (builtinSkill(imported.name)) return json({ error: "skill name is reserved" }, 409);
   const timestamp = now();
   if (projectId) {
@@ -834,6 +848,7 @@ async function installSkill(request: Request, userId: string): Promise<Response>
         instructions: imported.instructions,
         files: JSON.stringify(imported.files),
         source_id: imported.sourceId,
+        source_commit_sha: imported.sourceCommitSha,
         created_at: timestamp,
         updated_at: timestamp,
       })
@@ -860,6 +875,7 @@ async function installSkill(request: Request, userId: string): Promise<Response>
         instructions: imported.instructions,
         files: JSON.stringify(imported.files),
         source_id: imported.sourceId,
+        source_commit_sha: imported.sourceCommitSha,
         created_at: timestamp,
         updated_at: timestamp,
       })

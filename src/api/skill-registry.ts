@@ -16,6 +16,7 @@ export type ImportedSkill = {
   instructions: string;
   files: { path: string; contents: string }[];
   sourceId: string;
+  sourceCommitSha: string;
 };
 
 const registryOrigin = "https://skills.sh";
@@ -117,28 +118,48 @@ function uniqueSkills(skills: RegistrySkill[]): RegistrySkill[] {
 
 export async function importRegistrySkill(
   catalogId: string,
+  sourceCommitSha?: string,
   signal?: AbortSignal,
   fetcher: typeof fetch = fetch,
 ): Promise<ImportedSkill> {
   const match = /^([\w.-]+)\/([\w.-]+)\/(.+)$/.exec(catalogId);
   if (!match) throw new Error("スキルIDが不正です");
+  if (sourceCommitSha !== undefined && !/^[0-9a-f]{40}$/i.test(sourceCommitSha))
+    throw new Error("コミットSHAが不正です");
   const [, owner, repo, slug] = match;
   const headers: HeadersInit = { Accept: "application/vnd.github+json", "User-Agent": "ai-chat" };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 
-  const [registryResponse, repositoryResponse] = await Promise.all([
-    fetcher(`${registryOrigin}/${catalogId}`, { method: "HEAD", signal }),
-    fetcher(`${githubApi}/repos/${owner}/${repo}`, { headers, signal }),
-  ]);
+  const registryResponse = await fetcher(`${registryOrigin}/${catalogId}`, {
+    method: "HEAD",
+    signal,
+  });
   if (!registryResponse.ok) throw new Error("skills.shに登録されていないスキルです");
-  if (!repositoryResponse.ok)
-    throw new Error(`スキルのリポジトリを取得できません (${repositoryResponse.status})`);
-  const repository = (await repositoryResponse.json()) as { default_branch?: unknown };
-  if (typeof repository.default_branch !== "string")
-    throw new Error("既定ブランチを取得できません");
+  if (!sourceCommitSha) {
+    const repositoryResponse = await fetcher(`${githubApi}/repos/${owner}/${repo}`, {
+      headers,
+      signal,
+    });
+    if (!repositoryResponse.ok)
+      throw new Error(`スキルのリポジトリを取得できません (${repositoryResponse.status})`);
+    const repository = (await repositoryResponse.json()) as { default_branch?: unknown };
+    if (typeof repository.default_branch !== "string")
+      throw new Error("既定ブランチを取得できません");
+    const commitResponse = await fetcher(
+      `${githubApi}/repos/${owner}/${repo}/commits/${encodeURIComponent(repository.default_branch)}`,
+      { headers, signal },
+    );
+    if (!commitResponse.ok)
+      throw new Error(`スキルのコミットを取得できません (${commitResponse.status})`);
+    const commit = (await commitResponse.json()) as { sha?: unknown };
+    if (typeof commit.sha !== "string" || !/^[0-9a-f]{40}$/i.test(commit.sha))
+      throw new Error("コミットSHAが不正です");
+    sourceCommitSha = commit.sha;
+  }
+  sourceCommitSha = sourceCommitSha.toLowerCase();
 
   const treeResponse = await fetcher(
-    `${githubApi}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(repository.default_branch)}?recursive=1`,
+    `${githubApi}/repos/${owner}/${repo}/git/trees/${sourceCommitSha}?recursive=1`,
     { headers, signal },
   );
   if (!treeResponse.ok)
@@ -150,7 +171,7 @@ export async function importRegistrySkill(
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const row = item as Record<string, unknown>;
     return row.type === "blob" && typeof row.path === "string" && typeof row.size === "number"
-      ? [{ path: row.path, size: row.size, sha: typeof row.sha === "string" ? row.sha : "" }]
+      ? [{ path: row.path, size: row.size }]
       : [];
   });
   const normalizedSlug = slug.toLowerCase().replaceAll(" ", "-");
@@ -164,22 +185,45 @@ export async function importRegistrySkill(
   const selected = blobs.filter((file) => file.path.startsWith(root));
   if (
     selected.length > maxFiles ||
-    selected.some((file) => file.size > 250_000) ||
+    selected.some(
+      (file) => !Number.isSafeInteger(file.size) || file.size < 0 || file.size > 250_000,
+    ) ||
     selected.reduce((total, file) => total + file.size, 0) > maxBytes
   )
     throw new Error("スキルが取込上限を超えています");
 
+  let totalBytes = 0;
   const contents = await Promise.all(
     selected.map(async (file) => {
       const response = await fetcher(
-        `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(repository.default_branch as string)}/${file.path
+        `https://raw.githubusercontent.com/${owner}/${repo}/${sourceCommitSha}/${file.path
           .split("/")
           .map(encodeURIComponent)
           .join("/")}`,
         { signal },
       );
       if (!response.ok) throw new Error(`スキルファイルを取得できません (${response.status})`);
-      return { path: file.path.slice(root.length), contents: await response.text() };
+      if (!response.body) throw new Error("スキルファイルの本文がありません");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fileBytes = 0;
+      let contents = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fileBytes += value.byteLength;
+          totalBytes += value.byteLength;
+          if (fileBytes > 250_000 || totalBytes > maxBytes)
+            throw new Error("スキルが取込上限を超えています");
+          contents += decoder.decode(value, { stream: true });
+        }
+        contents += decoder.decode();
+      } finally {
+        await reader.cancel();
+        reader.releaseLock();
+      }
+      return { path: file.path.slice(root.length), contents };
     }),
   );
   const manifest = contents.find((file) => file.path === "SKILL.md")!;
@@ -192,6 +236,7 @@ export async function importRegistrySkill(
     instructions,
     files: contents,
     sourceId: catalogId,
+    sourceCommitSha,
   };
 }
 

@@ -35,6 +35,7 @@ export type Skill = {
   enabled: number;
   source: "builtin" | "skills.sh" | "legacy";
   source_id: string | null;
+  source_commit_sha: string | null;
   editable: boolean;
   created_at: string | null;
   updated_at: string | null;
@@ -49,7 +50,8 @@ export type RegistryPage = { skills: RegistrySkill[]; hasMore: boolean };
 export type RegistrySkillDetail = {
   name: string;
   description: string;
-  files: { path: string }[];
+  sourceCommitSha: string;
+  files: { path: string; contents: string }[];
 };
 export type ProjectInvitation = {
   project_id: string;

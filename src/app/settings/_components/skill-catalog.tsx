@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Download, Search, X } from "lucide-react";
+import { Check, Download, Eye, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { LoadingWave } from "@/components/loading-wave";
 import {
@@ -26,10 +26,6 @@ export function mergeRegistrySkills(
   ];
 }
 
-export function skillInstallBody(catalogId: string, projectId?: string) {
-  return projectId ? { catalogId, projectId } : { catalogId };
-}
-
 export function installedRegistryIds(skills: Skill[]): Set<string> {
   return new Set(
     skills
@@ -39,14 +35,10 @@ export function installedRegistryIds(skills: Skill[]): Set<string> {
 }
 export function SkillCatalog({
   installedSourceIds,
-  projectId,
   select,
-  installed,
 }: {
   installedSourceIds: Set<string>;
-  projectId?: string;
   select: (skill: RegistrySkill) => void;
-  installed: () => Promise<void>;
 }) {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
@@ -54,7 +46,6 @@ export function SkillCatalog({
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [installing, setInstalling] = useState<string>();
   const offset = useRef(0);
   const loadingRequest = useRef(false);
   const requestVersion = useRef(0);
@@ -129,23 +120,6 @@ export function SkillCatalog({
     return () => observer.disconnect();
   }, [hasMore, loadMore, skills.length]);
 
-  async function install(skill: RegistrySkill) {
-    if (installing || installedSourceIds.has(skill.id)) return;
-    setInstalling(skill.id);
-    try {
-      await api("/api/skills/install", {
-        method: "POST",
-        body: JSON.stringify(skillInstallBody(skill.id, projectId)),
-      });
-      await installed();
-      toast.success("スキルを追加しました");
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : "追加できませんでした");
-    } finally {
-      setInstalling(undefined);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-3 p-4 pb-[max(28px,env(safe-area-inset-bottom))]">
       <label className="relative block">
@@ -197,17 +171,11 @@ export function SkillCatalog({
                 <button
                   type="button"
                   className="inline-flex size-9 shrink-0 items-center justify-center text-primary disabled:text-muted-foreground [&_svg]:size-4"
-                  disabled={Boolean(installing) || isInstalled}
-                  aria-label={isInstalled ? `${skill.name}は追加済み` : `${skill.name}を追加`}
-                  onClick={() => void install(skill)}
+                  disabled={isInstalled}
+                  aria-label={isInstalled ? `${skill.name}は追加済み` : `${skill.name}の内容を確認`}
+                  onClick={() => select(skill)}
                 >
-                  {installing === skill.id ? (
-                    <LoadingWave label="追加中" />
-                  ) : isInstalled ? (
-                    <Check />
-                  ) : (
-                    <Download />
-                  )}
+                  {isInstalled ? <Check /> : <Eye />}
                 </button>
               </div>
             );
@@ -246,12 +214,16 @@ export function SkillCatalogDetail({
   const [installing, setInstalling] = useState(false);
 
   async function install() {
-    if (installing || installed) return;
+    if (installing || installed || !detail) return;
     setInstalling(true);
     try {
       await api("/api/skills/install", {
         method: "POST",
-        body: JSON.stringify(skillInstallBody(skill.id, projectId)),
+        body: JSON.stringify({
+          catalogId: skill.id,
+          sourceCommitSha: detail.sourceCommitSha,
+          ...(projectId ? { projectId } : {}),
+        }),
       });
       await refresh();
       toast.success("スキルを追加しました");
@@ -288,37 +260,44 @@ export function SkillCatalogDetail({
 }
 
 export function InstalledSkillDetail({ skill }: { skill: Skill }) {
-  const { detail, error } = useRegistryDetail(skill.source_id ?? undefined);
-  const localDetail = skill.source_id
-    ? detail
-    : { name: skill.name, description: skill.description, files: [] };
-
   return (
     <article className="flex flex-col gap-4 p-5 pb-[max(28px,env(safe-area-inset-bottom))]">
       <div>
-        <h3 className="text-lg font-bold">{localDetail?.name ?? skill.name}</h3>
+        <h3 className="text-lg font-bold">{skill.name}</h3>
         {skill.source_id ? (
           <p className="text-[11px] text-muted-foreground">{skill.source_id}</p>
         ) : null}
+        <p className="cursor-text select-text text-[11px] break-all text-muted-foreground">
+          保存コミットSHA: {skill.source_commit_sha ?? "null（不明）"}
+        </p>
       </div>
-      <DetailState detail={localDetail} error={error} />
+      <p className="cursor-text select-text whitespace-pre-wrap text-xs leading-relaxed">
+        {skill.description || "説明はありません。"}
+      </p>
+      <section className="flex flex-col gap-2">
+        <h4 className="text-[10px] font-bold text-muted-foreground">保存済みの指示</h4>
+        <pre className="max-h-96 overflow-auto rounded-[11px] bg-card p-3 text-xs whitespace-pre-wrap break-words">
+          {skill.instructions}
+        </pre>
+      </section>
     </article>
   );
 }
 
-function useRegistryDetail(id?: string) {
-  const [detail, setDetail] = useState<RegistrySkillDetail>();
+function useRegistryDetail(id: string) {
+  const [result, setResult] = useState<{ id: string; detail: RegistrySkillDetail }>();
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setDetail(undefined);
+    setResult(undefined);
     setError("");
-    if (!id) return;
     const controller = new AbortController();
     void api<RegistrySkillDetail>(`/api/skill-catalog/detail?id=${encodeURIComponent(id)}`, {
       signal: controller.signal,
     })
-      .then(setDetail)
+      .then((detail) => {
+        if (!controller.signal.aborted) setResult({ id, detail });
+      })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted)
           setError(reason instanceof Error ? reason.message : "詳細を取得できませんでした");
@@ -326,7 +305,7 @@ function useRegistryDetail(id?: string) {
     return () => controller.abort();
   }, [id]);
 
-  return { detail, error };
+  return { detail: result?.id === id ? result.detail : undefined, error };
 }
 
 function DetailState({ detail, error }: { detail?: RegistrySkillDetail; error: string }) {
@@ -339,16 +318,26 @@ function DetailState({ detail, error }: { detail?: RegistrySkillDetail; error: s
             {detail.description || "説明はありません。"}
           </p>
         </section>
+        <p className="cursor-text select-text text-[11px] break-all text-muted-foreground">
+          確認コミットSHA: {detail.sourceCommitSha}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          以下の本文とスクリプトを確認してから追加してください。このコミットの内容を保存します。
+        </p>
         <section className="flex flex-col gap-2">
           <h4 className="text-[10px] font-bold text-muted-foreground">同梱ファイル</h4>
           {detail.files.length ? (
             <ul className="overflow-hidden rounded-[11px] bg-card">
               {detail.files.map((file) => (
-                <li
-                  key={file.path}
-                  className="border-b border-border px-3 py-2 text-[11px] break-all last:border-b-0"
-                >
-                  {file.path}
+                <li key={file.path} className="border-b border-border last:border-b-0">
+                  <details open={file.path === "SKILL.md"}>
+                    <summary className="cursor-pointer px-3 py-2 text-[11px] break-all">
+                      {file.path}
+                    </summary>
+                    <pre className="max-h-96 overflow-auto px-3 pb-3 text-xs whitespace-pre-wrap break-words">
+                      {file.contents}
+                    </pre>
+                  </details>
                 </li>
               ))}
             </ul>

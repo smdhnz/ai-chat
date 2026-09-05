@@ -62,6 +62,38 @@ describe("database migration", () => {
     expect(sqlite.query("PRAGMA foreign_key_check").all()).toEqual([]);
   });
 
+  test("個人とプロジェクトの既存スキルの内容を保ち、未記録SHAはnullにする", () => {
+    const directory = dataDirectory();
+    migrate(directory);
+    const path = join(directory, "chat.sqlite");
+    const sqlite = new Database(path);
+    sqlite.exec(`
+      INSERT INTO users (id,username,display_name,created_at,updated_at)
+      VALUES ('user','name','User','2025','2025');
+      INSERT INTO projects (id,user_id,name,created_at,updated_at)
+      VALUES ('project','user','Project','2025','2025');
+      INSERT INTO skills (id,user_id,name,instructions,source_id,created_at,updated_at)
+      VALUES ('personal','user','Sample','saved instructions','owner/repo/sample','2025','2025');
+      INSERT INTO project_skills (id,project_id,name,instructions,source_id,created_at,updated_at)
+      VALUES ('shared','project','Sample','saved project instructions','owner/repo/sample','2025','2025');
+      ALTER TABLE skills DROP COLUMN source_commit_sha;
+      ALTER TABLE project_skills DROP COLUMN source_commit_sha;
+      DELETE FROM __drizzle_migrations
+      WHERE created_at = (SELECT MAX(created_at) FROM __drizzle_migrations);
+    `);
+    sqlite.close();
+
+    migrate(directory);
+    const migrated = new Database(path, { readonly: true });
+    expect(migrated.query("SELECT instructions, source_commit_sha FROM skills").all()).toEqual([
+      { instructions: "saved instructions", source_commit_sha: null },
+    ]);
+    expect(
+      migrated.query("SELECT instructions, source_commit_sha FROM project_skills").all(),
+    ).toEqual([{ instructions: "saved project instructions", source_commit_sha: null }]);
+    migrated.close();
+  });
+
   test("既存データを保ったままbaseline化し、旧schemaだけ削除する", () => {
     const directory = dataDirectory();
     migrate(directory);
@@ -76,6 +108,7 @@ describe("database migration", () => {
       ALTER TABLE projects ADD COLUMN language TEXT NOT NULL DEFAULT 'Japanese';
       DROP TABLE project_skills;
       ALTER TABLE skills DROP COLUMN source_id;
+      ALTER TABLE skills DROP COLUMN source_commit_sha;
       ALTER TABLE skills DROP COLUMN files;
       ALTER TABLE projects ADD COLUMN thinking_level TEXT NOT NULL DEFAULT 'low';
       INSERT INTO users (
@@ -94,8 +127,8 @@ describe("database migration", () => {
     migrate(directory);
     const migrated = new Database(path, { readonly: true });
     expect(migrated.query("SELECT id FROM users").all()).toEqual([{ id: "user" }]);
-    expect(migrated.query("SELECT id, name FROM skills").all()).toEqual([
-      { id: "skill", name: "existing" },
+    expect(migrated.query("SELECT id, name, source_commit_sha FROM skills").all()).toEqual([
+      { id: "skill", name: "existing", source_commit_sha: null },
     ]);
     expect(
       migrated

@@ -27,6 +27,8 @@ const migratedColumns = new Set([
   "users.default_system_prompt",
   "skills.files",
   "skills.source_id",
+  "skills.source_commit_sha",
+  "project_skills.source_commit_sha",
 ]);
 if (!hasMigration && tables.some((table) => existingTables.has(getTableName(table))))
   for (const table of tables) {

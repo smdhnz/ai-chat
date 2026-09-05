@@ -8,6 +8,7 @@ import {
 
 describe("skills.sh registry", () => {
   test("検索結果を検証し、対象SKILL.mdと同梱スクリプトだけを取り込む", async () => {
+    const sourceCommitSha = "a".repeat(40);
     const responses = new Map<string, Response>([
       [
         "https://skills.sh/api/search?q=sample&limit=200",
@@ -22,7 +23,11 @@ describe("skills.sh registry", () => {
       ["https://skills.sh/owner/repo/sample", new Response("skill")],
       ["https://api.github.com/repos/owner/repo", Response.json({ default_branch: "main" })],
       [
-        "https://api.github.com/repos/owner/repo/git/trees/main?recursive=1",
+        "https://api.github.com/repos/owner/repo/commits/main",
+        Response.json({ sha: sourceCommitSha }),
+      ],
+      [
+        `https://api.github.com/repos/owner/repo/git/trees/${sourceCommitSha}?recursive=1`,
         Response.json({
           tree: [
             { type: "blob", path: "skills/sample/SKILL.md", size: 80, sha: "hash" },
@@ -32,11 +37,11 @@ describe("skills.sh registry", () => {
         }),
       ],
       [
-        "https://raw.githubusercontent.com/owner/repo/main/skills/sample/SKILL.md",
+        `https://raw.githubusercontent.com/owner/repo/${sourceCommitSha}/skills/sample/SKILL.md`,
         new Response("---\nname: Sample skill\ndescription: Does work\n---\nFollow these steps."),
       ],
       [
-        "https://raw.githubusercontent.com/owner/repo/main/skills/sample/scripts/run.ts",
+        `https://raw.githubusercontent.com/owner/repo/${sourceCommitSha}/skills/sample/scripts/run.ts`,
         new Response("console.log('ok')"),
       ],
     ]);
@@ -50,7 +55,8 @@ describe("skills.sh registry", () => {
       { id: "owner/repo/popular", name: "Popular", source: "owner/repo", installs: 20 },
       { id: "owner/repo/sample", name: "Sample", source: "owner/repo", installs: 12 },
     ]);
-    await expect(importRegistrySkill("owner/repo/sample", undefined, fetcher)).resolves.toEqual({
+    const preview = await importRegistrySkill("owner/repo/sample", undefined, undefined, fetcher);
+    expect(preview).toEqual({
       name: "Sample skill",
       description: "Does work",
       instructions: "Follow these steps.",
@@ -62,7 +68,61 @@ describe("skills.sh registry", () => {
         { path: "scripts/run.ts", contents: "console.log('ok')" },
       ],
       sourceId: "owner/repo/sample",
+      sourceCommitSha,
     });
+
+    // Previewed files remain the installation source after the default branch moves.
+    responses.set(
+      "https://api.github.com/repos/owner/repo/commits/main",
+      Response.json({ sha: "b".repeat(40) }),
+    );
+    responses.set(
+      "https://api.github.com/repos/owner/repo",
+      Response.json({ default_branch: "renamed" }),
+    );
+    await expect(
+      importRegistrySkill("owner/repo/sample", preview.sourceCommitSha, undefined, fetcher),
+    ).resolves.toEqual(preview);
+  });
+
+  test("不正なSHAとファイル一覧を超える実バイトを拒否する", async () => {
+    const sourceCommitSha = "a".repeat(40);
+    const fetcher = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://skills.sh/")) return new Response(null);
+      if (url.includes("/git/trees/"))
+        return Response.json({
+          tree: [{ type: "blob", path: "skills/sample/SKILL.md", size: 1 }],
+        });
+      if (url.startsWith("https://raw.githubusercontent.com/"))
+        return new Response("あ".repeat(90_000));
+      throw new Error(`Unexpected request: ${url}`);
+    }) as typeof fetch;
+    await expect(
+      importRegistrySkill("owner/repo/sample", "main", undefined, fetcher),
+    ).rejects.toThrow("コミットSHAが不正です");
+    await expect(
+      importRegistrySkill("owner/repo/sample", sourceCommitSha, undefined, fetcher),
+    ).rejects.toThrow("スキルが取込上限を超えています");
+  });
+
+  test("各ファイルが上限内でも実バイト合計の超過を拒否する", async () => {
+    const fetcher = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://skills.sh/")) return new Response(null);
+      if (url.includes("/git/trees/"))
+        return Response.json({
+          tree: ["SKILL.md", ...Array.from({ length: 5 }, (_, index) => `script-${index}.py`)].map(
+            (name) => ({ type: "blob", path: `skills/sample/${name}`, size: 1 }),
+          ),
+        });
+      if (url.startsWith("https://raw.githubusercontent.com/"))
+        return new Response(url.endsWith("SKILL.md") ? "Follow these steps." : "あ".repeat(70_000));
+      throw new Error(`Unexpected request: ${url}`);
+    }) as typeof fetch;
+    await expect(
+      importRegistrySkill("owner/repo/sample", "a".repeat(40), undefined, fetcher),
+    ).rejects.toThrow("スキルが取込上限を超えています");
   });
 
   test("累計ランキングを解析し、installs降順で10件ずつ返す", async () => {
