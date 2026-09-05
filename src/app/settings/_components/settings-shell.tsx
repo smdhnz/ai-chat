@@ -642,7 +642,6 @@ function StandardChatSettings({
 }) {
   const [prompt, setPrompt] = useState(value);
   const [saving, setSaving] = useState(false);
-
   return (
     <form
       className="flex flex-col gap-[15px] p-5 pb-8"

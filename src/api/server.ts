@@ -78,7 +78,6 @@ setInterval(() => {
   cleanupExpired();
   void cleanupTemporaryConversations();
 }, 60 * 60_000).unref();
-
 const server = Bun.serve<SocketData>({
   port: config.port,
   async fetch(request, server) {
@@ -211,6 +210,7 @@ const server = Bun.serve<SocketData>({
     },
   },
 });
+
 console.log(`ai-chat listening on ${config.origin}`);
 
 type User = {
