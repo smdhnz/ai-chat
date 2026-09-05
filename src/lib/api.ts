@@ -140,7 +140,6 @@ export type Bootstrap = {
     username: string;
     display_name: string;
     avatar: string | null;
-    ctrl_enter_send: number;
     default_system_prompt: string;
   };
   users: UserSummary[];

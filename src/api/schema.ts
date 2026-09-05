@@ -14,7 +14,6 @@ export const users = sqliteTable("users", {
   username: text().notNull(),
   display_name: text().notNull(),
   avatar: text(),
-  ctrl_enter_send: integer().notNull().default(0),
   default_system_prompt: text().notNull().default(""),
   created_at: text().notNull(),
   updated_at: text().notNull(),

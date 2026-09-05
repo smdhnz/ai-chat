@@ -218,7 +218,6 @@ type User = {
   username: string;
   display_name: string;
   avatar: string | null;
-  ctrl_enter_send: number;
   default_system_prompt: string;
 };
 type UserSummary = Pick<User, "id" | "username" | "display_name" | "avatar">;
@@ -745,17 +744,14 @@ async function saveSettings(request: Request, userId: string): Promise<Response>
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (
     !body ||
-    (typeof body.ctrlEnterSend !== "boolean" && typeof body.defaultSystemPrompt !== "string") ||
-    (typeof body.defaultSystemPrompt === "string" && body.defaultSystemPrompt.length > 30_000)
+    typeof body.defaultSystemPrompt !== "string" ||
+    body.defaultSystemPrompt.length > 30_000
   )
     return json({ error: "invalid settings" }, 400);
-  const updates: { ctrl_enter_send?: number; default_system_prompt?: string; updated_at: string } =
-    {
-      updated_at: now(),
-    };
-  if (typeof body.ctrlEnterSend === "boolean") updates.ctrl_enter_send = body.ctrlEnterSend ? 1 : 0;
-  if (typeof body.defaultSystemPrompt === "string")
-    updates.default_system_prompt = clean(body.defaultSystemPrompt, 30_000);
+  const updates = {
+    default_system_prompt: clean(body.defaultSystemPrompt, 30_000),
+    updated_at: now(),
+  };
   db.update(users).set(updates).where(eq(users.id, userId)).run();
   return json(updates);
 }
@@ -1531,7 +1527,6 @@ function sessionUser(request: Request): User | null {
       username: users.username,
       display_name: users.display_name,
       avatar: users.avatar,
-      ctrl_enter_send: users.ctrl_enter_send,
       default_system_prompt: users.default_system_prompt,
     })
     .from(sessions)
