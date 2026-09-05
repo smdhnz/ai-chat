@@ -48,10 +48,17 @@ import {
 } from "@/app/settings/_components/skill-catalog";
 
 type DeleteTarget = { type: "projects" | "skills" | "data"; id: string; name: string };
-type EditorState =
-  { type: "project"; item?: Project } | { type: "skill"; item: Skill; projectId?: string };
+type EditorState = { type: "project"; item?: Project } | { type: "skill"; item: Skill };
 
-type CatalogState = { projectId?: string; skill?: RegistrySkill };
+type SettingsView =
+  | { type: "root" }
+  | { type: "tab"; tab: SettingsTab }
+  | { type: "projectEditor"; item?: Project }
+  | { type: "skillDetail"; item: Skill }
+  | { type: "projectSkills"; draft: Project }
+  | { type: "projectSkillDetail"; item: Skill; draft: Project }
+  | { type: "catalog"; skill?: RegistrySkill }
+  | { type: "projectCatalog"; draft: Project; skill?: RegistrySkill };
 const pageHeaderClass =
   "relative flex h-[58px] shrink-0 items-center justify-center border-b border-border px-3";
 
@@ -69,24 +76,16 @@ export function SettingsShell({
   const reduceMotion = useReducedMotion();
   const sheetDragControls = useDragControls();
   const backDragControls = useDragControls();
-  const [tab, setTab] = useState<SettingsTab | null>(null);
+  const [view, setView] = useState<SettingsView>({ type: "root" });
   const [direction, setDirection] = useState(1);
   const [closing, setClosing] = useState(false);
-  const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [catalog, setCatalog] = useState<CatalogState | null>(null);
-  const [projectSkills, setProjectSkills] = useState<string | null>(null);
-  const [projectDraft, setProjectDraft] = useState<Project | null>(null);
 
   useEffect(() => {
     setClosing(false);
     if (open) return;
-    setTab(null);
-    setEditor(null);
-    setCatalog(null);
-    setProjectSkills(null);
-    setProjectDraft(null);
+    setView({ type: "root" });
   }, [open]);
 
   async function refresh(message?: string) {
@@ -107,84 +106,111 @@ export function SettingsShell({
     if (!closing) setClosing(true);
   }
 
-  function showTab(next: SettingsTab) {
+  function showTab(tab: SettingsTab) {
     setDirection(1);
-    setTab(next);
+    setView({ type: "tab", tab });
   }
 
-  function showEditor(next: EditorState) {
+  function showEditor(editor: EditorState) {
     setDirection(1);
-    setEditor(next);
+    if (editor.type === "project") {
+      setView({ type: "projectEditor", item: editor.item });
+      return;
+    }
+    if (view.type === "projectSkills") {
+      setView({ type: "projectSkillDetail", item: editor.item, draft: view.draft });
+      return;
+    }
+    setView({ type: "skillDetail", item: editor.item });
   }
 
-  function showCatalog(projectId?: string) {
+  function showCatalog() {
     setDirection(1);
-    setCatalog({ projectId });
+    if (view.type === "projectSkills") {
+      setView({ type: "projectCatalog", draft: view.draft });
+      return;
+    }
+    setView({ type: "catalog" });
   }
 
   function showProjectSkills(draft: Project) {
     setDirection(1);
-    setProjectDraft(draft);
-    setProjectSkills(draft.id);
+    setView({ type: "projectSkills", draft });
   }
 
   function back() {
     setDirection(-1);
-    if (catalog?.skill) {
-      setCatalog({ projectId: catalog.projectId });
-      return;
+    switch (view.type) {
+      case "catalog":
+        setView(view.skill ? { type: "catalog" } : { type: "tab", tab: "skills" });
+        return;
+      case "projectCatalog":
+        setView(
+          view.skill
+            ? { type: "projectCatalog", draft: view.draft }
+            : { type: "projectSkills", draft: view.draft },
+        );
+        return;
+      case "projectSkills":
+      case "projectSkillDetail": {
+        const latest = data.projects.find((project) => project.id === view.draft.id);
+        setView({
+          type: "projectEditor",
+          item: latest ? { ...view.draft, skills: latest.skills } : latest,
+        });
+        return;
+      }
+      case "projectEditor":
+        setView({ type: "tab", tab: "projects" });
+        return;
+      case "skillDetail":
+        setView({ type: "tab", tab: "skills" });
+        return;
+      case "tab":
+        setView(view.tab === "skills" ? { type: "tab", tab: "chat" } : { type: "root" });
+        return;
+      case "root":
+        return;
     }
-    if (catalog) {
-      setCatalog(null);
-      return;
-    }
-    if (projectSkills) {
-      const latest = data.projects.find((project) => project.id === projectSkills);
-      setProjectSkills(null);
-      setEditor({
-        type: "project",
-        item: projectDraft && latest ? { ...projectDraft, skills: latest.skills } : latest,
-      });
-      setProjectDraft(null);
-      return;
-    }
-    if (editor?.type === "skill" && editor.projectId) {
-      const latest = data.projects.find((project) => project.id === editor.projectId);
-      setEditor({
-        type: "project",
-        item: projectDraft && latest ? { ...projectDraft, skills: latest.skills } : latest,
-      });
-      setProjectDraft(null);
-    } else if (editor) setEditor(null);
-    else if (tab === "skills") setTab("chat");
-    else setTab(null);
   }
 
-  const viewKey = catalog
-    ? `catalog-${catalog.projectId ?? "general"}-${catalog.skill?.id ?? "list"}`
-    : projectSkills
-      ? `project-skills-${projectSkills}`
-      : editor
-        ? `${editor.type}-${editor.item?.id ?? "new"}`
-        : tab
-          ? `tab-${tab}`
-          : "root";
-  const title = catalog
-    ? catalog.skill
-      ? "スキル詳細"
-      : "スキルを追加"
-    : projectSkills
-      ? "スキル"
-      : editor
-        ? editor.type === "project"
-          ? `プロジェクト${editor.item ? (editor.item.is_owner ? "を編集" : "の詳細") : "を作成"}`
-          : "スキル詳細"
-        : tab
-          ? settingsTabLabels[tab]
-          : "設定";
-  const skillProject = projectSkills
-    ? data.projects.find((project) => project.id === projectSkills)
-    : undefined;
+  let viewKey = "root";
+  let title = "設定";
+  switch (view.type) {
+    case "tab":
+      viewKey = `tab-${view.tab}`;
+      title = settingsTabLabels[view.tab];
+      break;
+    case "projectEditor":
+      viewKey = `project-${view.item?.id ?? "new"}`;
+      title = `プロジェクト${view.item ? (view.item.is_owner ? "を編集" : "の詳細") : "を作成"}`;
+      break;
+    case "skillDetail":
+    case "projectSkillDetail":
+      viewKey = `skill-${view.item.id}`;
+      title = "スキル詳細";
+      break;
+    case "projectSkills":
+      viewKey = `project-skills-${view.draft.id}`;
+      title = "スキル";
+      break;
+    case "catalog":
+      viewKey = `catalog-general-${view.skill?.id ?? "list"}`;
+      title = view.skill ? "スキル詳細" : "スキルを追加";
+      break;
+    case "projectCatalog":
+      viewKey = `catalog-${view.draft.id}-${view.skill?.id ?? "list"}`;
+      title = view.skill ? "スキル詳細" : "スキルを追加";
+      break;
+    case "root":
+      break;
+  }
+  const skillProject =
+    view.type === "projectSkills"
+      ? data.projects.find((project) => project.id === view.draft.id)
+      : undefined;
+  const catalogProjectId = view.type === "projectCatalog" ? view.draft.id : undefined;
+  const canGoBack = view.type !== "root";
   const visible = open && !closing;
 
   return (
@@ -242,18 +268,18 @@ export function SettingsShell({
                   animate={{ x: 0 }}
                   exit={{ x: direction > 0 ? "-28%" : "100%" }}
                   transition={{ duration: reduceMotion ? 0 : 0.3, ease: [0.32, 0.72, 0, 1] }}
-                  drag={tab ? "x" : false}
+                  drag={canGoBack ? "x" : false}
                   dragControls={backDragControls}
                   dragListener={false}
                   onPointerDownCapture={(event) => {
-                    if (tab && canStartSwipe(false, event.clientX, window.innerWidth))
+                    if (canGoBack && canStartSwipe(false, event.clientX, window.innerWidth))
                       backDragControls.start(event);
                   }}
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={{ left: 0, right: 1 }}
                   onDragEnd={(_, info: PanInfo) => {
                     if (
-                      tab &&
+                      canGoBack &&
                       shouldCompleteSwipe(info.offset.x, window.innerWidth * 0.2, info.velocity.x)
                     )
                       back();
@@ -261,7 +287,7 @@ export function SettingsShell({
                   className="absolute inset-0 flex touch-pan-y flex-col bg-background"
                 >
                   <header className={pageHeaderClass}>
-                    {tab && (
+                    {canGoBack && (
                       <button
                         type="button"
                         className="absolute left-2 inline-flex h-10 items-center gap-0.5 px-1 text-[13px] text-primary [&_svg]:size-5"
@@ -273,7 +299,7 @@ export function SettingsShell({
                       </button>
                     )}
                     <h2 className="text-[16px] font-bold">{title}</h2>
-                    {!tab && (
+                    {!canGoBack && (
                       <button
                         type="button"
                         className="absolute right-3 inline-flex size-9 items-center justify-center rounded-full bg-muted [&_svg]:size-[18px]"
@@ -285,17 +311,17 @@ export function SettingsShell({
                     )}
                   </header>
                   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {catalog ? (
-                      catalog.skill ? (
+                    {view.type === "catalog" || view.type === "projectCatalog" ? (
+                      view.skill ? (
                         <SkillCatalogDetail
-                          skill={catalog.skill}
-                          projectId={catalog.projectId}
+                          skill={view.skill}
+                          projectId={catalogProjectId}
                           installed={installedRegistryIds(
-                            (catalog.projectId
-                              ? data.projects.find((project) => project.id === catalog.projectId)
+                            (catalogProjectId
+                              ? data.projects.find((project) => project.id === catalogProjectId)
                                   ?.skills
                               : data.skills) ?? [],
-                          ).has(catalog.skill.id)}
+                          ).has(view.skill.id)}
                           refresh={async () => {
                             await refresh();
                           }}
@@ -303,37 +329,28 @@ export function SettingsShell({
                       ) : (
                         <SkillCatalog
                           installedSourceIds={installedRegistryIds(
-                            (catalog.projectId
-                              ? data.projects.find((project) => project.id === catalog.projectId)
+                            (catalogProjectId
+                              ? data.projects.find((project) => project.id === catalogProjectId)
                                   ?.skills
                               : data.skills) ?? [],
                           )}
                           select={(skill) => {
                             setDirection(1);
-                            setCatalog({ ...catalog, skill });
+                            setView({ ...view, skill });
                           }}
                         />
                       )
-                    ) : projectSkills ? (
+                    ) : view.type === "projectSkills" ? (
                       skillProject ? (
                         <DetailLayout
                           text={`${skillProject.name}に適用されます。`}
                           action={skillProject.is_owner ? "追加" : undefined}
-                          onAction={
-                            skillProject.is_owner ? () => showCatalog(skillProject.id) : undefined
-                          }
+                          onAction={skillProject.is_owner ? showCatalog : undefined}
                         >
                           <SkillManager
                             skills={skillProject.skills}
                             editable={skillProject.is_owner}
-                            detail={(skill) => {
-                              setProjectSkills(null);
-                              showEditor({
-                                type: "skill",
-                                item: skill,
-                                projectId: skillProject.id,
-                              });
-                            }}
+                            detail={(skill) => showEditor({ type: "skill", item: skill })}
                             remove={(skill) => {
                               setDeleteTarget({
                                 type: "skills",
@@ -350,32 +367,30 @@ export function SettingsShell({
                       ) : (
                         <EmptyText>プロジェクトが見つかりません。</EmptyText>
                       )
-                    ) : editor ? (
-                      editor.type === "project" ? (
-                        <Editor
-                          key={viewKey}
-                          item={editor.item}
-                          users={data.users}
-                          cancel={back}
-                          refresh={async () => {
-                            const fresh = await refresh();
-                            return editor.item
-                              ? (fresh.projects.find((project) => project.id === editor.item?.id) ??
-                                  null)
-                              : null;
-                          }}
-                          saved={async () => {
-                            await refresh("保存しました");
-                            back();
-                          }}
-                          showSkills={(draft) => showProjectSkills(draft)}
-                        />
-                      ) : (
-                        <InstalledSkillDetail key={viewKey} skill={editor.item} />
-                      )
-                    ) : tab ? (
+                    ) : view.type === "projectEditor" ? (
+                      <Editor
+                        key={viewKey}
+                        item={view.item}
+                        users={data.users}
+                        cancel={back}
+                        refresh={async () => {
+                          const fresh = await refresh();
+                          return view.item
+                            ? (fresh.projects.find((project) => project.id === view.item?.id) ??
+                                null)
+                            : null;
+                        }}
+                        saved={async () => {
+                          await refresh("保存しました");
+                          back();
+                        }}
+                        showSkills={(draft) => showProjectSkills(draft)}
+                      />
+                    ) : view.type === "skillDetail" || view.type === "projectSkillDetail" ? (
+                      <InstalledSkillDetail key={viewKey} skill={view.item} />
+                    ) : view.type === "tab" ? (
                       <SettingsDetail
-                        tab={tab}
+                        tab={view.tab}
                         data={data}
                         edit={showEditor}
                         navigate={showTab}
@@ -538,7 +553,7 @@ function SettingsDetail({
   refresh: (message?: string) => Promise<Bootstrap>;
   askDelete: (target: DeleteTarget) => void;
   navigate: (tab: SettingsTab) => void;
-  browse: (projectId?: string) => void;
+  browse: () => void;
 }) {
   if (tab === "chat")
     return (
