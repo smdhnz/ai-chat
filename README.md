@@ -102,6 +102,8 @@ docker compose up -d
 
 Composeの `tunnel` サービスが `gateway.fumiya.dev:2222` へSSH接続し、`chat:80` をアプリの `chat:3000` へリバースフォワードします。ホストの `~/.ssh/id_ed25519` と、StrictHostKeyChecking用の `known_hosts` が必要です。TLS終端はgateway側で行います。
 
+SSHクライアントはイメージのビルド時にインストールするため、トンネル起動時のパッケージ取得はありません。初回・更新時は `docker compose up -d --build tunnel` でビルドして起動します。
+
 ## 注意
 
 画像生成は `pi-discord-bot` と同じChatGPT Codex内部Images APIを使用します。OpenAIの公開APIではないため、サービス側の仕様変更で追従が必要になる可能性があります。

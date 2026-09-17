@@ -38,7 +38,10 @@ services:
       - skill-executor
 
   tunnel:
-    image: alpine:latest
+    build:
+      context: .
+      target: tunnel
+    image: ai-chat-tunnel:latest
     container_name: ai-chat-tunnel
     restart: unless-stopped
     depends_on:
@@ -46,8 +49,7 @@ services:
     volumes:
       - ~/.ssh:/root/.ssh:ro
     command: >
-      sh -c "apk add --no-cache openssh-client &&
-      exec ssh -N
+      ssh -N
       -o StrictHostKeyChecking=yes
       -o ExitOnForwardFailure=yes
       -o ServerAliveInterval=30
@@ -55,7 +57,7 @@ services:
       -i /root/.ssh/id_ed25519
       -p 2222
       -R chat:80:chat:3000
-      gateway.fumiya.dev"
+      gateway.fumiya.dev
 
 networks:
   skill-executor:

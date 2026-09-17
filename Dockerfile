@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1
+FROM alpine:3.23 AS tunnel
+RUN apk add --no-cache openssh-client
+
 FROM oven/bun:1-alpine AS build
 WORKDIR /app
 COPY package.json bun.lock ./
