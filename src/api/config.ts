@@ -19,6 +19,12 @@ export const config = {
       .map((id) => id.trim())
       .filter(Boolean),
   ),
+  adminDiscordIds: new Set(
+    env("ADMIN_DISCORD_USER_IDS")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  ),
   cookieSecure: env("COOKIE_SECURE", "1") !== "0",
   dataDir: resolve(env("DATA_DIR", "data")),
   codexModel: env("CODEX_MODEL", "gpt-5.6-sol"),

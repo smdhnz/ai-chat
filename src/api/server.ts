@@ -21,6 +21,7 @@ import {
 } from "./agent-messages";
 import { config, storedFilePath } from "./config";
 import { attachmentText } from "./attachments";
+import { adminRequest, isAdmin } from "./admin";
 import { cleanupExpired, db, id, now } from "./db";
 import { createImagePreview, imagePreviewPath, prepareImage } from "./images";
 import { MESSAGE_PAGE_SIZE, regenerationIndex } from "./messages";
@@ -78,7 +79,7 @@ setInterval(() => {
   cleanupExpired();
   void cleanupTemporaryConversations();
 }, 60 * 60_000).unref();
-const server = Bun.serve<SocketData>({
+export const server = Bun.serve<SocketData>({
   port: config.port,
   async fetch(request, server) {
     try {
@@ -111,6 +112,8 @@ const server = Bun.serve<SocketData>({
         return url.pathname.startsWith("/api/")
           ? json({ error: "unauthorized" }, 401)
           : redirect("/login");
+      if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/"))
+        return await adminRequest(request, db, user.id);
       if (url.pathname === "/api/socket") {
         if (request.headers.get("origin") !== config.origin)
           return json({ error: "invalid origin" }, 403);
@@ -329,6 +332,7 @@ function bootstrap(user: User): Response {
   ];
   return json({
     user,
+    ...(isAdmin(user.id) ? { is_admin: true } : {}),
     users: projectViews.some((project) => project.is_owner)
       ? db
           .select({

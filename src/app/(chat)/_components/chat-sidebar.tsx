@@ -59,6 +59,7 @@ export function ChatSidebar({
   selectConversation,
   askDeleteConversation,
   openSettings,
+  openAdminMode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -69,6 +70,7 @@ export function ChatSidebar({
   selectConversation: (item: Conversation) => void;
   askDeleteConversation: (item: Conversation) => void;
   openSettings: () => void;
+  openAdminMode: () => void;
 }) {
   const [conversationLimit, setConversationLimit] = useState(10);
   const reduceMotion = useReducedMotion();
@@ -180,6 +182,15 @@ export function ChatSidebar({
               </motion.ul>
             </AnimatePresence>
           </nav>
+          {data.is_admin ? (
+            <button
+              type="button"
+              className="mx-6 mt-2 min-h-11 rounded-xl border border-border px-3 text-sm"
+              onClick={openAdminMode}
+            >
+              管理者モードをオンにする
+            </button>
+          ) : null}
           <footer className="flex justify-between px-10 pt-2.5 pb-10">
             <button
               type="button"

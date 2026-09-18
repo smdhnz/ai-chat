@@ -136,7 +136,19 @@ export function parseDeviceAuth(content: string): DeviceAuth | undefined {
   return { verificationUri: match[1], userCode: match[2], expiresInSeconds: 0 };
 }
 
+export type AdminConversation = {
+  id: string;
+  user_id: string;
+  display_name: string;
+  title: string;
+  temporary: number;
+  created_at: string;
+  updated_at: string;
+};
+export type AdminConversationPage = { conversations: AdminConversation[]; hasMore: boolean };
+
 export type Bootstrap = {
+  is_admin?: boolean;
   user: {
     id: string;
     username: string;

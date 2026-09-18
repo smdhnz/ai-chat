@@ -12,11 +12,13 @@ export function ImageDialog({
   onOpenChange,
   src,
   name,
+  imageContextLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   src: string;
   name: string;
+  imageContextLabel?: string;
 }) {
   const reduceMotion = useReducedMotion();
   const [closing, setClosing] = useState(false);
@@ -102,6 +104,11 @@ export function ImageDialog({
             {sharing ? "準備中" : "保存"}
           </button>
         </motion.header>
+        {imageContextLabel ? (
+          <p className="absolute inset-x-4 bottom-[max(12px,env(safe-area-inset-bottom))] z-1 text-center text-xs text-warning">
+            {imageContextLabel}
+          </p>
+        ) : null}
         {src && (
           <motion.img
             className="block max-h-full max-w-full rounded-[18px] object-contain shadow-[0_30px_100px_rgba(0,0,0,0.65)]"

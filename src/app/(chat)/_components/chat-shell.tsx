@@ -10,6 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   animate,
@@ -51,6 +52,8 @@ import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
 import { SettingsShell } from "@/app/settings/_components/settings-shell";
 
+const AdminMode = dynamic(() => import("./admin-mode").then((module) => module.AdminMode));
+
 export function ChatShell() {
   const router = useRouter();
   const pathname = usePathname();
@@ -85,6 +88,7 @@ export function ChatShell() {
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
   const openConversationRef = useRef<string | null>(conversationId);
   const projectIdRef = useRef(projectId);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -693,7 +697,12 @@ export function ChatShell() {
           setDeleteOpen(true);
         }}
         openSettings={() => setSettingsOpen(true)}
+        openAdminMode={() => {
+          setMobileSidebar(false);
+          setAdminMode(true);
+        }}
       />
+      {data.is_admin && adminMode ? <AdminMode close={() => setAdminMode(false)} /> : null}
 
       {!mobileSidebar && (
         <motion.div

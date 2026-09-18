@@ -346,13 +346,15 @@ function ChatImage({
   file,
   priority,
   open,
+  fileBaseUrl,
 }: {
   file: FileItem;
   priority: boolean;
   open: () => void;
+  fileBaseUrl: string;
 }) {
   const [loaded, setLoaded] = useState(Boolean(file.preview));
-  const source = file.preview || `/files/${file.id}`;
+  const source = file.preview || `${fileBaseUrl}/${file.id}`;
   return (
     <button
       type="button"
@@ -364,7 +366,7 @@ function ChatImage({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className="block h-auto max-h-[170px] max-w-[260px] rounded-[13px] object-cover"
-          src={`/files/${file.id}?preview`}
+          src={`${fileBaseUrl}/${file.id}?preview`}
           alt=""
           data-image-preview
         />
@@ -386,13 +388,17 @@ export function FileBlocks({
   files,
   alignEnd = false,
   prioritizeImages,
+  fileBaseUrl = "/files",
+  imageContextLabel,
 }: {
   files: FileItem[];
   alignEnd?: boolean;
   prioritizeImages: boolean;
+  fileBaseUrl?: string;
+  imageContextLabel?: string;
 }) {
   const [preview, setPreview] = useState<FileItem | null>(null);
-  const previewUrl = preview?.preview || (preview?.id ? `/files/${preview.id}` : "");
+  const previewUrl = preview?.preview || (preview?.id ? `${fileBaseUrl}/${preview.id}` : "");
   return (
     <>
       <div
@@ -404,13 +410,14 @@ export function FileBlocks({
               <ChatImage
                 key={file.id || file.name}
                 file={file}
+                fileBaseUrl={fileBaseUrl}
                 priority={prioritizeImages}
                 open={() => setPreview(file)}
               />
             ) : (
               <a
                 key={file.id || file.name}
-                href={file.id ? `/files/${file.id}` : undefined}
+                href={file.id ? `${fileBaseUrl}/${file.id}` : undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex h-auto shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-[9px] [&_svg]:size-4 [&_svg]:text-primary"
@@ -427,6 +434,7 @@ export function FileBlocks({
         onOpenChange={(open) => !open && setPreview(null)}
         src={previewUrl}
         name={preview?.name ?? "image"}
+        imageContextLabel={imageContextLabel}
       />
     </>
   );
