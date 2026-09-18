@@ -8,7 +8,11 @@ import type {
   RunStatus,
 } from "@/lib/api";
 
-export type ChatConversation = Conversation & { owner?: string; readOnly?: boolean };
+export type ChatConversation = Conversation & {
+  owner?: string;
+  readOnly?: boolean;
+  project_name?: string | null;
+};
 
 export function sidebarConversations(
   data: Bootstrap,
@@ -22,11 +26,10 @@ export function sidebarConversations(
     const own = item.user_id === data.user.id ? conversations.get(item.id) : undefined;
     conversations.set(item.id, {
       ...item,
-      project_id: null,
       generation_status: "idle",
       unread: 0,
       ...own,
-      owner: `${item.display_name} · ${item.user_id}`,
+      owner: item.display_name,
       readOnly: !own,
     });
   }

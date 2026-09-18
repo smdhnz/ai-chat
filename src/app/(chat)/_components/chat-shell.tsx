@@ -26,6 +26,7 @@ import {
   getBootstrap,
   readJson,
   socketUrl,
+  type AdminConversation,
   type AdminConversationPage,
   type ChatEventEnvelope,
   type Conversation,
@@ -90,18 +91,31 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminMode, setAdminMode] = useState(false);
+  const [adminModeUser, setAdminModeUser] = useState<string | null>(null);
+  const [adminSelection, setAdminSelection] = useState<AdminConversation | null>(null);
   const [adminPage, setAdminPage] = useState<AdminConversationPage | null>(null);
   const [adminBefore, setAdminBefore] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState("");
   const [adminRetry, setAdminRetry] = useState(0);
-  const adminEnabled = Boolean(data?.is_admin && adminMode);
+  const userId = data?.user.id;
+  const isAdmin = Boolean(data?.is_admin);
+  const adminModeReady = !isAdmin || adminModeUser === userId;
+  const adminEnabled = Boolean(isAdmin && adminModeReady && adminMode);
   const conversations = data
-    ? sidebarConversations(data, adminEnabled ? (adminPage?.conversations ?? []) : null)
+    ? sidebarConversations(
+        data,
+        adminEnabled
+          ? [...(adminPage?.conversations ?? []), ...(adminSelection ? [adminSelection] : [])]
+          : null,
+      )
     : undefined;
   const requestedConversationId = conversationIdFromPath(pathname);
   const requestedConversation = conversations?.find((item) => item.id === requestedConversationId);
-  const readOnly = Boolean(requestedConversation?.readOnly);
+  const readOnly = Boolean(
+    requestedConversation?.readOnly ||
+    (adminEnabled && requestedConversationId && !requestedConversation),
+  );
   const switchingConversation =
     requestedConversationId !== conversationId || Boolean(conversationId && !requestedConversation);
   const readOnlyRef = useRef(readOnly);
@@ -129,6 +143,18 @@ export function ChatShell() {
   projectIdRef.current = projectId;
 
   useEffect(() => clearLocalImagePreviews, [clearLocalImagePreviews]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let enabled = false;
+    try {
+      enabled = isAdmin && localStorage.getItem(`ai-chat:admin-mode:${userId}`) === "1";
+    } catch {
+      /* Storage may be unavailable; default to off. */
+    }
+    setAdminMode(enabled);
+    setAdminModeUser(userId);
+  }, [userId, isAdmin]);
 
   useEffect(() => {
     if (!adminEnabled) return;
@@ -486,11 +512,12 @@ export function ChatShell() {
     };
   }, [replaceMessagesFromServer, setData]);
 
-  const resolvedConversationId = requestedConversation?.id || null;
+  const resolvedConversationId =
+    requestedConversation?.id || (adminEnabled ? requestedConversationId : null);
   const requestedProjectId = requestedConversation?.project_id || "";
   const conversationsLoaded = conversations !== undefined;
   useEffect(() => {
-    if (!conversationsLoaded) return;
+    if (!conversationsLoaded || !adminModeReady) return;
     if (requestedConversationId && !resolvedConversationId) {
       router.replace(chatUrl("/", temporaryParam, projectIdRef.current));
       return;
@@ -507,9 +534,12 @@ export function ChatShell() {
       return;
     }
     let active = true;
-    void api<MessagePage>(`/api/${readOnly ? "admin/" : ""}conversations/${resolvedConversationId}`)
+    void api<MessagePage & { conversation?: AdminConversation }>(
+      `/api/${readOnly ? "admin/" : ""}conversations/${resolvedConversationId}`,
+    )
       .then((page) => {
         if (!active) return;
+        if (readOnly && page.conversation) setAdminSelection(page.conversation);
         replaceMessagesFromServer(page.messages);
         setHasOlderMessages(page.hasMore);
         if (!readOnly) setData((value) => clearUnread(value, resolvedConversationId));
@@ -526,6 +556,7 @@ export function ChatShell() {
   }, [
     conversationSelection,
     conversationsLoaded,
+    adminModeReady,
     readOnly,
     requestedConversationId,
     requestedProjectId,
@@ -554,6 +585,7 @@ export function ChatShell() {
   if (!data) return <LoadingScreen />;
 
   const project = data.projects.find((item) => item.id === projectId);
+  const readOnlyProject = Boolean(adminEnabled && projectId && !project);
   const activeConversation = data.conversations.find((item) => item.id === conversationId);
   const activeStream =
     conversationId && !readOnly && !switchingConversation ? streams[conversationId] : undefined;
@@ -606,9 +638,19 @@ export function ChatShell() {
     newChat("", false, false);
     setFiles([]);
     setAdminPage(null);
+    setAdminSelection(null);
     setAdminBefore("");
     setAdminError("");
-    setAdminMode(Boolean(data?.is_admin && enabled));
+    const next = Boolean(data?.is_admin && enabled);
+    setAdminMode(next);
+    if (data) {
+      setAdminModeUser(data.user.id);
+      try {
+        localStorage.setItem(`ai-chat:admin-mode:${data.user.id}`, next ? "1" : "0");
+      } catch {
+        toast.error("このブラウザーでは管理者モードの状態を保存できません");
+      }
+    }
   }
   async function removeConversation(item: Conversation) {
     if (conversations?.find((conversation) => conversation.id === item.id)?.readOnly) return;
@@ -647,7 +689,13 @@ export function ChatShell() {
   }
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (readOnly || switchingConversation || (!prompt.trim() && !files.length) || generating)
+    if (
+      readOnly ||
+      readOnlyProject ||
+      switchingConversation ||
+      (!prompt.trim() && !files.length) ||
+      generating
+    )
       return;
     followLatestRef.current = true;
     setSending(true);
@@ -872,6 +920,7 @@ export function ChatShell() {
               className={`${iconButtonClass} ml-auto inline-flex items-center justify-center`}
               onClick={() => newChat()}
               aria-label={project ? `${project.name}で新しいチャット` : "新しいチャット"}
+              disabled={readOnlyProject}
             >
               <SquarePen />
             </button>
@@ -882,6 +931,7 @@ export function ChatShell() {
               onClick={() => newChat(projectId, !temporary)}
               aria-label={temporary ? "一時チャットを終了" : "一時チャットを開始"}
               aria-pressed={temporary}
+              disabled={readOnlyProject}
             >
               <MessageCircleDashed />
             </button>
@@ -974,7 +1024,7 @@ export function ChatShell() {
           <p role="status" className="p-4 text-center text-xs text-muted-foreground">
             読み込み中…
           </p>
-        ) : readOnly ? (
+        ) : readOnly || readOnlyProject ? (
           <div className="shrink-0 border-t border-border px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground">
             <p className="truncate">{requestedConversation?.owner}</p>
             <p>読み取り専用</p>

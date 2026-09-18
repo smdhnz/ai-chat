@@ -140,6 +140,8 @@ export type AdminConversation = {
   id: string;
   user_id: string;
   display_name: string;
+  project_id: string | null;
+  project_name: string | null;
   title: string;
   temporary: number;
   created_at: string;

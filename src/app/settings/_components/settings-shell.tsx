@@ -501,8 +501,14 @@ function SettingsHome({
             role="switch"
             checked={adminMode}
             onChange={(event) => onAdminModeChange(event.target.checked)}
-            className="size-5 accent-primary"
+            className="peer sr-only"
           />
+          <span
+            aria-hidden="true"
+            className="flex h-6 w-10 shrink-0 items-center rounded-full bg-muted px-1 transition-colors peer-checked:bg-primary peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-checked:[&>span]:translate-x-4"
+          >
+            <span className="size-4 rounded-full bg-white shadow transition-transform" />
+          </span>
         </label>
       ) : null}
       <section className="overflow-hidden rounded-[14px] bg-card">

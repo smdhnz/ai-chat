@@ -6,7 +6,7 @@ import { config, storedFilePath } from "./config";
 import type { Database } from "./database";
 import { createImagePreview } from "./images";
 import { MESSAGE_PAGE_SIZE } from "./messages";
-import { conversations, files, users } from "./schema";
+import { conversations, files, projects, users } from "./schema";
 
 export function isAdmin(userId: string): boolean {
   return config.adminDiscordIds.has(userId) && config.allowedDiscordIds.has(userId);
@@ -15,6 +15,17 @@ export function isAdmin(userId: string): boolean {
 const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const imageMimes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const conversationColumns = {
+  id: conversations.id,
+  user_id: conversations.user_id,
+  display_name: users.display_name,
+  project_id: conversations.project_id,
+  project_name: projects.name,
+  title: conversations.title,
+  temporary: conversations.temporary,
+  created_at: conversations.created_at,
+  updated_at: conversations.updated_at,
+};
 
 type AuditTarget = { user_id: string; id: string };
 
@@ -55,17 +66,10 @@ export async function adminRequest(
 
   if (url.pathname === "/api/admin/conversations") {
     const rows = database
-      .select({
-        id: conversations.id,
-        user_id: conversations.user_id,
-        display_name: users.display_name,
-        title: conversations.title,
-        temporary: conversations.temporary,
-        created_at: conversations.created_at,
-        updated_at: conversations.updated_at,
-      })
+      .select(conversationColumns)
       .from(conversations)
       .innerJoin(users, eq(users.id, conversations.user_id))
+      .leftJoin(projects, eq(projects.id, conversations.project_id))
       .where(before ? lt(conversations.id, before) : undefined)
       .orderBy(desc(conversations.id))
       .limit(51)
@@ -80,8 +84,10 @@ export async function adminRequest(
   );
   if (!match) return json({ error: "not found" }, 404);
   const conversation = database
-    .select({ id: conversations.id, user_id: conversations.user_id })
+    .select(conversationColumns)
     .from(conversations)
+    .innerJoin(users, eq(users.id, conversations.user_id))
+    .leftJoin(projects, eq(projects.id, conversations.project_id))
     .where(eq(conversations.id, match[1]))
     .get();
   if (!conversation) return json({ error: "not found" }, 404);
@@ -151,5 +157,5 @@ export async function adminRequest(
     }),
   }));
   await audit(userId, [conversation], "conversation");
-  return json({ messages, hasMore: page.hasMore });
+  return json({ conversation, messages, hasMore: page.hasMore });
 }

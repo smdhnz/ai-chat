@@ -10,6 +10,11 @@ const root = join(import.meta.dir, "..");
 
 async function fixture(adminIds = " , 100 , ") {
   const directory = mkdtempSync(join(tmpdir(), "ai-chat-admin-"));
+  const web = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response("chat shell"),
+  });
   const child = Bun.spawn(
     [
       process.execPath,
@@ -22,6 +27,7 @@ async function fixture(adminIds = " , 100 , ") {
         ...process.env,
         DATA_DIR: directory,
         PORT: "0",
+        WEB_ORIGIN: `http://127.0.0.1:${web.port}`,
         APP_ORIGIN: "http://localhost:3000",
         DISCORD_CLIENT_ID: "test",
         DISCORD_CLIENT_SECRET: "test",
@@ -37,6 +43,7 @@ async function fixture(adminIds = " , 100 , ") {
   const dispose = async () => {
     child.kill();
     await child.exited;
+    web.stop(true);
     db?.close();
     rmSync(directory, { recursive: true, force: true });
   };
@@ -171,6 +178,58 @@ async function fixture(adminIds = " , 100 , ") {
     throw error;
   }
 }
+
+test("管理者は他人のチャットページへ遷移でき、通常ユーザーのページとAPIの分離は維持する", async () => {
+  const { request, dispose } = await fixture();
+  try {
+    const page = await request("/chat/private");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toBe("chat shell");
+    expect((await request("/chat/private?_rsc=test")).status).toBe(200);
+    const detail = await (await request("/api/admin/conversations/private")).json();
+    expect(detail.conversation).toMatchObject({
+      id: "private",
+      user_id: "200",
+      project_id: null,
+      display_name: "User",
+    });
+    expect(detail.messages.length).toBeGreaterThan(0);
+    expect((await request("/api/conversations/private")).status).toBe(404);
+    const forbidden = await request("/chat/own", "200");
+    expect(forbidden.status).toBe(303);
+    expect(forbidden.headers.get("location")).toBe("/");
+    expect((await request("/chat/private", "200")).status).toBe(200);
+    expect((await request("/chat/private", null)).headers.get("location")).toBe("/login");
+  } finally {
+    await dispose();
+  }
+});
+
+test("管理者一覧は共有・非共有プロジェクトの所属と名前を保持する", async () => {
+  const { db, request, dispose } = await fixture();
+  try {
+    db.exec(`INSERT INTO projects (id, user_id, name, shared, created_at, updated_at) VALUES ('shared', '200', '共有プロジェクト', 1, '2026', '2026'), ('personal', '200', '個人プロジェクト', 0, '2026', '2026');
+      UPDATE conversations SET project_id = 'shared' WHERE id = 'private';
+      UPDATE conversations SET project_id = 'personal' WHERE id = 'temporary';`);
+    const page = (await (
+      await request("/api/admin/conversations")
+    ).json()) as AdminConversationPage;
+    expect(page.conversations.find((item) => item.id === "private")).toMatchObject({
+      project_id: "shared",
+      project_name: "共有プロジェクト",
+    });
+    expect(page.conversations.find((item) => item.id === "temporary")).toMatchObject({
+      project_id: "personal",
+      project_name: "個人プロジェクト",
+    });
+    expect(page.conversations.find((item) => item.id === "own")).toMatchObject({
+      project_id: null,
+      project_name: null,
+    });
+  } finally {
+    await dispose();
+  }
+});
 
 test("admin GET経路だけで本文・画像を閲覧し、分離・読み取り専用・監査を維持する", async () => {
   const { directory, db, request, dispose } = await fixture();

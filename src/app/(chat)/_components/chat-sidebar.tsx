@@ -96,13 +96,27 @@ export function ChatSidebar({
     return () => window.removeEventListener("keydown", close);
   }, [open, onOpenChange]);
 
-  const project = data.projects.find((item) => item.id === projectId);
-  const conversations = adminMode
-    ? items
-    : items.filter(
-        (item) =>
-          !item.temporary && (projectId ? item.project_id === projectId : item.project_id === null),
-      );
+  const projects = new Map<
+    string,
+    { id: string; name: string; shared: boolean; is_owner: boolean }
+  >(data.projects.map((project) => [project.id, project]));
+  if (adminMode)
+    for (const item of items) {
+      if (item.project_id && !projects.has(item.project_id))
+        projects.set(item.project_id, {
+          id: item.project_id,
+          name: item.project_name ?? "プロジェクト",
+          shared: false,
+          is_owner: false,
+        });
+    }
+  const project = projects.get(projectId);
+  const readOnlyProject = Boolean(
+    projectId && !data.projects.some((item) => item.id === projectId),
+  );
+  const conversations = items.filter(
+    (item) => (adminMode || !item.temporary) && item.project_id === (projectId || null),
+  );
   const canDelete = project ? project.is_owner : true;
 
   return (
@@ -140,7 +154,7 @@ export function ChatSidebar({
                 <span className="min-w-0 flex-1 truncate">プロジェクトなし</span>
                 {!project ? <Check className="size-3.5 shrink-0 text-primary" /> : null}
               </button>
-              {data.projects.map((item) => (
+              {[...projects.values()].map((item) => (
                 <button
                   type="button"
                   aria-pressed={item.id === projectId}
@@ -238,6 +252,7 @@ export function ChatSidebar({
               type="button"
               className={`${iconButtonClass} inline-flex items-center justify-center`}
               aria-label={project ? `${project.name}で新しいチャット` : "新しいチャット"}
+              disabled={readOnlyProject}
               onClick={() => newChat(projectId)}
             >
               <SquarePen />

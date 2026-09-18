@@ -123,7 +123,7 @@ export const server = Bun.serve<SocketData>({
       if (url.pathname === "/settings" || url.pathname.startsWith("/settings/"))
         return redirect("/");
       if (/^\/chat\/[\w-]+$/.test(url.pathname))
-        return conversationAccess(db, url.pathname.slice(6), user.id)
+        return isAdmin(user.id) || conversationAccess(db, url.pathname.slice(6), user.id)
           ? webApp(request)
           : redirect("/");
 
