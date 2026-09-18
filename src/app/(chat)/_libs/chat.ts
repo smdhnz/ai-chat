@@ -1,4 +1,37 @@
-import type { ChatEventEnvelope, Message, PublicActivity, RunStatus } from "@/lib/api";
+import type {
+  AdminConversation,
+  Bootstrap,
+  ChatEventEnvelope,
+  Conversation,
+  Message,
+  PublicActivity,
+  RunStatus,
+} from "@/lib/api";
+
+export type ChatConversation = Conversation & { owner?: string; readOnly?: boolean };
+
+export function sidebarConversations(
+  data: Bootstrap,
+  admin: AdminConversation[] | null,
+): ChatConversation[] {
+  if (admin === null) return data.conversations;
+  const conversations = new Map<string, ChatConversation>(
+    data.conversations.map((item) => [item.id, item]),
+  );
+  for (const item of admin) {
+    const own = item.user_id === data.user.id ? conversations.get(item.id) : undefined;
+    conversations.set(item.id, {
+      ...item,
+      project_id: null,
+      generation_status: "idle",
+      unread: 0,
+      ...own,
+      owner: `${item.display_name} · ${item.user_id}`,
+      readOnly: !own,
+    });
+  }
+  return [...conversations.values()].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
 
 export const conversationIdFromPath = (pathname: string): string | null =>
   pathname.match(/^\/chat\/([\w-]+)$/)?.[1] || null;

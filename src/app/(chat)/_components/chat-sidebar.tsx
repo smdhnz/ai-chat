@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Check, Settings, SquarePen, Trash2, UsersRound } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Bootstrap, Conversation } from "@/lib/api";
+import type { ChatConversation } from "../_libs/chat";
 import { iconButtonClass } from "@/lib/ui";
 
 const rowButtonClass =
@@ -16,7 +17,7 @@ function ConversationRow({
   select,
   remove,
 }: {
-  item: Conversation;
+  item: ChatConversation;
   active: boolean;
   select: () => void;
   remove?: () => void;
@@ -26,7 +27,10 @@ function ConversationRow({
       className={`flex items-center rounded-[11px] hover:bg-sidebar-accent ${active ? "bg-[color-mix(in_srgb,var(--primary)_11%,var(--card))] text-foreground" : ""}`}
     >
       <button type="button" className={rowButtonClass} onClick={select} aria-current={active}>
-        <span className="truncate">{item.title}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {item.title}
+          {item.owner ? <span className="block truncate text-[9px]">{item.owner}</span> : null}
+        </span>
         {item.unread === 1 && !active && (
           <span
             role="status"
@@ -59,7 +63,12 @@ export function ChatSidebar({
   selectConversation,
   askDeleteConversation,
   openSettings,
-  openAdminMode,
+  adminMode,
+  items,
+  adminLoading,
+  adminError,
+  loadMoreAdmin,
+  retryAdmin,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -70,7 +79,12 @@ export function ChatSidebar({
   selectConversation: (item: Conversation) => void;
   askDeleteConversation: (item: Conversation) => void;
   openSettings: () => void;
-  openAdminMode: () => void;
+  adminMode: boolean;
+  items: ChatConversation[];
+  adminLoading: boolean;
+  adminError: string;
+  loadMoreAdmin?: () => void;
+  retryAdmin: () => void;
 }) {
   const [conversationLimit, setConversationLimit] = useState(10);
   const reduceMotion = useReducedMotion();
@@ -83,10 +97,12 @@ export function ChatSidebar({
   }, [open, onOpenChange]);
 
   const project = data.projects.find((item) => item.id === projectId);
-  const conversations = data.conversations.filter(
-    (item) =>
-      !item.temporary && (projectId ? item.project_id === projectId : item.project_id === null),
-  );
+  const conversations = adminMode
+    ? items
+    : items.filter(
+        (item) =>
+          !item.temporary && (projectId ? item.project_id === projectId : item.project_id === null),
+      );
   const canDelete = project ? project.is_owner : true;
 
   return (
@@ -147,7 +163,7 @@ export function ChatSidebar({
             </div>
           </section>
           <div className="flex h-8 shrink-0 items-center px-6 text-[11px] font-semibold text-muted-foreground">
-            チャット
+            {adminMode ? "全ユーザーのチャット · 管理者モード ON" : "チャット"}
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto px-3.5" aria-label="チャット一覧">
             <AnimatePresence initial={false} mode="wait">
@@ -165,7 +181,17 @@ export function ChatSidebar({
                     item={item}
                     active={item.id === conversationId}
                     select={() => selectConversation(item)}
-                    remove={canDelete ? () => askDeleteConversation(item) : undefined}
+                    remove={
+                      !item.readOnly &&
+                      (adminMode
+                        ? !item.project_id ||
+                          data.projects.some(
+                            (project) => project.id === item.project_id && project.is_owner,
+                          )
+                        : canDelete)
+                        ? () => askDeleteConversation(item)
+                        : undefined
+                    }
                   />
                 ))}
                 {conversations.length > conversationLimit && (
@@ -179,18 +205,34 @@ export function ChatSidebar({
                     </button>
                   </li>
                 )}
+                {adminMode && adminLoading ? (
+                  <li role="status" className="p-3 text-xs">
+                    読み込み中…
+                  </li>
+                ) : null}
+                {adminMode && adminError ? (
+                  <li className="p-3 text-xs">
+                    <p role="alert">{adminError}</p>
+                    <button type="button" className="min-h-11" onClick={retryAdmin}>
+                      再試行
+                    </button>
+                  </li>
+                ) : null}
+                {adminMode && loadMoreAdmin && conversations.length <= conversationLimit ? (
+                  <li>
+                    <button
+                      type="button"
+                      disabled={adminLoading}
+                      className="min-h-11 px-[11px] text-xs"
+                      onClick={loadMoreAdmin}
+                    >
+                      もっと見る
+                    </button>
+                  </li>
+                ) : null}
               </motion.ul>
             </AnimatePresence>
           </nav>
-          {data.is_admin ? (
-            <button
-              type="button"
-              className="mx-6 mt-2 min-h-11 rounded-xl border border-border px-3 text-sm"
-              onClick={openAdminMode}
-            >
-              管理者モードをオンにする
-            </button>
-          ) : null}
           <footer className="flex justify-between px-10 pt-2.5 pb-10">
             <button
               type="button"

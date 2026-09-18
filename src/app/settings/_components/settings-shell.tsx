@@ -67,7 +67,11 @@ export function SettingsShell({
   onOpenChange,
   data,
   setData,
+  adminMode,
+  onAdminModeChange,
 }: {
+  adminMode: boolean;
+  onAdminModeChange: (enabled: boolean) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   data: Bootstrap;
@@ -404,6 +408,8 @@ export function SettingsShell({
                     ) : (
                       <SettingsHome
                         data={data}
+                        adminMode={adminMode}
+                        onAdminModeChange={onAdminModeChange}
                         showTab={showTab}
                         deleteData={() => {
                           setDeleteTarget({ type: "data", id: "", name: "すべてのデータ" });
@@ -448,7 +454,11 @@ function SettingsHome({
   data,
   showTab,
   deleteData,
+  adminMode,
+  onAdminModeChange,
 }: {
+  adminMode: boolean;
+  onAdminModeChange: (enabled: boolean) => void;
   data: Bootstrap;
   showTab: (tab: SettingsTab) => void;
   deleteData: () => void;
@@ -478,6 +488,23 @@ function SettingsHome({
           </button>
         </form>
       </section>
+      {data.is_admin ? (
+        <label className="flex min-h-[52px] items-center justify-between gap-3 rounded-[14px] bg-card p-3.5 text-[13px]">
+          <span>
+            管理者モード
+            <span className="mt-1 block text-[11px] text-muted-foreground">
+              全ユーザーの会話・画像を閲覧する
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={adminMode}
+            onChange={(event) => onAdminModeChange(event.target.checked)}
+            className="size-5 accent-primary"
+          />
+        </label>
+      ) : null}
       <section className="overflow-hidden rounded-[14px] bg-card">
         <SettingsLink icon={MessageSquareText} label="一般" onClick={() => showTab("chat")} />
         <SettingsLink

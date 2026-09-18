@@ -10,7 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import Image from "next/image";
-import dynamic from "next/dynamic";
+import { toast } from "sonner";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   animate,
@@ -26,6 +26,7 @@ import {
   getBootstrap,
   readJson,
   socketUrl,
+  type AdminConversationPage,
   type ChatEventEnvelope,
   type Conversation,
   type Message,
@@ -35,6 +36,7 @@ import { useBootstrap } from "@/hooks/use-bootstrap";
 import { iconButtonClass } from "@/lib/ui";
 import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
 import {
+  sidebarConversations,
   mergeServerMessages,
   chatUrl,
   conversationIdFromPath,
@@ -52,8 +54,6 @@ import { Composer } from "@/app/(chat)/_components/composer";
 import { MessageView, Thinking } from "@/app/(chat)/_components/message-view";
 import { SettingsShell } from "@/app/settings/_components/settings-shell";
 
-const AdminMode = dynamic(() => import("./admin-mode").then((module) => module.AdminMode));
-
 export function ChatShell() {
   const router = useRouter();
   const pathname = usePathname();
@@ -68,6 +68,7 @@ export function ChatShell() {
   const [projectId, setProjectId] = useState(projectParam);
   const [temporary, setTemporary] = useState(temporaryParam);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationSelection, setConversationSelection] = useState(0);
   const [streams, dispatchStream] = useReducer(reduceChatStreams, {});
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -89,6 +90,22 @@ export function ChatShell() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [adminMode, setAdminMode] = useState(false);
+  const [adminPage, setAdminPage] = useState<AdminConversationPage | null>(null);
+  const [adminBefore, setAdminBefore] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [adminRetry, setAdminRetry] = useState(0);
+  const adminEnabled = Boolean(data?.is_admin && adminMode);
+  const conversations = data
+    ? sidebarConversations(data, adminEnabled ? (adminPage?.conversations ?? []) : null)
+    : undefined;
+  const requestedConversationId = conversationIdFromPath(pathname);
+  const requestedConversation = conversations?.find((item) => item.id === requestedConversationId);
+  const readOnly = Boolean(requestedConversation?.readOnly);
+  const switchingConversation =
+    requestedConversationId !== conversationId || Boolean(conversationId && !requestedConversation);
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const openConversationRef = useRef<string | null>(conversationId);
   const projectIdRef = useRef(projectId);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -112,6 +129,35 @@ export function ChatShell() {
   projectIdRef.current = projectId;
 
   useEffect(() => clearLocalImagePreviews, [clearLocalImagePreviews]);
+
+  useEffect(() => {
+    if (!adminEnabled) return;
+    const controller = new AbortController();
+    setAdminLoading(true);
+    setAdminError("");
+    void api<AdminConversationPage>(
+      `/api/admin/conversations${adminBefore ? `?before=${encodeURIComponent(adminBefore)}` : ""}`,
+      { signal: controller.signal },
+    )
+      .then((next) => {
+        if (!controller.signal.aborted)
+          setAdminPage((current) => ({
+            ...next,
+            conversations: [
+              ...(adminBefore ? (current?.conversations ?? []) : []),
+              ...next.conversations,
+            ],
+          }));
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          setAdminError(error instanceof Error ? error.message : "取得できませんでした");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setAdminLoading(false);
+      });
+    return () => controller.abort();
+  }, [adminEnabled, adminBefore, adminRetry]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -248,15 +294,25 @@ export function ChatShell() {
   const loadOlderMessages = useCallback(async () => {
     const oldest = messages[0];
     const currentConversationId = conversationId;
-    if (!oldest || !currentConversationId || loadingOlderMessagesRef.current) return;
+    if (
+      !oldest ||
+      !currentConversationId ||
+      switchingConversation ||
+      loadingOlderMessagesRef.current
+    )
+      return;
     loadingOlderMessagesRef.current = true;
     setLoadingOlderMessages(true);
     try {
       const page = await api<MessagePage>(
-        `/api/conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
+        `/api/${readOnly ? "admin/" : ""}conversations/${currentConversationId}?before=${encodeURIComponent(oldest.id)}`,
       );
-      await preloadMessagePreviews(page.messages);
-      if (openConversationRef.current !== currentConversationId) return;
+      await preloadMessagePreviews(
+        page.messages,
+        readOnly ? `/api/admin/conversations/${currentConversationId}/images` : undefined,
+      );
+      if (openConversationRef.current !== currentConversationId || readOnlyRef.current !== readOnly)
+        return;
       const viewport = messageViewportRef.current;
       if (viewport)
         prependScrollRef.current = {
@@ -265,11 +321,13 @@ export function ChatShell() {
         };
       setMessages((value) => [...page.messages, ...value]);
       setHasOlderMessages(page.hasMore);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "取得できませんでした");
     } finally {
       loadingOlderMessagesRef.current = false;
       setLoadingOlderMessages(false);
     }
-  }, [conversationId, messages]);
+  }, [conversationId, messages, readOnly, switchingConversation]);
 
   useEffect(() => {
     const root = messageViewportRef.current;
@@ -320,26 +378,31 @@ export function ChatShell() {
       const openId = openConversationRef.current;
       if (
         !openId ||
+        readOnlyRef.current ||
         (targetConversationId && targetConversationId !== openId) ||
         !fresh.conversations.some((conversation) => conversation.id === openId)
       )
         return;
       const page = await api<MessagePage>(`/api/conversations/${openId}`);
-      if (!active || openConversationRef.current !== openId) return;
+      if (!active || openConversationRef.current !== openId || readOnlyRef.current) return;
       replaceMessagesFromServer(page.messages);
       setHasOlderMessages(page.hasMore);
       setData((value) => clearUnread(value, openId));
     };
     const finishRun = (event: ChatEventEnvelope) => {
       const current =
-        openConversationRef.current === event.conversationId
+        openConversationRef.current === event.conversationId && !readOnlyRef.current
           ? api<MessagePage>(`/api/conversations/${event.conversationId}`)
           : Promise.resolve(null);
       void Promise.all([getBootstrap(), current])
         .then(([fresh, page]) => {
           if (!active) return;
           setData(fresh);
-          if (page && openConversationRef.current === event.conversationId) {
+          if (
+            page &&
+            openConversationRef.current === event.conversationId &&
+            !readOnlyRef.current
+          ) {
             replaceMessagesFromServer(page.messages);
             setHasOlderMessages(page.hasMore);
             setData((value) => clearUnread(value, event.conversationId));
@@ -423,9 +486,6 @@ export function ChatShell() {
     };
   }, [replaceMessagesFromServer, setData]);
 
-  const conversations = data?.conversations;
-  const requestedConversationId = conversationIdFromPath(pathname);
-  const requestedConversation = conversations?.find((item) => item.id === requestedConversationId);
   const resolvedConversationId = requestedConversation?.id || null;
   const requestedProjectId = requestedConversation?.project_id || "";
   const conversationsLoaded = conversations !== undefined;
@@ -447,20 +507,26 @@ export function ChatShell() {
       return;
     }
     let active = true;
-    void api<MessagePage>(`/api/conversations/${resolvedConversationId}`).then((page) => {
-      if (!active) return;
-      replaceMessagesFromServer(page.messages);
-      setHasOlderMessages(page.hasMore);
-      setData((value) => clearUnread(value, resolvedConversationId));
-      setConversationId(resolvedConversationId);
-      setProjectId(requestedProjectId);
-      setTemporary(temporaryParam);
-    });
+    void api<MessagePage>(`/api/${readOnly ? "admin/" : ""}conversations/${resolvedConversationId}`)
+      .then((page) => {
+        if (!active) return;
+        replaceMessagesFromServer(page.messages);
+        setHasOlderMessages(page.hasMore);
+        if (!readOnly) setData((value) => clearUnread(value, resolvedConversationId));
+        setConversationId(resolvedConversationId);
+        setProjectId(requestedProjectId);
+        setTemporary(temporaryParam);
+      })
+      .catch((error: unknown) => {
+        if (active) toast.error(error instanceof Error ? error.message : "取得できませんでした");
+      });
     return () => {
       active = false;
     };
   }, [
+    conversationSelection,
     conversationsLoaded,
+    readOnly,
     requestedConversationId,
     requestedProjectId,
     resolvedConversationId,
@@ -478,6 +544,7 @@ export function ChatShell() {
         api<MessagePage>(`/api/conversations/${id}`),
       ]);
       setData(clearUnread(fresh, id));
+      if (openConversationRef.current !== id || readOnlyRef.current) return;
       replaceMessagesFromServer(page.messages);
       setHasOlderMessages(page.hasMore);
     },
@@ -488,16 +555,20 @@ export function ChatShell() {
 
   const project = data.projects.find((item) => item.id === projectId);
   const activeConversation = data.conversations.find((item) => item.id === conversationId);
-  const activeStream = conversationId ? streams[conversationId] : undefined;
+  const activeStream =
+    conversationId && !readOnly && !switchingConversation ? streams[conversationId] : undefined;
   const streamedMessage = activeStream ? streamMessage(activeStream) : undefined;
-  const displayedMessages = streamedMessage
-    ? [...messages.filter((message) => message.runId !== streamedMessage.runId), streamedMessage]
-    : messages;
+  const displayedMessages = switchingConversation
+    ? []
+    : streamedMessage
+      ? [...messages.filter((message) => message.runId !== streamedMessage.runId), streamedMessage]
+      : messages;
   const generating =
-    sending ||
-    activeConversation?.generation_status === "running" ||
-    activeStream?.status === "queued" ||
-    activeStream?.status === "running";
+    !readOnly &&
+    (sending ||
+      activeConversation?.generation_status === "running" ||
+      activeStream?.status === "queued" ||
+      activeStream?.status === "running");
   const editing = editingMessageId !== null;
   const waitingForResponse = !streamedMessage?.content && !streamedMessage?.activities?.length;
   const newestImageMessageId = displayedMessages.reduceRight<string | undefined>(
@@ -507,6 +578,11 @@ export function ChatShell() {
   );
 
   function selectConversation(item: Conversation) {
+    setConversationSelection((value) => value + 1);
+    setMessages([]);
+    setHasOlderMessages(false);
+    setConversationId(item.id);
+    setFiles([]);
     clearLocalImagePreviews();
     setReadyConversationId(null);
     setEditingMessageId(null);
@@ -526,8 +602,25 @@ export function ChatShell() {
     router.replace(chatUrl("/", isTemporary, targetProjectId));
     if (closeSidebar) setMobileSidebar(false);
   }
+  function changeAdminMode(enabled: boolean) {
+    newChat("", false, false);
+    setFiles([]);
+    setAdminPage(null);
+    setAdminBefore("");
+    setAdminError("");
+    setAdminMode(Boolean(data?.is_admin && enabled));
+  }
   async function removeConversation(item: Conversation) {
+    if (conversations?.find((conversation) => conversation.id === item.id)?.readOnly) return;
     await api(`/api/conversations/${item.id}`, { method: "DELETE" });
+    setAdminPage((page) =>
+      page
+        ? {
+            ...page,
+            conversations: page.conversations.filter((conversation) => conversation.id !== item.id),
+          }
+        : page,
+    );
     setData((value) =>
       value
         ? {
@@ -554,7 +647,8 @@ export function ChatShell() {
   }
   async function send(event: FormEvent) {
     event.preventDefault();
-    if ((!prompt.trim() && !files.length) || generating) return;
+    if (readOnly || switchingConversation || (!prompt.trim() && !files.length) || generating)
+      return;
     followLatestRef.current = true;
     setSending(true);
     let currentId = conversationId;
@@ -629,7 +723,7 @@ export function ChatShell() {
     }
   }
   async function stop() {
-    if (!conversationId) return;
+    if (!conversationId || readOnly || switchingConversation) return;
     try {
       await api(`/api/conversations/${conversationId}/stop`, { method: "POST" });
       setSending(false);
@@ -657,7 +751,7 @@ export function ChatShell() {
     setSidebarDragging(false);
   }
   async function regenerate(messageId: string) {
-    if (!conversationId) return;
+    if (!conversationId || readOnly || switchingConversation) return;
     followLatestRef.current = true;
     setEditingMessageId(null);
     setPrompt("");
@@ -697,12 +791,15 @@ export function ChatShell() {
           setDeleteOpen(true);
         }}
         openSettings={() => setSettingsOpen(true)}
-        openAdminMode={() => {
-          setMobileSidebar(false);
-          setAdminMode(true);
-        }}
+        adminMode={adminEnabled}
+        items={conversations ?? []}
+        adminLoading={adminLoading}
+        adminError={adminError}
+        loadMoreAdmin={
+          adminPage?.hasMore ? () => setAdminBefore(adminPage.conversations.at(-1)!.id) : undefined
+        }
+        retryAdmin={() => setAdminRetry((value) => value + 1)}
       />
-      {data.is_admin && adminMode ? <AdminMode close={() => setAdminMode(false)} /> : null}
 
       {!mobileSidebar && (
         <motion.div
@@ -720,6 +817,8 @@ export function ChatShell() {
         onOpenChange={setSettingsOpen}
         data={data}
         setData={setData}
+        adminMode={adminEnabled}
+        onAdminModeChange={changeAdminMode}
       />
 
       <ConfirmDialog
@@ -765,7 +864,7 @@ export function ChatShell() {
             </div>
           )}
           <p className="absolute left-1/2 max-w-[calc(100%-132px)] -translate-x-1/2 truncate pt-3 text-[12px] font-semibold">
-            {project?.name ?? ""}
+            {adminEnabled ? "管理者モード ON" : (project?.name ?? "")}
           </p>
           {conversationId ? (
             <button
@@ -835,6 +934,10 @@ export function ChatShell() {
                     key={message.id}
                     message={message}
                     disabled={generating}
+                    readOnly={readOnly}
+                    fileBaseUrl={
+                      readOnly ? `/api/admin/conversations/${conversationId}/images` : undefined
+                    }
                     shared={Boolean(project?.shared)}
                     draft={editingMessageId === message.id ? prompt : undefined}
                     regenerate={() => void regenerate(message.id)}
@@ -867,34 +970,48 @@ export function ChatShell() {
             <ArrowDown />
           </button>
         )}
-        <Composer
-          prompt={prompt}
-          setPrompt={setPrompt}
-          files={files}
-          setFiles={setFiles}
-          temporary={temporary}
-          generating={generating}
-          editing={editing}
-          cancelEditing={() => {
-            setEditingMessageId(null);
-            setPrompt("");
-          }}
-          stop={stop}
-          send={send}
-        />
+        {switchingConversation ? (
+          <p role="status" className="p-4 text-center text-xs text-muted-foreground">
+            読み込み中…
+          </p>
+        ) : readOnly ? (
+          <div className="shrink-0 border-t border-border px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground">
+            <p className="truncate">{requestedConversation?.owner}</p>
+            <p>読み取り専用</p>
+          </div>
+        ) : (
+          <Composer
+            prompt={prompt}
+            setPrompt={setPrompt}
+            files={files}
+            setFiles={setFiles}
+            temporary={temporary}
+            generating={generating}
+            editing={editing}
+            cancelEditing={() => {
+              setEditingMessageId(null);
+              setPrompt("");
+            }}
+            stop={stop}
+            send={send}
+          />
+        )}
       </motion.main>
     </div>
   );
 }
 
-function preloadMessagePreviews(messages: readonly Message[]): Promise<void[]> {
+function preloadMessagePreviews(
+  messages: readonly Message[],
+  fileBaseUrl = "/files",
+): Promise<void[]> {
   return Promise.all(
     messages.flatMap((message) =>
       message.files
         .filter((file) => file.mime.startsWith("image/") && file.id && !file.preview)
         .map((file) => {
           const image = new window.Image();
-          image.src = `/files/${file.id}?preview`;
+          image.src = `${fileBaseUrl}/${file.id}?preview`;
           return waitForImage(image);
         }),
     ),

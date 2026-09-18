@@ -34,6 +34,8 @@ export function MessageView({
   shared,
   prioritizeImages,
   finishStreaming,
+  readOnly = false,
+  fileBaseUrl,
 }: {
   message: Message;
   disabled: boolean;
@@ -43,10 +45,12 @@ export function MessageView({
   shared: boolean;
   prioritizeImages: boolean;
   finishStreaming?: () => void;
+  readOnly?: boolean;
+  fileBaseUrl?: string;
 }) {
   const deferredDraft = useDeferredValue(draft);
   const sourceContent = draft === undefined ? message.content : (deferredDraft ?? draft);
-  const auth = message.auth ?? parseDeviceAuth(sourceContent);
+  const auth = readOnly ? undefined : (message.auth ?? parseDeviceAuth(sourceContent));
   const content = auth ? "" : sourceContent;
   const hasBody = Boolean(content || auth || message.activities?.length);
   const isUser = message.role === "user";
@@ -63,17 +67,23 @@ export function MessageView({
           </span>
         ) : null}
         {isUser && message.files?.length > 0 && (
-          <FileBlocks files={message.files} alignEnd prioritizeImages={prioritizeImages} />
+          <FileBlocks
+            files={message.files}
+            alignEnd
+            prioritizeImages={prioritizeImages}
+            fileBaseUrl={fileBaseUrl}
+            imageContextLabel={readOnly ? "管理者モード ON・読み取り専用" : undefined}
+          />
         )}
         {hasBody && (
           <>
             <div
               className={`min-w-0 max-w-full text-sm leading-[1.78] [&_a]:text-primary [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-muted [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:pl-5 ${isUser ? "rounded-[20px] bg-[color-mix(in_srgb,var(--primary)_9%,var(--card))] px-4 py-[11px] shadow-[0_6px_20px_#1a1a1e1f]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
             >
-              {!isUser && message.activities && message.activities.length > 0 && (
+              {!readOnly && !isUser && message.activities && message.activities.length > 0 && (
                 <ActivityPanel activities={message.activities} streaming={streaming} />
               )}
-              {isUser ? (
+              {isUser || readOnly ? (
                 <div className="message-text break-words whitespace-pre-wrap">{content}</div>
               ) : streaming ? (
                 <StreamingContent content={content} finish={finishStreaming} />
@@ -95,7 +105,12 @@ export function MessageView({
           </>
         )}
         {!isUser && message.files?.length > 0 && (
-          <FileBlocks files={message.files} prioritizeImages={prioritizeImages} />
+          <FileBlocks
+            files={message.files}
+            prioritizeImages={prioritizeImages}
+            fileBaseUrl={fileBaseUrl}
+            imageContextLabel={readOnly ? "管理者モード ON・読み取り専用" : undefined}
+          />
         )}
         {(sourceContent || isUser) && (
           <div className={`mt-1 flex w-full gap-0.5 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -109,7 +124,7 @@ export function MessageView({
                 {copy.copied ? <Check /> : <Copy />}
               </button>
             )}
-            {isUser && (
+            {isUser && !readOnly && (
               <>
                 <button
                   type="button"
