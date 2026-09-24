@@ -16,15 +16,16 @@ import {
   allConversationFileIds,
   appendLegacyMessage,
   listLegacyMessages,
-  pagePublicMessages,
   rewindConversation,
 } from "./agent-messages";
 import { config, storedFilePath } from "./config";
 import { attachmentText } from "./attachments";
-import { adminRequest, isAdmin } from "./admin";
+import { adminRequest, isAdmin, authorizeAdminStream, adminConversationTopic } from "./admin";
 import { cleanupExpired, db, id, now } from "./db";
-import { createImagePreview, imagePreviewPath, prepareImage } from "./images";
-import { MESSAGE_PAGE_SIZE, regenerationIndex } from "./messages";
+import { imagePreviewPath, prepareImage } from "./images";
+import { regenerationIndex } from "./messages";
+import { publicMessagePage } from "./public-messages";
+import { serveStoredFile } from "./files";
 import {
   conversationAccess,
   conversationUserIds,
@@ -53,7 +54,7 @@ import {
   users,
 } from "./schema";
 
-type SocketData = { userId: string };
+type SocketData = { userId: string; adminConversationId?: string };
 const chatModel = getChatModel(config.codexModel);
 const conversationRunner = new ConversationRunner({
   database: db,
@@ -117,7 +118,12 @@ export const server = Bun.serve<SocketData>({
       if (url.pathname === "/api/socket") {
         if (request.headers.get("origin") !== config.origin)
           return json({ error: "invalid origin" }, 403);
-        if (server.upgrade(request, { data: { userId: user.id } })) return;
+        const adminConversationId = url.searchParams.get("adminConversationId") ?? undefined;
+        if (adminConversationId !== undefined) {
+          const denied = await authorizeAdminStream(db, user.id, adminConversationId);
+          if (denied) return denied;
+        }
+        if (server.upgrade(request, { data: { userId: user.id, adminConversationId } })) return;
         return json({ error: "websocket upgrade required" }, 426);
       }
       if (url.pathname === "/settings" || url.pathname.startsWith("/settings/"))
@@ -206,7 +212,11 @@ export const server = Bun.serve<SocketData>({
   },
   websocket: {
     open(socket) {
-      socket.subscribe(userTopic(socket.data.userId));
+      socket.subscribe(
+        socket.data.adminConversationId
+          ? adminConversationTopic(socket.data.adminConversationId)
+          : userTopic(socket.data.userId),
+      );
     },
     message(socket) {
       socket.close(1003, "server events only");
@@ -427,14 +437,16 @@ function userTopic(userId: string): string {
   return `user:${userId}`;
 }
 
-function publishAgentEvent(_userId: string, envelope: ChatEventEnvelope): void {
+export function publishAgentEvent(_userId: string, envelope: ChatEventEnvelope): void {
   const payload = JSON.stringify(envelope);
+  server.publish(adminConversationTopic(envelope.conversationId), payload);
   for (const recipient of conversationUserIds(db, envelope.conversationId))
     server.publish(userTopic(recipient), payload);
 }
 
 function publishSync(userIds: string[], conversationId?: string): void {
   const payload = JSON.stringify({ type: "sync", conversationId });
+  if (conversationId) server.publish(adminConversationTopic(conversationId), payload);
   for (const userId of new Set(userIds)) server.publish(userTopic(userId), payload);
 }
 
@@ -567,20 +579,13 @@ function conversationMessages(
   setConversationRead(db, conversationId, userId);
   let page;
   try {
-    page = pagePublicMessages(db, conversationId, before, MESSAGE_PAGE_SIZE);
+    page = publicMessagePage(db, conversationId, access.creator_id, before);
   } catch (error) {
     if (error instanceof Error && error.message === "invalid cursor")
       return json({ error: "invalid cursor" }, 400);
     throw error;
   }
-  return json({
-    messages: page.messages.map(({ fileIds, authorId, ...message }) => ({
-      ...message,
-      author: message.role === "user" ? userSummary(authorId ?? access.creator_id) : undefined,
-      files: filesByIds(fileIds),
-    })),
-    hasMore: page.hasMore,
-  });
+  return json(page);
 }
 
 async function deleteConversation(
@@ -1335,28 +1340,7 @@ async function serveUserFile(
   preview: boolean,
 ): Promise<Response> {
   if (!fileAccess(db, fileId, userId)) return json({ error: "not found" }, 404);
-  const file = db
-    .select({ name: filesTable.name, path: filesTable.path, mime: filesTable.mime })
-    .from(filesTable)
-    .where(eq(filesTable.id, fileId))
-    .get();
-  if (!file) return json({ error: "not found" }, 404);
-  const originalPath = storedFilePath(file.path);
-  if (!(await Bun.file(originalPath).exists())) return json({ error: "not found" }, 404);
-  const path = preview ? imagePreviewPath(originalPath) : originalPath;
-  if (preview && !(await Bun.file(path).exists()))
-    await writeFile(
-      path,
-      await createImagePreview(Buffer.from(await Bun.file(originalPath).arrayBuffer()), file.mime),
-    );
-  return new Response(Bun.file(path), {
-    headers: {
-      "Content-Type": preview ? "image/webp" : file.mime,
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-      "Cache-Control": "private, max-age=31536000, immutable",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  return serveStoredFile(db, fileId, download, preview);
 }
 
 async function saveUploads(entries: FormDataEntryValue[], userId: string): Promise<StoredFile[]> {
@@ -1426,22 +1410,6 @@ function publicFiles(files: StoredFile[]) {
     source,
     created_at,
   }));
-}
-function filesByIds(ids: string[]) {
-  return ids.length
-    ? db
-        .select({
-          id: filesTable.id,
-          name: filesTable.name,
-          mime: filesTable.mime,
-          size: filesTable.size,
-          source: filesTable.source,
-          created_at: filesTable.created_at,
-        })
-        .from(filesTable)
-        .where(inArray(filesTable.id, ids))
-        .all()
-    : [];
 }
 
 function startDiscordLogin(): Response {

@@ -7,6 +7,10 @@ import sharp from "sharp";
 import type { AdminConversationPage, MessagePage } from "../src/lib/api";
 
 const root = join(import.meta.dir, "..");
+// DOM typings omit Bun's authenticated WebSocket client options.
+const BunWebSocket = WebSocket as unknown as {
+  new (url: string, options: Bun.WebSocketOptions): WebSocket;
+};
 
 async function fixture(adminIds = " , 100 , ") {
   const directory = mkdtempSync(join(tmpdir(), "ai-chat-admin-"));
@@ -19,7 +23,10 @@ async function fixture(adminIds = " , 100 , ") {
     [
       process.execPath,
       "-e",
-      'const {server} = await import("./src/api/server.ts"); console.log("READY:" + server.port);',
+      `const {server, publishAgentEvent} = await import("./src/api/server.ts");
+       console.log("READY:" + server.port);
+       const {createInterface} = await import("node:readline");
+       for await (const line of createInterface({input: process.stdin})) publishAgentEvent("200", JSON.parse(line));`,
     ],
     {
       cwd: root,
@@ -35,6 +42,7 @@ async function fixture(adminIds = " , 100 , ") {
         ADMIN_DISCORD_USER_IDS: adminIds,
         CODEX_MODEL: "gpt-5.6-sol",
       },
+      stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -152,7 +160,7 @@ async function fixture(adminIds = " , 100 , ") {
       [
         {
           type: "text",
-          text: "OpenAI Codexの再認証が必要です。\n\n[認証ページを開く](https://example.com/device)\n\nコード: `SECRET-CODE`",
+          text: "OpenAI Codexの再認証が必要です。\n\n[認証ページを開く](https://example.com/device)\n\nコード: `DEVICE-CODE`",
         },
       ],
       "assistant",
@@ -172,7 +180,15 @@ async function fixture(adminIds = " , 100 , ") {
         body,
         redirect: "manual",
       });
-    return { directory, db, request, dispose };
+    const connect = (conversationId?: string, userId = "100", origin = "http://localhost:3000") =>
+      new BunWebSocket(
+        `ws://127.0.0.1:${port}/api/socket${conversationId ? `?adminConversationId=${conversationId}` : ""}`,
+        {
+          headers: { cookie: `session=session-${userId}`, origin },
+        },
+      );
+    const publish = (envelope: unknown) => child.stdin.write(`${JSON.stringify(envelope)}\n`);
+    return { directory, db, request, connect, publish, dispose };
   } catch (error) {
     await dispose();
     throw error;
@@ -231,7 +247,7 @@ test("管理者一覧は共有・非共有プロジェクトの所属と名前�
   }
 });
 
-test("admin GET経路だけで本文・画像を閲覧し、分離・読み取り専用・監査を維持する", async () => {
+test("admin GET経路だけで通常と同じ本文・添付を閲覧し、分離・読み取り専用・監査を維持する", async () => {
   const { directory, db, request, dispose } = await fixture();
   try {
     const bootstrap = await (await request("/api/bootstrap")).json();
@@ -245,6 +261,7 @@ test("admin GET経路だけで本文・画像を閲覧し、分離・読み取�
       "/api/admin/conversations",
       "/api/admin/conversations/private",
       "/api/admin/conversations/private/images/attached",
+      "/api/admin/conversations/private/files/document",
     ]) {
       expect((await request(path, null)).status).toBe(401);
       expect((await request(path, "200")).status).toBe(403);
@@ -281,20 +298,25 @@ test("admin GET経路だけで本文・画像を閲覧し、分離・読み取�
       "private body",
       "assistant body",
       "",
-      "認証情報は表示しません",
+      "OpenAI Codexの再認証が必要です。\n\n[認証ページを開く](https://example.com/device)\n\nコード: `DEVICE-CODE`",
     ]);
     expect(detail.messages.flatMap((message) => message.files.map((file) => file.id))).toEqual([
       "attached",
+      "document",
       "fake",
       "generated",
     ]);
+    expect(detail.messages.flatMap((message) => message.activities ?? [])).toContainEqual({
+      type: "reasoning",
+      text: "hidden reasoning",
+    });
     expect(JSON.stringify(detail)).not.toMatch(
-      /hidden|SECRET-CODE|example.com|document|attachmentContext|activities/,
+      /hidden attachment text|attachmentContext|thinkingSignature|access_token|refresh_token/,
     );
     expect((await request("/api/admin/conversations/missing")).status).toBe(404);
     expect((await request("/api/admin/conversations/private?before=missing")).status).toBe(400);
     expect((await request("/api/admin/conversations?before=%27")).status).toBe(400);
-    for (const fileId of ["document", "unattached", "missing", "fake"])
+    for (const fileId of ["unattached", "missing", "fake"])
       expect((await request(`/api/admin/conversations/private/images/${fileId}`)).status).toBe(404);
     expect((await request("/api/admin/conversations/own/images/attached")).status).toBe(404);
     for (const fileId of ["attached", "generated"]) {
@@ -308,16 +330,21 @@ test("admin GET経路だけで本文・画像を閲覧し、分離・読み取�
         expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
       }
     }
+    const document = await request("/api/admin/conversations/private/files/document?download");
+    expect(document.status).toBe(200);
+    expect(document.headers.get("content-disposition")).toContain("attachment");
+    expect(await document.text()).toBe("private document");
+    expect((await request("/api/admin/conversations/own/files/document")).status).toBe(404);
     expect(db.serialize()).toEqual(before);
     const auditPath = join(directory, "admin-audit.jsonl");
     expect(statSync(auditPath).mode & 0o777).toBe(0o600);
     const auditText = readFileSync(auditPath, "utf8");
-    expect(auditText).not.toMatch(/private body|private title|hidden|SECRET-CODE/);
+    expect(auditText).not.toMatch(/private body|private title|hidden|DEVICE-CODE/);
     const records = auditText
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    expect(records).toHaveLength(9);
+    expect(records).toHaveLength(10);
     expect(
       records.every(
         (record) => record.viewer_id === "100" && !Number.isNaN(Date.parse(record.timestamp)),
@@ -329,8 +356,8 @@ test("admin GET経路だけで本文・画像を閲覧し、分離・読み取�
       ).user_id,
     ).toBe("200");
     expect(
-      records.filter((record) => record.action === "image").map((record) => record.file_id),
-    ).toEqual(["attached", "attached", "generated", "generated"]);
+      records.filter((record) => record.action === "file").map((record) => record.file_id),
+    ).toEqual(["attached", "attached", "generated", "generated", "document"]);
     for (const record of records)
       expect(Object.keys(record).sort()).toEqual(
         [
@@ -348,6 +375,7 @@ test("admin GET経路だけで本文・画像を閲覧し、分離・読み取�
       "/api/admin/conversations",
       "/api/admin/conversations/private",
       "/api/admin/conversations/private/images/attached",
+      "/api/admin/conversations/private/files/document",
     ])
       expect((await request(path)).status).toBe(500);
   } finally {
@@ -412,6 +440,87 @@ test("管理者未設定は無効、権限のないセッションからはモ�
     expect((await request("/api/admin/conversations")).status).toBe(403);
     expect((await request("/api/admin/conversations", "invalid")).status).toBe(401);
   } finally {
+    await dispose();
+  }
+}, 30_000);
+
+test("通常APIと管理者APIは公開メッセージ・処理履歴・添付・認証案内を同じ形で返す", async () => {
+  const { request, dispose } = await fixture();
+  try {
+    const normal = await (await request("/api/conversations/private", "200")).json();
+    const admin = await (await request("/api/admin/conversations/private")).json();
+    expect(admin.messages).toEqual(normal.messages);
+    expect(admin.hasMore).toBe(normal.hasMore);
+    expect(
+      admin.messages
+        .flatMap((message: MessagePage["messages"][number]) => message.activities ?? [])
+        .some((activity: { type: string }) => activity.type !== "reasoning"),
+    ).toBe(true);
+    expect(admin.messages[0].author.id).toBe("200");
+  } finally {
+    await dispose();
+  }
+});
+
+test("管理者ライブ購読は権限・Origin・会話を検証し、対象会話だけを通常と同じイベントで配信・監査する", async () => {
+  const { request, connect, publish, directory, dispose } = await fixture();
+  const sockets: WebSocket[] = [];
+  try {
+    expect((await request("/api/socket?adminConversationId=private", "200")).status).toBe(403);
+    expect((await request("/api/socket?adminConversationId=private", null)).status).toBe(401);
+    expect((await request("/api/socket?adminConversationId=missing")).status).toBe(404);
+    const invalidOrigin = connect("private", "100", "https://untrusted.example");
+    sockets.push(invalidOrigin);
+    await new Promise<void>((resolve, reject) => {
+      invalidOrigin.onopen = () => reject(new Error("invalid origin accepted"));
+      invalidOrigin.onerror = () => resolve();
+    });
+    const received: unknown[][] = [];
+    for (const [conversationId, userId] of [
+      ["private", "100"],
+      [undefined, "200"],
+      [undefined, "100"],
+      ["temporary", "100"],
+    ] as const) {
+      const socket = connect(conversationId, userId);
+      sockets.push(socket);
+      const events: unknown[] = [];
+      received.push(events);
+      socket.onmessage = (event) => events.push(JSON.parse(String(event.data)));
+      await new Promise<void>((resolve, reject) => {
+        socket.onopen = () => resolve();
+        socket.onerror = () => reject(new Error("socket connection failed"));
+      });
+    }
+    const event = {
+      version: 1,
+      conversationId: "private",
+      runId: "run-1",
+      seq: 1,
+      timestamp: "2026-01-02T03:04:00.000Z",
+      event: { type: "assistant.text.delta", contentIndex: 0, delta: "live reply" },
+    };
+    publish(event);
+    for (let attempt = 0; attempt < 100 && received[0].length === 0; attempt++) await Bun.sleep(10);
+    await Bun.sleep(30);
+    expect(received).toEqual([[event], [event], [], []]);
+    const records = readFileSync(join(directory, "admin-audit.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(
+      records
+        .filter((record) => record.action === "stream")
+        .map((record) => record.conversation_id),
+    ).toEqual(["private", "temporary"]);
+    // The subscribed socket remains receive-only; it cannot send chat commands.
+    const closed = new Promise<number>((resolve) => {
+      sockets[1].onclose = (event) => resolve(event.code);
+    });
+    sockets[1].send(JSON.stringify({ type: "send", content: "impersonation" }));
+    expect(await closed).toBe(1003);
+  } finally {
+    sockets.forEach((socket) => socket.close());
     await dispose();
   }
 }, 30_000);

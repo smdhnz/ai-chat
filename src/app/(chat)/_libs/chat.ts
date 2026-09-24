@@ -26,7 +26,7 @@ export function sidebarConversations(
     const own = item.user_id === data.user.id ? conversations.get(item.id) : undefined;
     conversations.set(item.id, {
       ...item,
-      generation_status: "idle",
+      generation_status: item.generation_status ?? "idle",
       unread: 0,
       ...own,
       owner: item.display_name,

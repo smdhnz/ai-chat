@@ -201,7 +201,7 @@ test("各メッセージの送信日時は読み取り専用かどうかによ�
   }
 });
 
-test("通常のメッセージ表示を読み取り専用にし、画像は管理者API・本文の外部画像は読み込まない", () => {
+test("通常のメッセージ表示を読み取り専用にし、添付は管理者API・本文の外部画像は通常と同じ表示", () => {
   const message: Message = {
     id: "message",
     role: "user",
@@ -227,24 +227,38 @@ test("通常のメッセージ表示を読み取り専用にし、画像は管�
       shared={false}
       prioritizeImages={false}
       readOnly
-      fileBaseUrl="/api/admin/conversations/other/images"
+      fileBaseUrl="/api/admin/conversations/other/files"
     />,
   );
-  expect(markup).toContain("/api/admin/conversations/other/images/image?preview");
+  expect(markup).toContain("/api/admin/conversations/other/files/image?preview");
   expect(markup).not.toContain("編集して再生成");
   expect(markup).not.toContain("このメッセージから再生成");
   const assistant = renderToStaticMarkup(
     <MessageView
-      message={{ ...message, role: "assistant" }}
+      message={{
+        ...message,
+        role: "assistant",
+        content: `${message.content}\n\n**回答**\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`\n\n![添付](/files/image)\n\n[文書](/files/document?download)\n\n[不正](javascript:alert)`,
+        activities: [{ type: "reasoning", text: "保存済みの思考" }],
+      }}
       disabled={false}
       regenerate={noop}
       edit={noop}
       shared={false}
       prioritizeImages={false}
       readOnly
+      fileBaseUrl="/api/admin/conversations/other/files"
     />,
   );
-  expect(assistant).not.toContain('src="https://example.com/tracker.png"');
+  expect(assistant).toContain('src="https://example.com/tracker.png"');
+  expect(assistant).toContain("<strong>回答</strong>");
+  expect(assistant).toContain('src="/api/admin/conversations/other/files/image"');
+  expect(assistant).toContain('href="/api/admin/conversations/other/files/document?download"');
+  expect(assistant).not.toContain('href="javascript:');
+  expect(assistant).toContain('aria-label="コードをコピー"');
+  expect(assistant).toContain("1件の処理");
+  expect(assistant).toContain('aria-expanded="false"');
+  expect(assistant).not.toContain("編集して再生成");
   const normal = renderToStaticMarkup(
     <MessageView
       message={message}
@@ -257,4 +271,37 @@ test("通常のメッセージ表示を読み取り専用にし、画像は管�
   );
   expect(normal).toContain("編集して再生成");
   expect(normal).toContain("/files/image?preview");
+});
+
+test("管理者も通常と同じMarkdown・処理履歴・公開認証カード・生成中表示を使う", () => {
+  for (const message of [
+    {
+      id: "stream-run",
+      content: "**生成中**\n\n![外部画像](https://example.com/image.png)",
+      activities: [
+        { type: "reasoning", text: "思考" },
+        { type: "tool", name: "inspect_image", summary: "画像を確認中", status: "running" },
+      ],
+    },
+    {
+      id: "auth",
+      content:
+        "OpenAI Codexの再認証が必要です。\n\n[認証ページを開く](https://example.com/device)\n\nコード: `DEVICE-CODE`",
+    },
+  ] satisfies Partial<Message>[]) {
+    const render = (readOnly: boolean) =>
+      renderToStaticMarkup(
+        <MessageView
+          message={{ role: "assistant", files: [], created_at: "2026-01-02", ...message }}
+          disabled={false}
+          regenerate={noop}
+          edit={noop}
+          shared={false}
+          prioritizeImages={false}
+          readOnly={readOnly}
+        />,
+      );
+    expect(render(true)).toBe(render(false));
+    expect(render(true)).toContain(message.id === "auth" ? "認証コードをコピー" : "画像を確認");
+  }
 });

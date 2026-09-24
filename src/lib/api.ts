@@ -142,6 +142,8 @@ export type AdminConversation = {
   display_name: string;
   project_id: string | null;
   project_name: string | null;
+  shared?: number | null;
+  generation_status?: Conversation["generation_status"];
   title: string;
   temporary: number;
   created_at: string;
@@ -193,7 +195,10 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getBootstrap = () => api<Bootstrap>("/api/bootstrap");
 
-export function socketUrl() {
+export function socketUrl(adminConversationId?: string | null) {
   const origin = process.env.NEXT_PUBLIC_API_ORIGIN || location.origin;
-  return `${origin.replace(/^http/, "ws")}/api/socket`;
+  const query = adminConversationId
+    ? `?adminConversationId=${encodeURIComponent(adminConversationId)}`
+    : "";
+  return `${origin.replace(/^http/, "ws")}/api/socket${query}`;
 }

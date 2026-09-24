@@ -2,7 +2,7 @@
 
 import { memo, useDeferredValue, useEffect, useRef, useState, type ComponentProps } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Check,
@@ -53,7 +53,7 @@ export function MessageView({
 }) {
   const deferredDraft = useDeferredValue(draft);
   const sourceContent = draft === undefined ? message.content : (deferredDraft ?? draft);
-  const auth = readOnly ? undefined : (message.auth ?? parseDeviceAuth(sourceContent));
+  const auth = message.auth ?? parseDeviceAuth(sourceContent);
   const content = auth ? "" : sourceContent;
   const hasBody = Boolean(content || auth || message.activities?.length);
   const isUser = message.role === "user";
@@ -83,15 +83,19 @@ export function MessageView({
             <div
               className={`min-w-0 max-w-full text-sm leading-[1.78] [&_a]:text-primary [&_a]:underline [&_code:not(pre_code)]:rounded-[5px] [&_code:not(pre_code)]:bg-muted [&_code:not(pre_code)]:px-[5px] [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:text-[0.88em] [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:pl-5 ${isUser ? "rounded-[20px] bg-[color-mix(in_srgb,var(--primary)_9%,var(--card))] px-4 py-[11px] shadow-[0_6px_20px_#1a1a1e1f]" : ""} ${collapsible && !expanded ? "max-h-56 overflow-hidden [mask-image:linear-gradient(#000_75%,transparent)]" : ""}`}
             >
-              {!readOnly && !isUser && message.activities && message.activities.length > 0 && (
+              {!isUser && message.activities && message.activities.length > 0 && (
                 <ActivityPanel activities={message.activities} streaming={streaming} />
               )}
-              {isUser || readOnly ? (
+              {isUser ? (
                 <div className="message-text break-words whitespace-pre-wrap">{content}</div>
               ) : streaming ? (
-                <StreamingContent content={content} finish={finishStreaming} />
+                <StreamingContent
+                  content={content}
+                  finish={finishStreaming}
+                  fileBaseUrl={fileBaseUrl}
+                />
               ) : (
-                <MarkdownContent content={content} />
+                <MarkdownContent content={content} fileBaseUrl={fileBaseUrl} />
               )}
               {auth && <AuthCard auth={auth} />}
             </div>
@@ -322,18 +326,38 @@ const markdownComponents: Components = {
   td: (props) => <td className={cellClass} {...withoutMarkdownNode(props)} />,
 };
 
-function StreamingContent({ content, finish }: { content: string; finish?: () => void }) {
+function StreamingContent({
+  content,
+  finish,
+  fileBaseUrl,
+}: {
+  content: string;
+  finish?: () => void;
+  fileBaseUrl?: string;
+}) {
   const deferred = useDeferredValue(content);
   useEffect(() => {
     if (finish && deferred === content) finish();
   }, [content, deferred, finish]);
-  return <MarkdownContent content={deferred} />;
+  return <MarkdownContent content={deferred} fileBaseUrl={fileBaseUrl} />;
 }
 
-const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
+const MarkdownContent = memo(function MarkdownContent({
+  content,
+  fileBaseUrl = "/files",
+}: {
+  content: string;
+  fileBaseUrl?: string;
+}) {
   return (
     <div className="message-text">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={markdownComponents}
+        urlTransform={(url) =>
+          defaultUrlTransform(url.replace(/^\/files\/([\w-]+)(?=[?#]|$)/, `${fileBaseUrl}/$1`))
+        }
+      >
         {content}
       </ReactMarkdown>
     </div>

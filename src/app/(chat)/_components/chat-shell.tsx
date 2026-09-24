@@ -335,7 +335,7 @@ export function ChatShell() {
       );
       await preloadMessagePreviews(
         page.messages,
-        readOnly ? `/api/admin/conversations/${currentConversationId}/images` : undefined,
+        readOnly ? `/api/admin/conversations/${currentConversationId}/files` : undefined,
       );
       if (openConversationRef.current !== currentConversationId || readOnlyRef.current !== readOnly)
         return;
@@ -391,12 +391,12 @@ export function ChatShell() {
     return () => animation.stop();
   }, [mobileSidebar, reduceMotion, sidebarDragging, sidebarX]);
 
+  const adminStreamConversationId = readOnly ? requestedConversationId : null;
   useEffect(() => {
     let active = true;
     let socket: WebSocket | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
-    let connected = false;
     const sync = async (targetConversationId?: string) => {
       const fresh = await getBootstrap();
       if (!active) return;
@@ -404,49 +404,52 @@ export function ChatShell() {
       const openId = openConversationRef.current;
       if (
         !openId ||
-        readOnlyRef.current ||
+        (readOnlyRef.current && openId !== adminStreamConversationId) ||
         (targetConversationId && targetConversationId !== openId) ||
-        !fresh.conversations.some((conversation) => conversation.id === openId)
+        (!adminStreamConversationId &&
+          !fresh.conversations.some((conversation) => conversation.id === openId))
       )
         return;
-      const page = await api<MessagePage>(`/api/conversations/${openId}`);
-      if (!active || openConversationRef.current !== openId || readOnlyRef.current) return;
+      const page = await api<MessagePage & { conversation?: AdminConversation }>(
+        `/api/${adminStreamConversationId ? "admin/" : ""}conversations/${openId}`,
+      );
+      if (!active || openConversationRef.current !== openId) return;
+      if (page.conversation) setAdminSelection(page.conversation);
       replaceMessagesFromServer(page.messages);
       setHasOlderMessages(page.hasMore);
-      setData((value) => clearUnread(value, openId));
+      if (!adminStreamConversationId) setData((value) => clearUnread(value, openId));
     };
     const finishRun = (event: ChatEventEnvelope) => {
       const current =
-        openConversationRef.current === event.conversationId && !readOnlyRef.current
-          ? api<MessagePage>(`/api/conversations/${event.conversationId}`)
+        openConversationRef.current === event.conversationId
+          ? api<MessagePage & { conversation?: AdminConversation }>(
+              `/api/${adminStreamConversationId ? "admin/" : ""}conversations/${event.conversationId}`,
+            )
           : Promise.resolve(null);
       void Promise.all([getBootstrap(), current])
         .then(([fresh, page]) => {
           if (!active) return;
           setData(fresh);
-          if (
-            page &&
-            openConversationRef.current === event.conversationId &&
-            !readOnlyRef.current
-          ) {
+          if (page && openConversationRef.current === event.conversationId) {
             replaceMessagesFromServer(page.messages);
             setHasOlderMessages(page.hasMore);
-            setData((value) => clearUnread(value, event.conversationId));
+            if (page.conversation) setAdminSelection(page.conversation);
+            if (!adminStreamConversationId)
+              setData((value) => clearUnread(value, event.conversationId));
           }
           dispatchStream({ type: "clear", conversationId: event.conversationId });
         })
         .catch(() => undefined);
     };
     const connect = () => {
-      socket = new WebSocket(socketUrl());
+      socket = new WebSocket(socketUrl(adminStreamConversationId));
       socket.onopen = () => {
         setSocketConnected(true);
-        const reconnecting = connected;
-        connected = true;
         attempts = 0;
-        if (reconnecting) void sync().catch(() => undefined);
+        void sync().catch(() => undefined);
       };
       socket.onmessage = ({ data: message }) => {
+        if (!active) return;
         let event: unknown;
         try {
           event = JSON.parse(String(message));
@@ -470,6 +473,19 @@ export function ChatShell() {
         dispatchStream({ type: "event", envelope: event });
         if (event.event.type === "run.status") {
           const status = event.event.status;
+          setAdminSelection((value) =>
+            value?.id === event.conversationId
+              ? {
+                  ...value,
+                  generation_status:
+                    status === "running" || status === "queued"
+                      ? "running"
+                      : status === "stopped"
+                        ? "stopped"
+                        : "idle",
+                }
+              : value,
+          );
           setData((value) =>
             value
               ? {
@@ -491,6 +507,7 @@ export function ChatShell() {
         } else if (event.event.type === "run.done") finishRun(event);
       };
       socket.onerror = () => {
+        if (!active) return;
         setSocketConnected(false);
         socket?.close();
       };
@@ -504,13 +521,15 @@ export function ChatShell() {
     connect();
     return () => {
       active = false;
+      if (adminStreamConversationId)
+        dispatchStream({ type: "clear", conversationId: adminStreamConversationId });
       clearTimeout(retry);
       const closingSocket = socket;
       if (closingSocket?.readyState === WebSocket.CONNECTING)
         closingSocket.onopen = () => closingSocket.close();
       else closingSocket?.close();
     };
-  }, [replaceMessagesFromServer, setData]);
+  }, [adminStreamConversationId, replaceMessagesFromServer, setData]);
 
   const resolvedConversationId =
     requestedConversation?.id || (adminEnabled ? requestedConversationId : null);
@@ -586,9 +605,12 @@ export function ChatShell() {
 
   const project = data.projects.find((item) => item.id === projectId);
   const readOnlyProject = Boolean(adminEnabled && projectId && !project);
-  const activeConversation = data.conversations.find((item) => item.id === conversationId);
+  const activeConversation =
+    readOnly && adminSelection?.id === conversationId
+      ? adminSelection
+      : data.conversations.find((item) => item.id === conversationId);
   const activeStream =
-    conversationId && !readOnly && !switchingConversation ? streams[conversationId] : undefined;
+    conversationId && !switchingConversation ? streams[conversationId] : undefined;
   const streamedMessage = activeStream ? streamMessage(activeStream) : undefined;
   const displayedMessages = switchingConversation
     ? []
@@ -596,11 +618,10 @@ export function ChatShell() {
       ? [...messages.filter((message) => message.runId !== streamedMessage.runId), streamedMessage]
       : messages;
   const generating =
-    !readOnly &&
-    (sending ||
-      activeConversation?.generation_status === "running" ||
-      activeStream?.status === "queued" ||
-      activeStream?.status === "running");
+    sending ||
+    activeConversation?.generation_status === "running" ||
+    activeStream?.status === "queued" ||
+    activeStream?.status === "running";
   const editing = editingMessageId !== null;
   const waitingForResponse = !streamedMessage?.content && !streamedMessage?.activities?.length;
   const newestImageMessageId = displayedMessages.reduceRight<string | undefined>(
@@ -987,9 +1008,9 @@ export function ChatShell() {
                     adminMode={adminEnabled}
                     readOnly={readOnly}
                     fileBaseUrl={
-                      readOnly ? `/api/admin/conversations/${conversationId}/images` : undefined
+                      readOnly ? `/api/admin/conversations/${conversationId}/files` : undefined
                     }
-                    shared={Boolean(project?.shared)}
+                    shared={Boolean(project?.shared || (readOnly && adminSelection?.shared))}
                     draft={editingMessageId === message.id ? prompt : undefined}
                     regenerate={() => void regenerate(message.id)}
                     edit={() => {
