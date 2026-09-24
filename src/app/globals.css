@@ -105,6 +105,18 @@ textarea,
   user-select: text;
 }
 
+@media (pointer: coarse) {
+  .text-selection-trigger .message-text {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .text-selection-trigger a {
+    -webkit-touch-callout: default;
+  }
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;

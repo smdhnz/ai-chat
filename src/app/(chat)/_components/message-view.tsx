@@ -23,6 +23,7 @@ import {
 } from "@/lib/api";
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
 import { ImageDialog } from "@/components/image-dialog";
+import { TextSelection } from "./text-selection";
 import { LoadingWave } from "@/components/loading-wave";
 import { chatDateTime } from "@/lib/ui";
 
@@ -86,17 +87,19 @@ export function MessageView({
               {!isUser && message.activities && message.activities.length > 0 && (
                 <ActivityPanel activities={message.activities} streaming={streaming} />
               )}
-              {isUser ? (
-                <div className="message-text break-words whitespace-pre-wrap">{content}</div>
-              ) : streaming ? (
-                <StreamingContent
-                  content={content}
-                  finish={finishStreaming}
-                  fileBaseUrl={fileBaseUrl}
-                />
-              ) : (
-                <MarkdownContent content={content} fileBaseUrl={fileBaseUrl} />
-              )}
+              <TextSelection text={content} disabled={streaming}>
+                {isUser ? (
+                  <div className="message-text break-words whitespace-pre-wrap">{content}</div>
+                ) : streaming ? (
+                  <StreamingContent
+                    content={content}
+                    finish={finishStreaming}
+                    fileBaseUrl={fileBaseUrl}
+                  />
+                ) : (
+                  <MarkdownContent content={content} fileBaseUrl={fileBaseUrl} />
+                )}
+              </TextSelection>
               {auth && <AuthCard auth={auth} />}
             </div>
             {collapsible && (
