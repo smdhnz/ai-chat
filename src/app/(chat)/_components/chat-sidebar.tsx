@@ -6,19 +6,21 @@ import { Check, Settings, SquarePen, Trash2, UsersRound } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { Bootstrap, Conversation } from "@/lib/api";
 import type { ChatConversation } from "../_libs/chat";
-import { iconButtonClass } from "@/lib/ui";
+import { chatDateTime, iconButtonClass } from "@/lib/ui";
 
 const rowButtonClass =
-  "flex h-[41px] min-w-0 flex-1 items-center gap-2.5 rounded-[11px] px-[11px] text-left text-xs text-muted-foreground transition duration-200 hover:text-foreground [&>svg]:size-[15px] [&>svg]:shrink-0";
+  "flex min-h-[41px] min-w-0 flex-1 items-center gap-2.5 rounded-[11px] px-[11px] py-1.5 text-left text-xs text-muted-foreground transition duration-200 hover:text-foreground [&>svg]:size-[15px] [&>svg]:shrink-0";
 
 function ConversationRow({
   item,
   active,
+  adminMode,
   select,
   remove,
 }: {
   item: ChatConversation;
   active: boolean;
+  adminMode: boolean;
   select: () => void;
   remove?: () => void;
 }) {
@@ -30,6 +32,12 @@ function ConversationRow({
         <span className="min-w-0 flex-1 truncate">
           {item.title}
           {item.owner ? <span className="block truncate text-[9px]">{item.owner}</span> : null}
+          {adminMode && (
+            <time dateTime={item.updated_at} className="block text-[9px] text-muted-foreground">
+              <span className="sr-only">会話更新日時（日本時間） </span>
+              {chatDateTime.format(new Date(item.updated_at))}
+            </time>
+          )}
         </span>
         {item.unread === 1 && !active && (
           <span
@@ -191,6 +199,7 @@ export function ChatSidebar({
               >
                 {conversations.slice(0, conversationLimit).map((item) => (
                   <ConversationRow
+                    adminMode={adminMode}
                     key={item.id}
                     item={item}
                     active={item.id === conversationId}

@@ -151,6 +151,56 @@ test("管理者の設定内だけにモード切替を表示する", () => {
   expect(settings({ ...data, is_admin: false })).not.toContain("管理者モード");
 });
 
+test("サイドバーの会話更新日時は管理者モード時だけ日本時間で表示する", () => {
+  const updated_at = "2026-01-02T03:04:00.000Z";
+  for (const adminMode of [true, false]) {
+    const markup = renderToStaticMarkup(
+      <ChatSidebar
+        open
+        onOpenChange={noop}
+        data={data}
+        conversationId={null}
+        projectId=""
+        newChat={noop}
+        selectConversation={noop}
+        askDeleteConversation={noop}
+        openSettings={noop}
+        adminMode={adminMode}
+        items={[{ ...own, updated_at }]}
+        adminLoading={false}
+        adminError=""
+        retryAdmin={noop}
+      />,
+    );
+    expect(markup.includes(`<time dateTime="${updated_at}"`)).toBe(adminMode);
+    expect(markup.includes("2026/01/02 12:04")).toBe(adminMode);
+  }
+});
+
+test("各メッセージの送信日時は読み取り専用かどうかによらず管理者モード時だけ表示する", () => {
+  for (const role of ["user", "assistant"] as const) {
+    for (const adminMode of [true, false]) {
+      for (const readOnly of [true, false]) {
+        const created_at = "2026-01-02T03:04:00.000Z";
+        const markup = renderToStaticMarkup(
+          <MessageView
+            message={{ id: "message", role, content: "本文", created_at, files: [] }}
+            disabled={false}
+            regenerate={noop}
+            edit={noop}
+            shared={false}
+            prioritizeImages={false}
+            adminMode={adminMode}
+            readOnly={readOnly}
+          />,
+        );
+        expect(markup.includes(`<time dateTime="${created_at}"`)).toBe(adminMode);
+        expect(markup.includes("2026/01/02 12:04")).toBe(adminMode);
+      }
+    }
+  }
+});
+
 test("通常のメッセージ表示を読み取り専用にし、画像は管理者API・本文の外部画像は読み込まない", () => {
   const message: Message = {
     id: "message",

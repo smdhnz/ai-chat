@@ -984,6 +984,7 @@ export function ChatShell() {
                     key={message.id}
                     message={message}
                     disabled={generating}
+                    adminMode={adminEnabled}
                     readOnly={readOnly}
                     fileBaseUrl={
                       readOnly ? `/api/admin/conversations/${conversationId}/images` : undefined

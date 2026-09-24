@@ -1,3 +1,9 @@
+export const chatDateTime = new Intl.DateTimeFormat("ja-JP", {
+  dateStyle: "short",
+  timeStyle: "short",
+  timeZone: "Asia/Tokyo",
+});
+
 export const ease = [0.22, 1, 0.36, 1] as const;
 
 export const iconButtonClass =

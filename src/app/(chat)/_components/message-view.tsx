@@ -24,6 +24,7 @@ import {
 import { useCopy } from "@/app/(chat)/_hooks/use-copy";
 import { ImageDialog } from "@/components/image-dialog";
 import { LoadingWave } from "@/components/loading-wave";
+import { chatDateTime } from "@/lib/ui";
 
 export function MessageView({
   message,
@@ -35,6 +36,7 @@ export function MessageView({
   prioritizeImages,
   finishStreaming,
   readOnly = false,
+  adminMode = false,
   fileBaseUrl,
 }: {
   message: Message;
@@ -46,6 +48,7 @@ export function MessageView({
   prioritizeImages: boolean;
   finishStreaming?: () => void;
   readOnly?: boolean;
+  adminMode?: boolean;
   fileBaseUrl?: string;
 }) {
   const deferredDraft = useDeferredValue(draft);
@@ -111,6 +114,15 @@ export function MessageView({
             fileBaseUrl={fileBaseUrl}
             imageContextLabel={readOnly ? "管理者モード ON・読み取り専用" : undefined}
           />
+        )}
+        {adminMode && (
+          <time
+            dateTime={message.created_at}
+            className="mt-1 px-1 text-[10px] text-muted-foreground"
+          >
+            <span className="sr-only">送信日時（日本時間） </span>
+            {chatDateTime.format(new Date(message.created_at))}
+          </time>
         )}
         {(sourceContent || isUser) && (
           <div className={`mt-1 flex w-full gap-0.5 ${isUser ? "justify-end" : "justify-start"}`}>
