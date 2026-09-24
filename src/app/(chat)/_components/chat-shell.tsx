@@ -912,7 +912,7 @@ export function ChatShell() {
             </div>
           )}
           <p className="absolute left-1/2 max-w-[calc(100%-132px)] -translate-x-1/2 truncate pt-3 text-[12px] font-semibold">
-            {adminEnabled ? "管理者モード ON" : (project?.name ?? "")}
+            {project?.name ?? ""}
           </p>
           {conversationId ? (
             <button
