@@ -44,7 +44,7 @@ test("長押しは微小な揺れを許容し、タップ・スクロール・�
   expect(opened).toBe(1);
 });
 
-test("長押し以外の操作用ボタンを表示し、生成中は選択操作を追加しない", () => {
+test("選択ボタンは通常非表示でキーボード操作時のみ表示し、生成中は追加しない", () => {
   const render = (disabled: boolean) =>
     renderToStaticMarkup(
       <TextSelection text="本文" disabled={disabled}>
@@ -52,6 +52,7 @@ test("長押し以外の操作用ボタンを表示し、生成中は選択操�
       </TextSelection>,
     );
   expect(render(false)).toContain('aria-haspopup="dialog"');
+  expect(render(false)).toContain('class="sr-only focus:not-sr-only"');
   expect(render(false)).toContain("text-selection-trigger");
   expect(render(true)).not.toContain("<button");
   expect(render(true)).not.toContain("text-selection-trigger");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
-import { TextSelect, X } from "lucide-react";
+import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { NativeDialog } from "@/components/native-dialog";
 import { useTextLongPress } from "../_hooks/use-text-long-press";
@@ -27,11 +27,10 @@ export function TextSelection({
       {text && !disabled && (
         <button
           type="button"
-          className="mt-1 inline-flex min-h-11 items-center gap-1.5 text-xs text-muted-foreground"
+          className="sr-only focus:not-sr-only"
           onClick={() => setSelectedText(text)}
           aria-haspopup="dialog"
         >
-          <TextSelect className="size-4" />
           テキスト選択
         </button>
       )}
