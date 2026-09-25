@@ -360,7 +360,13 @@ export function pagePublicMessages(
   );
   const runMap = new Map(
     database
-      .select({ id: runs.id, status: runs.status, error: runs.error })
+      .select({
+        id: runs.id,
+        status: runs.status,
+        error: runs.error,
+        userEntryId: runs.user_entry_id,
+        createdAt: runs.created_at,
+      })
       .from(runs)
       .where(eq(runs.conversation_id, conversationId))
       .all()
@@ -452,6 +458,22 @@ export function pagePublicMessages(
       );
       toolCalls.delete(`${entry.run_id}:${result.toolCallId}`);
     } else group.activities.push(publicToolActivity(result));
+  }
+  const visibleRuns = new Set(messages.map((message) => message.runId));
+  for (const run of runMap.values()) {
+    if (run.status !== "failed" || visibleRuns.has(run.id)) continue;
+    const userIndex = messages.findIndex((message) => message.id === run.userEntryId);
+    if (userIndex < 0) continue;
+    messages.splice(userIndex + 1, 0, {
+      id: run.id,
+      runId: run.id,
+      role: "assistant",
+      content: "",
+      fileIds: [],
+      skills: [],
+      activities: [],
+      created_at: run.createdAt,
+    });
   }
   for (const message of messages) {
     message.fileIds = [...new Set(message.fileIds)];

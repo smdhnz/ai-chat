@@ -45,6 +45,30 @@ const data: Bootstrap = {
 };
 const noop = () => {};
 
+test("空の失敗応答も折りたたみを開かずエラーを表示する", () => {
+  for (const status of ["failed", "completed"] as const) {
+    const markup = renderToStaticMarkup(
+      <MessageView
+        message={{
+          id: "run",
+          role: "assistant",
+          content: "",
+          status,
+          created_at: "2026-01-02",
+          files: [],
+        }}
+        disabled={false}
+        regenerate={noop}
+        edit={noop}
+        shared={false}
+        prioritizeImages={false}
+      />,
+    );
+    expect(markup.includes('role="alert"')).toBe(status === "failed");
+    expect(markup.includes("応答に失敗しました。再生成してください。")).toBe(status === "failed");
+  }
+});
+
 test("管理者一覧は通常一覧と統合し、所有者・読み取り専用・重複排除を維持、オフなら通常一覧だけ", () => {
   const adminOwn = { ...other, ...own, user_id: "admin", display_name: "管理者" };
   const items = sidebarConversations(data, [other, adminOwn]);

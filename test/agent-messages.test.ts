@@ -59,6 +59,49 @@ function database() {
 }
 
 describe("public transcript projection", () => {
+  test("応答が空の失敗runも履歴に残し、後続送信やページングで消えない", () => {
+    const db = database();
+    appendLegacyMessage(db, {
+      id: "user",
+      conversationId: "conversation",
+      role: "user",
+      content: "質問",
+      createdAt: "2025-01-02",
+    });
+    db.$client
+      .query(
+        `INSERT INTO runs(id,conversation_id,user_entry_id,status,model,requested_thinking,resolved_thinking,error,created_at)
+         VALUES('empty-failure','conversation','user','failed','fake','low','low',?,'2025-01-02')`,
+      )
+      .run("WebSocket closed 1011 SECRET");
+    appendLegacyMessage(db, {
+      id: "next-user",
+      conversationId: "conversation",
+      role: "user",
+      content: "次の質問",
+      createdAt: "2025-01-03",
+    });
+    const page = pagePublicMessages(db, "conversation", null, 20);
+    expect(page.messages.map((message) => message.id)).toEqual([
+      "user",
+      "empty-failure",
+      "next-user",
+    ]);
+    expect(page.messages[1]).toMatchObject({
+      role: "assistant",
+      runId: "empty-failure",
+      status: "failed",
+      activities: [{ type: "tool", name: "run", status: "error" }],
+    });
+    expect(JSON.stringify(page)).not.toContain("SECRET");
+    expect(pagePublicMessages(db, "conversation", "next-user", 1)).toEqual({
+      messages: [page.messages[1]],
+      hasMore: true,
+    });
+    expect(pagePublicMessages(db, "conversation", "empty-failure", 1).messages[0].id).toBe("user");
+    expect(pagePublicMessages(db, "other-conversation", null, 20).messages).toEqual([]);
+  });
+
   test("同じrunを1件へまとめ、再生成時は最後の画像だけ公開してsecretを隠す", () => {
     const db = database();
     db.$client

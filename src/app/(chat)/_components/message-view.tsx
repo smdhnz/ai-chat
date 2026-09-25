@@ -79,6 +79,11 @@ export function MessageView({
             imageContextLabel={readOnly ? "管理者モード ON・読み取り専用" : undefined}
           />
         )}
+        {!isUser && message.status === "failed" && (
+          <p role="alert" className="mb-2 text-sm text-destructive">
+            応答に失敗しました。再生成してください。
+          </p>
+        )}
         {hasBody && (
           <>
             <div

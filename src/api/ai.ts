@@ -12,6 +12,7 @@ import {
   type CredentialStore,
   type Model,
   type ModelThinkingLevel,
+  type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { config } from "./config";
@@ -148,6 +149,7 @@ Set title to a concise 12-20 character title only when needsTitle is true; other
   };
   const timeout = AbortSignal.timeout(10_000);
   const stream = models.stream(model, context, {
+    transport: "sse",
     reasoningEffort: "minimal",
     toolChoice: "required",
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
@@ -171,6 +173,7 @@ export async function summarizeConversation(payload: string, signal?: AbortSigna
       messages: [{ role: "user", content: payload, timestamp: Date.now() }],
     },
     {
+      transport: "sse",
       reasoning: "low",
       cacheRetention: "none",
       signal: signal
@@ -299,7 +302,9 @@ class JsonCredentialStore implements CredentialStore {
 const authPath = process.env.PI_AUTH_PATH || join(config.dataDir, "auth.json");
 const models = createModels({ credentials: new JsonCredentialStore(authPath) });
 models.setProvider(openaiCodexProvider());
-export const streamChat = models.streamSimple.bind(models);
+export function streamChat(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
+  return models.streamSimple(model, context, { ...options, transport: "sse" });
+}
 export function getChatModel(modelId: string) {
   return getModel(modelId);
 }
