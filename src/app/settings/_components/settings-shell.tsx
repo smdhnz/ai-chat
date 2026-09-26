@@ -28,6 +28,7 @@ import {
   api,
   getBootstrap,
   type Bootstrap,
+  type DeviceAuth,
   type FileItem,
   type Project,
   type ProjectInvitation,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/api";
 import { settingsTabLabels, type SettingsTab } from "@/app/settings/_libs/settings";
 import { canStartSwipe, shouldCompleteSwipe } from "@/lib/swipe";
+import { AuthCard } from "@/app/(chat)/_components/message-view";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImageDialog } from "@/components/image-dialog";
 import { NativeDialog } from "@/components/native-dialog";
@@ -463,6 +465,21 @@ function SettingsHome({
   showTab: (tab: SettingsTab) => void;
   deleteData: () => void;
 }) {
+  const [codexAuth, setCodexAuth] = useState<DeviceAuth>();
+  const [reauthPending, setReauthPending] = useState(false);
+  const [reauthError, setReauthError] = useState("");
+  async function reauthenticateCodex() {
+    setReauthPending(true);
+    setReauthError("");
+    setCodexAuth(undefined);
+    try {
+      setCodexAuth(await api<DeviceAuth>("/api/admin/codex/reauthenticate", { method: "POST" }));
+    } catch {
+      setReauthError("再認証コードを取得できませんでした。もう一度お試しください。");
+    } finally {
+      setReauthPending(false);
+    }
+  }
   return (
     <div className="flex flex-col gap-6 px-4 pt-5 pb-[max(28px,env(safe-area-inset-bottom))]">
       <section className="flex items-center gap-3 rounded-[14px] bg-card p-3.5">
@@ -510,6 +527,36 @@ function SettingsHome({
             <span className="size-4 rounded-full bg-white shadow transition-transform" />
           </span>
         </label>
+      ) : null}
+      {data.is_admin ? (
+        <section className="rounded-[14px] bg-card p-3.5">
+          <h3 className="text-[13px] font-semibold">Codex認証</h3>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            全ユーザー共通のAI接続を再認証します。認証が成功するまで現在の認証情報は維持されます。
+          </p>
+          <button
+            type="button"
+            className="mt-3 min-h-11 rounded-xl bg-muted px-3 text-[13px] disabled:opacity-40"
+            disabled={reauthPending}
+            onClick={() => void reauthenticateCodex()}
+          >
+            {reauthPending ? "認証コードを取得中…" : "Codexを再認証"}
+          </button>
+          {reauthError && (
+            <p role="alert" className="mt-2 text-sm text-destructive">
+              {reauthError}
+            </p>
+          )}
+          {codexAuth && (
+            <>
+              <AuthCard auth={codexAuth} />
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                コードは発行から{Math.ceil(codexAuth.expiresInSeconds / 60)}分間有効です。
+                認証ページで完了すると自動反映されます。
+              </p>
+            </>
+          )}
+        </section>
       ) : null}
       <section className="overflow-hidden rounded-[14px] bg-card">
         <SettingsLink icon={MessageSquareText} label="一般" onClick={() => showTab("chat")} />

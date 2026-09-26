@@ -158,21 +158,24 @@ test("管理者一覧でもプロジェクト所属を保持し、プロジェ�
   );
 });
 
-test("管理者の設定内だけにモード切替を表示する", () => {
-  const settings = (bootstrap: Bootstrap) =>
+test("管理者の設定内だけにモード切替と常時利用できるCodex再認証を表示する", () => {
+  const settings = (bootstrap: Bootstrap, adminMode = true) =>
     renderToStaticMarkup(
       <SettingsShell
         open
         onOpenChange={noop}
         data={bootstrap}
         setData={noop}
-        adminMode
+        adminMode={adminMode}
         onAdminModeChange={noop}
       />,
     );
   expect(settings(data)).toContain('role="switch"');
   expect(settings(data)).toContain("管理者モード");
   expect(settings({ ...data, is_admin: false })).not.toContain("管理者モード");
+  expect(settings(data)).toContain("Codexを再認証");
+  expect(settings(data, false)).toContain("Codexを再認証");
+  expect(settings({ ...data, is_admin: false })).not.toContain("Codexを再認証");
 });
 
 test("サイドバーの会話更新日時は管理者モード時だけ日本時間で表示する", () => {

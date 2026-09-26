@@ -23,7 +23,12 @@ async function fixture(adminIds = " , 100 , ") {
     [
       process.execPath,
       "-e",
-      `const {server, publishAgentEvent} = await import("./src/api/server.ts");
+      `const {mock} = await import("bun:test");
+       const ai = await import("./src/api/ai.ts");
+       mock.module("./src/api/ai.ts", () => ({...ai,
+         beginCodexReauthentication: async () => ({userCode:"TEST-CODE", verificationUri:"https://auth.openai.com/codex/device", expiresInSeconds:900})
+       }));
+       const {server, publishAgentEvent} = await import("./src/api/server.ts");
        console.log("READY:" + server.port);
        const {createInterface} = await import("node:readline");
        for await (const line of createInterface({input: process.stdin})) publishAgentEvent("200", JSON.parse(line));`,
@@ -170,12 +175,13 @@ async function fixture(adminIds = " , 100 , ") {
       userId: string | null = "100",
       method = "GET",
       body?: BodyInit,
+      origin: string | null = "http://localhost:3000",
     ) =>
       fetch(`http://127.0.0.1:${port}${path}`, {
         method,
         headers: {
           ...(userId ? { cookie: `session=session-${userId}` } : {}),
-          origin: "http://localhost:3000",
+          ...(origin ? { origin } : {}),
         },
         body,
         redirect: "manual",
@@ -194,6 +200,30 @@ async function fixture(adminIds = " , 100 , ") {
     throw error;
   }
 }
+
+test("Codex再認証は管理者の同一OriginのPOSTだけにコードを返す", async () => {
+  const { request, dispose } = await fixture();
+  const path = "/api/admin/codex/reauthenticate";
+  try {
+    expect((await request(path, null, "POST")).status).toBe(401);
+    expect((await request(path, "200", "POST")).status).toBe(403);
+    expect((await request(path)).status).toBe(405);
+    expect(
+      (await request(path, "100", "POST", undefined, "https://untrusted.example")).status,
+    ).toBe(403);
+    expect((await request(path, "100", "POST", undefined, null)).status).toBe(403);
+    const response = await request(path, "100", "POST");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      userCode: "TEST-CODE",
+      verificationUri: "https://auth.openai.com/codex/device",
+      expiresInSeconds: 900,
+    });
+  } finally {
+    await dispose();
+  }
+});
 
 test("管理者は他人のチャットページへ遷移でき、通常ユーザーのページとAPIの分離は維持する", async () => {
   const { request, dispose } = await fixture();

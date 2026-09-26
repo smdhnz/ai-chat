@@ -2,6 +2,7 @@ import { basename, extname, join } from "node:path";
 import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import {
+  beginCodexReauthentication,
   classifyThinking,
   DEFAULT_THINKING_LEVEL,
   generateImage,
@@ -113,6 +114,13 @@ export const server = Bun.serve<SocketData>({
         return url.pathname.startsWith("/api/")
           ? json({ error: "unauthorized" }, 401)
           : redirect("/login");
+      if (url.pathname === "/api/admin/codex/reauthenticate") {
+        if (!isAdmin(user.id)) return json({ error: "forbidden" }, 403);
+        if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+        if (request.headers.get("origin") !== config.origin)
+          return json({ error: "invalid origin" }, 403);
+        return json(await beginCodexReauthentication());
+      }
       if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/"))
         return await adminRequest(request, db, user.id);
       if (url.pathname === "/api/socket") {
