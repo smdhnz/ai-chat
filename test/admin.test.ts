@@ -201,6 +201,58 @@ async function fixture(adminIds = " , 100 , ") {
   }
 }
 
+test("有効なセッションは利用時にDBとCookieを更新し、期限切れやログアウトでは復活しない", async () => {
+  const { db, request, dispose } = await fixture();
+  const expiry = () =>
+    db
+      .query<{ expires_at: string }, []>("SELECT expires_at FROM sessions WHERE user_id = '100'")
+      .get()?.expires_at;
+  const setExpiry = (time: number) =>
+    db
+      .query("UPDATE sessions SET expires_at = ? WHERE user_id = '100'")
+      .run(new Date(time).toISOString());
+  try {
+    setExpiry(Date.now() + 86400_000);
+    const before = Date.now();
+    const page = await request("/chat/private");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toBe("chat shell");
+    const renewedCookie = page.headers.get("set-cookie")!;
+    expect(renewedCookie).toContain("session=session-100;");
+    expect(renewedCookie).toContain("Max-Age=2592000");
+    expect(renewedCookie).toContain("HttpOnly");
+    expect(renewedCookie).toContain("SameSite=Lax");
+    expect(Date.parse(expiry()!)).toBeGreaterThanOrEqual(before + 30 * 86400_000);
+    const renewedExpiry = expiry();
+    expect((await request("/api/bootstrap")).headers.get("set-cookie")).toBeNull();
+    expect(expiry()).toBe(renewedExpiry);
+
+    setExpiry(Date.now() + 86400_000);
+    const api = await request("/api/bootstrap");
+    expect(api.status).toBe(200);
+    expect(api.headers.get("set-cookie")).toContain("Max-Age=2592000");
+    expect(Date.parse(expiry()!)).toBeGreaterThanOrEqual(before + 30 * 86400_000);
+    expect((await request("/api/bootstrap", null)).status).toBe(401);
+
+    setExpiry(Date.now() - 1000);
+    const expiredAt = expiry();
+    const expired = await request("/api/bootstrap");
+    expect(expired.status).toBe(401);
+    expect(expired.headers.get("set-cookie")).toBeNull();
+    expect(expiry()).toBe(expiredAt);
+
+    setExpiry(Date.now() + 86400_000);
+    const logout = await request("/logout", "100", "POST");
+    expect(logout.status).toBe(303);
+    expect(logout.headers.get("set-cookie")).toContain("session=;");
+    expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(expiry()).toBeUndefined();
+    expect((await request("/api/bootstrap")).status).toBe(401);
+  } finally {
+    await dispose();
+  }
+});
+
 test("Codex再認証は管理者の同一OriginのPOSTだけにコードを返す", async () => {
   const { request, dispose } = await fixture();
   const path = "/api/admin/codex/reauthenticate";

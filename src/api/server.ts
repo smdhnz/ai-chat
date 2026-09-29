@@ -81,138 +81,34 @@ setInterval(() => {
   cleanupExpired();
   void cleanupTemporaryConversations();
 }, 60 * 60_000).unref();
+const sessionMaxAge = 30 * 86400;
 export const server = Bun.serve<SocketData>({
   port: config.port,
   async fetch(request, server) {
     try {
-      const url = new URL(request.url);
       const user = sessionUser(request);
-
+      const response = await handleRequest(request, server, user);
       if (
-        url.pathname.startsWith("/_next/") ||
-        /^\/(?:favicon\.svg|apple-touch-icon\.png|icon-(?:192|512)\.png|site\.webmanifest)$/.test(
-          url.pathname,
-        )
-      )
-        return webApp(request);
-      if (url.pathname === "/login") return user ? redirect("/") : webApp(request);
-      if (url.pathname === "/api/auth/discord") return startDiscordLogin();
-      if (url.pathname === "/api/auth/callback/discord") return finishDiscordLogin(request, url);
-      if (url.pathname === "/logout" && request.method === "POST") {
-        verifyOrigin(request);
-        const token = cookie(request, "session");
-        if (token)
-          db.delete(sessions)
-            .where(eq(sessions.token_hash, hash(token)))
-            .run();
-        return new Response(null, {
-          status: 303,
-          headers: { Location: "/login", "Set-Cookie": sessionCookie("", 0) },
-        });
-      }
-      if (!user)
-        return url.pathname.startsWith("/api/")
-          ? json({ error: "unauthorized" }, 401)
-          : redirect("/login");
-      if (url.pathname === "/api/admin/codex/reauthenticate") {
-        if (!isAdmin(user.id)) return json({ error: "forbidden" }, 403);
-        if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
-        if (request.headers.get("origin") !== config.origin)
-          return json({ error: "invalid origin" }, 403);
-        return json(await beginCodexReauthentication());
-      }
-      if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/"))
-        return await adminRequest(request, db, user.id);
-      if (url.pathname === "/api/socket") {
-        if (request.headers.get("origin") !== config.origin)
-          return json({ error: "invalid origin" }, 403);
-        const adminConversationId = url.searchParams.get("adminConversationId") ?? undefined;
-        if (adminConversationId !== undefined) {
-          const denied = await authorizeAdminStream(db, user.id, adminConversationId);
-          if (denied) return denied;
+        user &&
+        response &&
+        response.status < 400 &&
+        !response.headers.has("Set-Cookie") &&
+        Date.parse(user.session_expires_at) <= Date.now() + (sessionMaxAge - 86400) * 1000
+      ) {
+        const token = cookie(request, "session")!;
+        const updated = db
+          .update(sessions)
+          .set({ expires_at: new Date(Date.now() + sessionMaxAge * 1000).toISOString() })
+          .where(and(eq(sessions.token_hash, hash(token)), gt(sessions.expires_at, now())))
+          .returning({ userId: sessions.user_id })
+          .get();
+        if (updated) {
+          const refreshed = new Response(response.body, response);
+          refreshed.headers.append("Set-Cookie", sessionCookie(token, sessionMaxAge));
+          return refreshed;
         }
-        if (server.upgrade(request, { data: { userId: user.id, adminConversationId } })) return;
-        return json({ error: "websocket upgrade required" }, 426);
       }
-      if (url.pathname === "/settings" || url.pathname.startsWith("/settings/"))
-        return redirect("/");
-      if (/^\/chat\/[\w-]+$/.test(url.pathname))
-        return isAdmin(user.id) || conversationAccess(db, url.pathname.slice(6), user.id)
-          ? webApp(request)
-          : redirect("/");
-
-      if (url.pathname === "/api/bootstrap" && request.method === "GET") return bootstrap(user);
-      if (url.pathname === "/api/conversations" && request.method === "POST")
-        return createConversation(request, user);
-      const conversationMatch = url.pathname.match(/^\/api\/conversations\/([\w-]+)$/);
-      if (conversationMatch && request.method === "GET")
-        return conversationMessages(conversationMatch[1], user.id, url.searchParams.get("before"));
-      if (conversationMatch && request.method === "DELETE")
-        return deleteConversation(request, conversationMatch[1], user.id);
-      const generationMatch = url.pathname.match(
-        /^\/api\/conversations\/([\w-]+)\/(stop|regenerate)$/,
-      );
-      if (generationMatch && request.method === "POST")
-        return generationMatch[2] === "stop"
-          ? stopGeneration(request, generationMatch[1], user.id)
-          : regenerate(request, generationMatch[1], user);
-      if (url.pathname === "/api/chat" && request.method === "POST")
-        return sendMessage(request, user);
-      if (url.pathname === "/api/settings" && request.method === "PUT")
-        return saveSettings(request, user.id);
-      if (url.pathname === "/api/data" && request.method === "DELETE")
-        return deleteAllData(request, user.id);
-      if (url.pathname === "/api/skill-catalog/detail" && request.method === "GET")
-        return skillCatalogDetail(url.searchParams.get("id") ?? "");
-      if (url.pathname === "/api/skill-catalog" && request.method === "GET")
-        return searchSkillCatalog(url.searchParams);
-      if (url.pathname === "/api/skills/install" && request.method === "POST")
-        return installSkill(request, user.id);
-      const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)$/);
-      if (skillMatch && request.method === "PUT") return saveSkill(request, user.id, skillMatch[1]);
-      if (skillMatch && request.method === "DELETE")
-        return deleteSkill(request, skillMatch[1], user.id);
-      if (url.pathname === "/api/projects" && request.method === "POST")
-        return saveProject(request, user.id);
-      const projectMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)$/);
-      if (projectMatch && request.method === "PUT")
-        return saveProject(request, user.id, projectMatch[1]);
-      if (projectMatch && request.method === "DELETE")
-        return deleteProject(request, projectMatch[1], user.id);
-      const invitationMatch = url.pathname.match(
-        /^\/api\/projects\/([\w-]+)\/invitations(?:\/([\w-]+))?$/,
-      );
-      if (invitationMatch && request.method === "POST")
-        return inviteProjectMember(request, invitationMatch[1], user.id);
-      if (invitationMatch?.[2] && request.method === "DELETE")
-        return cancelProjectInvitation(request, invitationMatch[1], invitationMatch[2], user.id);
-      const memberMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)\/members\/([\w-]+)$/);
-      if (memberMatch && request.method === "DELETE")
-        return removeProjectMember(request, memberMatch[1], memberMatch[2], user.id);
-      const leaveMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)\/leave$/);
-      if (leaveMatch && request.method === "POST")
-        return leaveProject(request, leaveMatch[1], user.id);
-      const invitationDecision = url.pathname.match(
-        /^\/api\/invitations\/([\w-]+)\/(accept|decline)$/,
-      );
-      if (invitationDecision && request.method === "POST")
-        return decideProjectInvitation(
-          request,
-          invitationDecision[1],
-          user.id,
-          invitationDecision[2] === "accept",
-        );
-      const fileMatch = url.pathname.match(/^\/files\/([\w-]+)$/);
-      if (fileMatch && request.method === "GET")
-        return serveUserFile(
-          fileMatch[1],
-          user.id,
-          url.searchParams.has("download"),
-          url.searchParams.has("preview"),
-        );
-      if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))
-        return json({ error: "not found" }, 404);
-      return webApp(request);
+      return response;
     } catch (error) {
       console.error("request failed", error instanceof Error ? error.name : "UnknownError");
       return json({ error: "request failed" }, 500);
@@ -231,6 +127,129 @@ export const server = Bun.serve<SocketData>({
     },
   },
 });
+
+async function handleRequest(request: Request, server: Bun.Server<SocketData>, user: User | null) {
+  const url = new URL(request.url);
+
+  if (
+    url.pathname.startsWith("/_next/") ||
+    /^\/(?:favicon\.svg|apple-touch-icon\.png|icon-(?:192|512)\.png|site\.webmanifest)$/.test(
+      url.pathname,
+    )
+  )
+    return webApp(request);
+  if (url.pathname === "/login") return user ? redirect("/") : webApp(request);
+  if (url.pathname === "/api/auth/discord") return startDiscordLogin();
+  if (url.pathname === "/api/auth/callback/discord") return finishDiscordLogin(request, url);
+  if (url.pathname === "/logout" && request.method === "POST") {
+    verifyOrigin(request);
+    const token = cookie(request, "session");
+    if (token)
+      db.delete(sessions)
+        .where(eq(sessions.token_hash, hash(token)))
+        .run();
+    return new Response(null, {
+      status: 303,
+      headers: { Location: "/login", "Set-Cookie": sessionCookie("", 0) },
+    });
+  }
+  if (!user)
+    return url.pathname.startsWith("/api/")
+      ? json({ error: "unauthorized" }, 401)
+      : redirect("/login");
+  if (url.pathname === "/api/admin/codex/reauthenticate") {
+    if (!isAdmin(user.id)) return json({ error: "forbidden" }, 403);
+    if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+    if (request.headers.get("origin") !== config.origin)
+      return json({ error: "invalid origin" }, 403);
+    return json(await beginCodexReauthentication());
+  }
+  if (url.pathname === "/api/admin" || url.pathname.startsWith("/api/admin/"))
+    return await adminRequest(request, db, user.id);
+  if (url.pathname === "/api/socket") {
+    if (request.headers.get("origin") !== config.origin)
+      return json({ error: "invalid origin" }, 403);
+    const adminConversationId = url.searchParams.get("adminConversationId") ?? undefined;
+    if (adminConversationId !== undefined) {
+      const denied = await authorizeAdminStream(db, user.id, adminConversationId);
+      if (denied) return denied;
+    }
+    if (server.upgrade(request, { data: { userId: user.id, adminConversationId } })) return;
+    return json({ error: "websocket upgrade required" }, 426);
+  }
+  if (url.pathname === "/settings" || url.pathname.startsWith("/settings/")) return redirect("/");
+  if (/^\/chat\/[\w-]+$/.test(url.pathname))
+    return isAdmin(user.id) || conversationAccess(db, url.pathname.slice(6), user.id)
+      ? webApp(request)
+      : redirect("/");
+
+  if (url.pathname === "/api/bootstrap" && request.method === "GET") return bootstrap(user);
+  if (url.pathname === "/api/conversations" && request.method === "POST")
+    return createConversation(request, user);
+  const conversationMatch = url.pathname.match(/^\/api\/conversations\/([\w-]+)$/);
+  if (conversationMatch && request.method === "GET")
+    return conversationMessages(conversationMatch[1], user.id, url.searchParams.get("before"));
+  if (conversationMatch && request.method === "DELETE")
+    return deleteConversation(request, conversationMatch[1], user.id);
+  const generationMatch = url.pathname.match(/^\/api\/conversations\/([\w-]+)\/(stop|regenerate)$/);
+  if (generationMatch && request.method === "POST")
+    return generationMatch[2] === "stop"
+      ? stopGeneration(request, generationMatch[1], user.id)
+      : regenerate(request, generationMatch[1], user);
+  if (url.pathname === "/api/chat" && request.method === "POST") return sendMessage(request, user);
+  if (url.pathname === "/api/settings" && request.method === "PUT")
+    return saveSettings(request, user.id);
+  if (url.pathname === "/api/data" && request.method === "DELETE")
+    return deleteAllData(request, user.id);
+  if (url.pathname === "/api/skill-catalog/detail" && request.method === "GET")
+    return skillCatalogDetail(url.searchParams.get("id") ?? "");
+  if (url.pathname === "/api/skill-catalog" && request.method === "GET")
+    return searchSkillCatalog(url.searchParams);
+  if (url.pathname === "/api/skills/install" && request.method === "POST")
+    return installSkill(request, user.id);
+  const skillMatch = url.pathname.match(/^\/api\/skills\/([\w-]+)$/);
+  if (skillMatch && request.method === "PUT") return saveSkill(request, user.id, skillMatch[1]);
+  if (skillMatch && request.method === "DELETE")
+    return deleteSkill(request, skillMatch[1], user.id);
+  if (url.pathname === "/api/projects" && request.method === "POST")
+    return saveProject(request, user.id);
+  const projectMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)$/);
+  if (projectMatch && request.method === "PUT")
+    return saveProject(request, user.id, projectMatch[1]);
+  if (projectMatch && request.method === "DELETE")
+    return deleteProject(request, projectMatch[1], user.id);
+  const invitationMatch = url.pathname.match(
+    /^\/api\/projects\/([\w-]+)\/invitations(?:\/([\w-]+))?$/,
+  );
+  if (invitationMatch && request.method === "POST")
+    return inviteProjectMember(request, invitationMatch[1], user.id);
+  if (invitationMatch?.[2] && request.method === "DELETE")
+    return cancelProjectInvitation(request, invitationMatch[1], invitationMatch[2], user.id);
+  const memberMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)\/members\/([\w-]+)$/);
+  if (memberMatch && request.method === "DELETE")
+    return removeProjectMember(request, memberMatch[1], memberMatch[2], user.id);
+  const leaveMatch = url.pathname.match(/^\/api\/projects\/([\w-]+)\/leave$/);
+  if (leaveMatch && request.method === "POST") return leaveProject(request, leaveMatch[1], user.id);
+  const invitationDecision = url.pathname.match(/^\/api\/invitations\/([\w-]+)\/(accept|decline)$/);
+  if (invitationDecision && request.method === "POST")
+    return decideProjectInvitation(
+      request,
+      invitationDecision[1],
+      user.id,
+      invitationDecision[2] === "accept",
+    );
+  const fileMatch = url.pathname.match(/^\/files\/([\w-]+)$/);
+  if (fileMatch && request.method === "GET")
+    return serveUserFile(
+      fileMatch[1],
+      user.id,
+      url.searchParams.has("download"),
+      url.searchParams.has("preview"),
+    );
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/files/"))
+    return json({ error: "not found" }, 404);
+  return webApp(request);
+}
 
 console.log(`ai-chat listening on ${config.origin}`);
 
@@ -1505,16 +1524,16 @@ async function finishDiscordLogin(request: Request, url: URL): Promise<Response>
     .values({
       token_hash: hash(session),
       user_id: profile.id,
-      expires_at: new Date(Date.now() + 30 * 86400_000).toISOString(),
+      expires_at: new Date(Date.now() + sessionMaxAge * 1000).toISOString(),
     })
     .run();
   return new Response(null, {
     status: 303,
-    headers: { Location: "/", "Set-Cookie": sessionCookie(session, 30 * 86400) },
+    headers: { Location: "/", "Set-Cookie": sessionCookie(session, sessionMaxAge) },
   });
 }
 
-function sessionUser(request: Request): User | null {
+function sessionUser(request: Request): (User & { session_expires_at: string }) | null {
   const token = cookie(request, "session");
   if (!token) return null;
   return (db
@@ -1524,11 +1543,12 @@ function sessionUser(request: Request): User | null {
       display_name: users.display_name,
       avatar: users.avatar,
       default_system_prompt: users.default_system_prompt,
+      session_expires_at: sessions.expires_at,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.user_id))
     .where(and(eq(sessions.token_hash, hash(token)), gt(sessions.expires_at, now())))
-    .get() ?? null) as User | null;
+    .get() ?? null) as (User & { session_expires_at: string }) | null;
 }
 function clean(value: unknown, max: number): string {
   return typeof value === "string" ? value.replace(/\0/g, "").trim().slice(0, max) : "";
